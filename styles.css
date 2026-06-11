@@ -1,0 +1,596 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 42 25% 97%;
+  --foreground: 210 24% 12%;
+  --card: 0 0% 100%;
+  --card-foreground: 210 24% 12%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 210 24% 12%;
+  --primary: 210 52% 18%;
+  --primary-foreground: 42 25% 97%;
+  --secondary: 180 16% 89%;
+  --secondary-foreground: 210 24% 12%;
+  --muted: 210 15% 91%;
+  --muted-foreground: 210 12% 41%;
+  --accent: 155 24% 84%;
+  --accent-foreground: 210 24% 12%;
+  --destructive: 0 72% 43%;
+  --destructive-foreground: 42 25% 97%;
+  --border: 210 15% 82%;
+  --input: 210 15% 82%;
+  --ring: 185 38% 34%;
+  --radius: 0.5rem;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: Aptos, "Segoe UI", system-ui, sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+svg {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+.minuta-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+
+.minuta-scrollbar::-webkit-scrollbar {
+  width: 0.65rem;
+  height: 0.65rem;
+}
+
+.minuta-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.minuta-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border: 0.18rem solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+.minuta-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.48);
+  background-clip: content-box;
+}
+
+.minuta-native-inline-frame {
+  overflow: hidden;
+  border: 1px solid hsl(var(--ring) / 0.25);
+  border-radius: calc(var(--radius) - 2px);
+  background: hsl(var(--background) / 0.8);
+}
+
+.minuta-native-inline-frame:focus-within,
+.minuta-native-content-surface:focus-within {
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2);
+}
+
+.minuta-native-inline-bare {
+  min-width: 0;
+}
+
+.minuta-native-inline-editor {
+  min-height: 2.25rem;
+  width: 100%;
+  padding: 0.35rem 0;
+  color: hsl(var(--foreground));
+  line-height: inherit;
+  outline: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.minuta-native-inline-frame .minuta-native-inline-editor {
+  padding: 0.65rem 0.75rem;
+}
+
+.minuta-native-inline-editor-single {
+  min-height: 2rem;
+  white-space: pre;
+}
+
+.minuta-native-inline-editor:empty::before,
+.minuta-native-inline-editor[data-empty="true"]::before {
+  content: attr(data-placeholder);
+  color: hsl(var(--muted-foreground));
+}
+
+.minuta-native-placeholder {
+  border: 1px dashed hsl(var(--muted-foreground) / 0.3);
+  border-radius: calc(var(--radius) - 4px);
+  background: hsl(var(--muted) / 0.35);
+  color: hsl(var(--muted-foreground));
+  padding: 0 0.2rem;
+}
+
+.minuta-manual-edit-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.minuta-manual-edit-content {
+  min-width: 0;
+  padding: 0;
+}
+
+.minuta-manual-edit-content .minuta-native-editor-shell {
+  gap: 0.35rem;
+}
+
+.minuta-manual-edit-content .minuta-native-document-flow {
+  padding: 0.35rem 0.45rem 0.45rem;
+}
+
+.minuta-manual-edit-content .minuta-native-section-document-flow {
+  padding: 0.25rem 0.35rem 0.35rem;
+}
+
+.minuta-manual-edit-content .minuta-special-edit-surface {
+  padding: 0;
+}
+
+.minuta-preview-block-content-box {
+  position: relative;
+  isolation: isolate;
+  box-shadow: none;
+}
+
+.minuta-preview-block-content-box::before {
+  content: "";
+  position: absolute;
+  inset: -0.1rem -0.25rem -0.25rem;
+  z-index: 0;
+  pointer-events: none;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius) - 2px);
+  background: transparent;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.minuta-preview-block-content-box-active::before {
+  border-color: hsl(var(--foreground) / 0.2);
+  background: hsl(var(--background) / 0.35);
+}
+
+.minuta-preview-block-content-box-referenced::before {
+  border-color: hsl(var(--ring));
+  background: hsl(var(--accent) / 0.15);
+}
+
+.minuta-preview-block-content-box > * {
+  position: relative;
+  z-index: 1;
+}
+
+.minuta-preview-block-segment {
+  border-radius: calc(var(--radius) - 2px);
+}
+
+.minuta-preview-block-segment::before {
+  content: "";
+  position: absolute;
+  inset: -1.75rem -0.45rem -0.45rem;
+  z-index: 0;
+  pointer-events: none;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius) - 1px);
+  background: transparent;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.minuta-preview-block-segment:hover::before,
+.minuta-preview-block-segment:focus-within::before,
+.minuta-preview-block-segment-active::before {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.minuta-preview-block-segment > :not(.absolute) {
+  position: relative;
+  z-index: 1;
+}
+
+.minuta-native-editor-shell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.minuta-special-edit-surface {
+  overflow: hidden;
+  min-width: 0;
+  border: 0;
+  border-radius: calc(var(--radius) - 2px);
+  background: hsl(var(--card));
+  padding: 0;
+  box-shadow: none;
+}
+
+.minuta-request-edit-list {
+  padding-left: 1.45rem;
+}
+
+.minuta-request-edit-row::marker {
+  color: hsl(var(--muted-foreground));
+  font-variant-numeric: tabular-nums;
+}
+
+.minuta-request-edit-row .minuta-native-inline-editor {
+  min-height: 1.7rem;
+  padding: 0.05rem 0;
+  line-height: 1.65;
+}
+
+.minuta-signature-document-flow {
+  align-items: center;
+}
+
+.minuta-signature-document-flow .minuta-native-section-title-row {
+  align-self: stretch;
+}
+
+.minuta-signature-line-editor {
+  display: flex;
+  max-width: 100%;
+  flex-direction: column;
+  gap: 0.2rem;
+  border-top: 1px solid hsl(var(--foreground) / 0.72);
+  padding-top: 0.4rem;
+}
+
+.minuta-signature-line-editor .minuta-native-inline-editor {
+  min-height: 1.45rem;
+  padding: 0;
+  line-height: 1.45;
+}
+
+.minuta-signature-role-input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.875rem;
+  line-height: 1.45;
+  outline: none;
+  text-align: center;
+}
+
+.minuta-signature-role-input:focus-visible {
+  border-radius: calc(var(--radius) - 4px);
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.22);
+}
+
+.minuta-native-source-row {
+  min-width: 0;
+  padding: 0.2rem 0;
+}
+
+.minuta-native-source-row .minuta-native-inline-editor {
+  min-height: 1.7rem;
+  padding: 0;
+  line-height: 1.65;
+}
+
+.minuta-native-content-surface {
+  overflow: hidden;
+  border: 1px solid hsl(var(--foreground) / 0.82);
+  border-radius: calc(var(--radius) - 2px);
+  background: hsl(var(--card));
+}
+
+.minuta-native-section-edit-surface {
+  border: 0;
+  border-radius: calc(var(--radius) - 2px);
+  background: hsl(var(--card));
+  box-shadow: none;
+}
+
+.minuta-native-document-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.85rem 0.95rem 1rem;
+}
+
+.minuta-native-section-document-flow {
+  gap: 0.5rem;
+  padding: 0.7rem 0.8rem 0.85rem;
+}
+
+.minuta-native-section-title-row {
+  min-width: 0;
+  padding-bottom: 0.25rem;
+}
+
+.minuta-native-section-title-line {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.minuta-native-section-title-prefix {
+  flex: 0 0 auto;
+}
+
+.minuta-native-section-title-inline {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.minuta-native-section-title-editor {
+  min-height: 2rem;
+  padding: 0;
+  font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: 1.45;
+}
+
+.minuta-native-paragraph-row {
+  min-width: 0;
+}
+
+.minuta-native-table-row {
+  min-width: 0;
+  padding: 0.15rem 0;
+}
+
+.minuta-native-content-row {
+  border-radius: calc(var(--radius) - 4px);
+  outline: none;
+  transition:
+    background-color 120ms ease;
+}
+
+.minuta-native-content-row:hover,
+.minuta-native-content-row:focus-within {
+  background: transparent;
+}
+
+.minuta-content-row-context-menu {
+  position: fixed;
+  z-index: 50;
+  width: 14rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) - 2px);
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  padding: 0.25rem;
+  box-shadow: 0 1rem 2.25rem hsl(var(--foreground) / 0.18);
+  font-size: 0.875rem;
+}
+
+.minuta-native-trailing-block {
+  min-height: 2.25rem;
+}
+
+.minuta-native-trailing-block:hover,
+.minuta-native-trailing-block:focus-within {
+  background: transparent;
+}
+
+.minuta-native-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  padding-left: 1.4rem;
+}
+
+.minuta-native-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.minuta-native-list-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.15rem;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.minuta-native-list-item:focus-within .minuta-native-list-actions,
+.minuta-native-list-item:hover .minuta-native-list-actions {
+  opacity: 1;
+}
+
+.minuta-native-table-editor {
+  position: relative;
+  min-width: 0;
+  padding: 0.35rem 0.35rem 1.25rem;
+}
+
+.minuta-table-inline-actions {
+  position: absolute;
+  top: 0.55rem;
+  right: 1.7rem;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) - 2px);
+  background: hsl(var(--popover) / 0.96);
+  padding: 0.15rem;
+  box-shadow: 0 0.75rem 1.75rem hsl(var(--foreground) / 0.12);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-0.25rem);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.group\/table:hover .minuta-table-inline-actions,
+.group\/table:focus-within .minuta-table-inline-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.minuta-native-table-shell {
+  position: relative;
+  min-width: 100%;
+}
+
+.minuta-native-table {
+  width: 100%;
+  min-width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  border: 1px solid hsl(var(--border));
+}
+
+.minuta-native-table th,
+.minuta-native-table td {
+  position: relative;
+  min-width: 4rem;
+  border: 1px solid hsl(var(--border));
+  padding: 0;
+  vertical-align: top;
+}
+
+.minuta-native-table th .minuta-native-inline-editor,
+.minuta-native-table td .minuta-native-inline-editor {
+  min-height: 2.15rem;
+  padding: 0.42rem 0.55rem;
+  line-height: 1.55;
+}
+
+.minuta-native-table th {
+  background: hsl(var(--muted) / 0.55);
+  font-weight: 600;
+}
+
+.minuta-native-table th.is-selected,
+.minuta-native-table td.is-selected {
+  background: hsl(var(--accent) / 0.5);
+}
+
+.minuta-column-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 0.8rem;
+  transform: translateX(-50%);
+  border: 0;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.minuta-column-resize-handle::after {
+  position: absolute;
+  top: 0.35rem;
+  bottom: 0.35rem;
+  left: calc(50% - 1px);
+  width: 2px;
+  border-radius: 999px;
+  background: hsl(var(--ring) / 0.55);
+  content: "";
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.minuta-native-table-shell:hover .minuta-column-resize-handle::after {
+  opacity: 0.45;
+}
+
+.minuta-column-resize-handle:hover::after,
+.minuta-column-resize-handle:focus-visible::after {
+  opacity: 1;
+}
+
+.minuta-table-right-rail,
+.minuta-table-bottom-rail {
+  position: absolute;
+  display: flex;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.group\/table:hover .minuta-table-right-rail,
+.group\/table:hover .minuta-table-bottom-rail,
+.group\/table:focus-within .minuta-table-right-rail,
+.group\/table:focus-within .minuta-table-bottom-rail {
+  opacity: 1;
+}
+
+.minuta-table-right-rail {
+  top: 0.35rem;
+  right: 0.05rem;
+  bottom: 1.25rem;
+  width: 1.1rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: hsl(var(--muted));
+}
+
+.minuta-table-bottom-rail {
+  right: 0.35rem;
+  bottom: 0.05rem;
+  left: 0.35rem;
+  height: 1.1rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: hsl(var(--muted));
+}
+
+.minuta-table-right-rail button,
+.minuta-table-bottom-rail button {
+  display: flex;
+  width: 1.1rem;
+  height: 1.1rem;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  background: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+  cursor: pointer;
+}
