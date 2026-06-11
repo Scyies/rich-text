@@ -1,2 +1,5 @@
 .claude
 .history
+node_modules/
+dist/
+*.tsbuildinfo

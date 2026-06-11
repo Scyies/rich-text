@@ -58,11 +58,20 @@ function App() {
 editor.commands.updateBlock(id, patch);
 editor.commands.insertBlockAfter(id, block);
 editor.commands.deleteBlock(id);
-editor.commands.moveBlock(id, targetIndex);
-editor.commands.turnIntoHeading(id, level);
-editor.commands.turnIntoParagraph(id);
+editor.commands.moveBlock(id, afterBlockId);
+editor.commands.turnInto(id, target); // heading(level) | paragraph | bullet | numbered
 editor.commands.splitBlock(id, offset);
 editor.commands.mergeWithPrevious(id);
+editor.commands.indent(id); editor.commands.outdent(id);
+
+// seções derivadas dos níveis de heading (lista plana, árvore computada)
+editor.commands.moveSection(headingId, afterBlockId);
+editor.commands.deleteSection(headingId);
+editor.getSectionTree();
+
+// edições externas (LLM/servidor) entram pelo mesmo pipeline de transação
+editor.commands.applyPatches(patches);
+editor.commands.undo(); editor.commands.redo();
 ```
 
 ### i18n
@@ -84,11 +93,13 @@ import { myPlugin } from "./my-plugin"
 ## Schema
 
 ```typescript
-type Block = HeadingBlock | TextBlock | TableBlock | SpecialBlock
-type LegalDocument = { version: number; blocks: Block[]; metadata?: {...} }
+type Block<TMeta> = HeadingBlock<TMeta> | TextBlock<TMeta> | TableBlock<TMeta> | CustomBlock<TMeta>
+type Document<TMeta> = { schemaVersion: 1; blocks: Block<TMeta>[]; meta?: TMeta }
 ```
 
-Veja a [documentação completa do schema](./ARCHITECTURE.md#schema-simplificado).
+O documento é uma **lista plana** — cada linha é um bloco. Seções (heading + conteúdo seguinte) são **derivadas** dos níveis de heading, nunca armazenadas. O host anexa dados de domínio via `meta` (round-trip intacto) e registra blocos/inlines custom via plugins.
+
+Veja a [documentação completa do schema](./ARCHITECTURE.md#schema).
 
 ## Roadmap
 
