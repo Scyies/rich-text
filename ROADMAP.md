@@ -41,7 +41,9 @@ Publicação progressiva em 5 etapas. As decisões D1–D15 referenciadas estão
 
 **Arquivos:** `src/editor/hooks/`
 
-## v0.4 — Componentes React (📦 `wealthy-text-editor`)
+## v0.4 — Componentes React (📦 `wealthy-text-editor`) ✅
+
+> Nota de implementação: o pacote ganhou duas entradas — raiz (core, zero React, server-safe) e `/react` (hooks + componentes). CSS é folha global `.wte-*` (styles.css) em vez de CSS Modules; shadcn/radix não foi necessário até aqui (menus são posicionamento próprio). UX estrutural de tabela (add/remover linhas, resize) ficou para a v0.5.
 
 **Pacote:** componentes de UI.
 

@@ -125,11 +125,15 @@ export type { BlockSelection, EditorSelection, TextSelection } from "./editor/co
 // Selection equality
 export { selectionsEqual } from "./editor/core/selection";
 
-// React hooks (v0.3)
-export { useDocumentEditor } from "./editor/hooks/useDocumentEditor";
-export type { DocumentEditorApi, UseDocumentEditorOptions } from "./editor/hooks/useDocumentEditor";
-export { useBlockEditor } from "./editor/hooks/useBlockEditor";
-export type { BlockEditorApi, UseBlockEditorOptions } from "./editor/hooks/useBlockEditor";
+// Marks (range operations)
+export {
+  applyMark,
+  getActiveMarks,
+  markEquals,
+  rangeHasMark,
+  removeMark,
+  toggleMark,
+} from "./editor/core/marks";
 
 // Engine
 export { createEditorEngine } from "./editor/core/commands";

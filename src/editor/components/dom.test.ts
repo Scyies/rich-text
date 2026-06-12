@@ -1,0 +1,98 @@
+// @vitest-environment jsdom
+import { describe, expect, it } from "vitest";
+import { domToInlineNodes, getSelectionOffsets, inlineNodesToHtml, setCaretOffset } from "./dom";
+import type { InlineNode } from "../core/schema";
+
+function element(html: string): HTMLElement {
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  document.body.appendChild(div);
+  return div;
+}
+
+describe("inlineNodesToHtml", () => {
+  it("renders marks as semantic tags in a stable order", () => {
+    const content: InlineNode[] = [
+      { type: "text", text: "plain " },
+      { type: "text", text: "bold-italic", marks: [{ type: "italic" }, { type: "bold" }] },
+    ];
+    expect(inlineNodesToHtml(content)).toBe("plain <strong><em>bold-italic</em></strong>");
+  });
+
+  it("escapes HTML in text, links, and tokens", () => {
+    expect(inlineNodesToHtml([{ type: "text", text: "<b>&\"" }])).toBe("&lt;b&gt;&amp;&quot;");
+    expect(
+      inlineNodesToHtml([{ type: "text", text: "x", marks: [{ type: "link", href: 'https://a?b="c"' }] }]),
+    ).toBe('<a href="https://a?b=&quot;c&quot;">x</a>');
+  });
+
+  it("renders inline objects as atomic chips with payload attributes", () => {
+    const html = inlineNodesToHtml([
+      { type: "object", kind: "placeholder", data: { key: "client", label: "Cliente" } },
+    ]);
+    expect(html).toContain('data-wte-object="placeholder"');
+    expect(html).toContain('contenteditable="false"');
+    expect(html).toContain(">Cliente</span>");
+  });
+});
+
+describe("domToInlineNodes", () => {
+  it("round-trips text, marks, and objects", () => {
+    const content: InlineNode[] = [
+      { type: "text", text: "a " },
+      { type: "text", text: "b", marks: [{ type: "bold" }, { type: "underline" }] },
+      { type: "text", text: " c ", marks: [{ type: "link", href: "https://x.dev" }] },
+      { type: "object", kind: "mention", data: { id: "u1" }, meta: { state: "ok" } },
+      { type: "text", text: " end", marks: [{ type: "color", token: "danger" }] },
+    ];
+    const root = element(inlineNodesToHtml(content));
+    expect(domToInlineNodes(root)).toEqual(content);
+  });
+
+  it("reads browser-flavored tags (b, i, span styles) into marks", () => {
+    const root = element("<b>bold</b><i>italic</i><s>gone</s>");
+    expect(domToInlineNodes(root)).toEqual([
+      { type: "text", text: "bold", marks: [{ type: "bold" }] },
+      { type: "text", text: "italic", marks: [{ type: "italic" }] },
+      { type: "text", text: "gone", marks: [{ type: "strikethrough" }] },
+    ]);
+  });
+
+  it("ignores <br> and merges adjacent same-marked text", () => {
+    const root = element("hello<br>world");
+    expect(domToInlineNodes(root)).toEqual([{ type: "text", text: "helloworld" }]);
+  });
+
+  it("returns empty content for an empty element", () => {
+    expect(domToInlineNodes(element(""))).toEqual([]);
+  });
+});
+
+describe("caret utilities", () => {
+  it("setCaretOffset + getSelectionOffsets round-trip across marks and objects", () => {
+    const content: InlineNode[] = [
+      { type: "text", text: "ab", marks: [{ type: "bold" }] },
+      { type: "object", kind: "x", data: {} },
+      { type: "text", text: "cd" },
+    ];
+    const root = element(inlineNodesToHtml(content));
+
+    for (const offset of [0, 1, 2, 4, 5]) {
+      setCaretOffset(root, offset);
+      expect(getSelectionOffsets(root)).toEqual({ start: offset, end: offset });
+    }
+  });
+
+  it("clamps past-the-end offsets to the end", () => {
+    const root = element(inlineNodesToHtml([{ type: "text", text: "abc" }]));
+    setCaretOffset(root, 99);
+    expect(getSelectionOffsets(root)).toEqual({ start: 3, end: 3 });
+  });
+
+  it("returns null when the selection is outside the root", () => {
+    const root = element("abc");
+    const other = element("xyz");
+    setCaretOffset(other, 1);
+    expect(getSelectionOffsets(root)).toBeNull();
+  });
+});

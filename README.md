@@ -20,7 +20,7 @@ pnpm add wealthy-text-editor
 ## Uso básico
 
 ```tsx
-import { DocumentEditor } from 'wealthy-text-editor';
+import { DocumentEditor } from 'wealthy-text-editor/react';
 import 'wealthy-text-editor/styles.css';
 
 function App() {
@@ -84,11 +84,13 @@ editor.commands.undo(); editor.commands.redo();
 ### Plugins
 
 ```ts
-import { DocumentEditor } from "wealthy-text-editor"
+import { DocumentEditor } from "wealthy-text-editor/react"
 import { myPlugin } from "./my-plugin"
 
 <DocumentEditor extensions={[myPlugin]} />
 ```
+
+> **Entradas do pacote:** `wealthy-text-editor` (raiz) é o core sem React — schema, engine, transforms, patches — seguro para uso no servidor (ex.: aplicar patches de LLM). `wealthy-text-editor/react` contém hooks e componentes.
 
 ## Schema
 

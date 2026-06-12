@@ -1,12 +1,13 @@
 {
   "name": "wealthy-text-editor",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Schema-first, headless, block-based rich text editor for React.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
   "files": [
-    "dist"
+    "dist",
+    "styles.css"
   ],
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -16,7 +17,13 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
-    }
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.js",
+      "require": "./dist/react.cjs"
+    },
+    "./styles.css": "./styles.css"
   },
   "scripts": {
     "build": "tsup",
