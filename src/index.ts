@@ -122,6 +122,15 @@ export type { ApplyPatchesResult, DocumentPatch } from "./editor/core/patches";
 export { caretAt, clampSelection, getSelectedBlockRange, isCollapsed } from "./editor/core/selection";
 export type { BlockSelection, EditorSelection, TextSelection } from "./editor/core/selection";
 
+// Selection equality
+export { selectionsEqual } from "./editor/core/selection";
+
+// React hooks (v0.3)
+export { useDocumentEditor } from "./editor/hooks/useDocumentEditor";
+export type { DocumentEditorApi, UseDocumentEditorOptions } from "./editor/hooks/useDocumentEditor";
+export { useBlockEditor } from "./editor/hooks/useBlockEditor";
+export type { BlockEditorApi, UseBlockEditorOptions } from "./editor/hooks/useBlockEditor";
+
 // Engine
 export { createEditorEngine } from "./editor/core/commands";
 export type {

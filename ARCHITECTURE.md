@@ -79,6 +79,15 @@ A lib nasce greenfield em `src/`. `shared/document-schema.ts` e `components/minu
 ### D15 — Linha intenção × apresentação
 O schema do core guarda apenas atributos universais de intenção autoral: `align` (left/center/right/justify) e `indent` — além dos marks inline. Tudo visual (fontSizePt, spacing, styleRole, temas, page setup) vive em meta do host e templates do host.
 
+### D16 — Pipeline de input: native-first
+O caractere digitado aparece na velocidade nativa do browser — nenhum código nosso fica no caminho crítico keypress→pixel. A regra para o `InlineEditor` (v0.4):
+1. O browser insere e pinta o caractere no contenteditable (mesmo frame, zero JS).
+2. O evento `input` lê o DOM do bloco → `InlineNode[]` → `commands.updateBlock(id, { content })`.
+3. O engine roda a transação (cópia do array + validação de 1 bloco + push de referência no histórico — <1ms em documentos realistas).
+4. No re-render, o bloco focado **reconhece o eco do modelo e não reescreve seu DOM** (sem caret jump); blocos irmãos memoizados saem por igualdade de referência. Durante composição IME (`compositionstart`→`compositionend`), o passo 2 é adiado.
+
+Nunca interceptar digitação com preventDefault para re-renderizar texto via React. O modelo atrasa a tela em um turno do event loop — invisível. Hosts devem debounçar trabalho pesado em `onChange` (ele roda síncrono no notify).
+
 ## Estrutura de diretórios
 
 ```

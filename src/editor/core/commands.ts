@@ -2,7 +2,7 @@ import { generateBlockId } from "./factories";
 import { getInlineLength } from "./inline";
 import { createHistory, type HistoryEntry, type HistoryOptions } from "./history";
 import { applyPatches, type DocumentPatch } from "./patches";
-import { clampSelection, type EditorSelection } from "./selection";
+import { clampSelection, selectionsEqual, type EditorSelection } from "./selection";
 import { getSection, getSectionTree, type Section, type SectionTree } from "./sections";
 import type { Block, BlockMeta, WealthyDocument } from "./schema";
 import * as transforms from "./transforms";
@@ -15,7 +15,7 @@ import type { TurnIntoTarget } from "./transforms";
  * invalid input and leave the state untouched.
  */
 
-export type ChangeOrigin = "command" | "patches" | "history" | "set-document";
+export type ChangeOrigin = "command" | "patches" | "history" | "set-document" | "selection";
 
 export interface ChangeInfo {
   origin: ChangeOrigin;
@@ -59,7 +59,10 @@ export interface EditorEngine<TMeta extends BlockMeta = BlockMeta> {
   /** Document switch (D10: new `value` reference) — resets history. */
   setDocument(document: WealthyDocument<TMeta>): void;
   getSelection(): EditorSelection | null;
-  /** Selection updates do not create history entries. */
+  /**
+   * Selection updates notify subscribers (origin "selection") but never
+   * create history entries.
+   */
   setSelection(selection: EditorSelection | null): void;
   subscribe(listener: EngineListener<TMeta>): () => void;
   getSectionTree(): SectionTree<TMeta>;
@@ -252,7 +255,12 @@ export function createEditorEngine<TMeta extends BlockMeta = BlockMeta>(
     getSelection: () => selection,
 
     setSelection(next) {
-      selection = clampSelection(document, next);
+      const clamped = clampSelection(document, next);
+      if (selectionsEqual(selection, clamped)) {
+        return;
+      }
+      selection = clamped;
+      notify({ origin: "selection" });
     },
 
     subscribe(listener) {

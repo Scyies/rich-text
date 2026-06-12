@@ -29,7 +29,7 @@ Publicação progressiva em 5 etapas. As decisões D1–D15 referenciadas estão
 
 **Arquivos:** `src/editor/core/{sections,numbering,commands,transforms,history,patches,selection}.ts`
 
-## v0.3 — Hooks React (📦 `wealthy-text-editor`)
+## v0.3 — Hooks React (📦 `wealthy-text-editor`) ✅
 
 **Pacote:** hooks headless para React.
 

@@ -26,6 +26,22 @@ export function isCollapsed(selection: TextSelection): boolean {
   return selection.anchor === selection.focus;
 }
 
+export function selectionsEqual(a: EditorSelection | null, b: EditorSelection | null): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (a === null || b === null || a.type !== b.type) {
+    return false;
+  }
+  if (a.type === "text" && b.type === "text") {
+    return a.blockId === b.blockId && a.anchor === b.anchor && a.focus === b.focus;
+  }
+  if (a.type === "blocks" && b.type === "blocks") {
+    return a.anchorBlockId === b.anchorBlockId && a.focusBlockId === b.focusBlockId;
+  }
+  return false;
+}
+
 export function caretAt(blockId: string, offset: number): TextSelection {
   return { type: "text", blockId, anchor: offset, focus: offset };
 }
