@@ -66,3 +66,69 @@ export type {
 
 // Serialization
 export { deserializeDocument, serializeDocument } from "./editor/core/serialization";
+
+// Inline utilities
+export {
+  INLINE_OBJECT_CHAR,
+  concatInlineContent,
+  getInlineLength,
+  getInlineText,
+  marksEqual,
+  normalizeInlineContent,
+  splitInlineContent,
+} from "./editor/core/inline";
+
+// Sections (derived containment, D1/D3)
+export { getImpliedLevelAt, getSection, getSectionRange, getSectionTree } from "./editor/core/sections";
+export type { Section, SectionTree } from "./editor/core/sections";
+
+// Numbering (computed, display-only)
+export {
+  formatHeadingNumber,
+  getHeadingNumberLabel,
+  getHeadingNumberPath,
+  getHeadingNumbers,
+  getListItemNumber,
+  getListItemNumbers,
+} from "./editor/core/numbering";
+
+// Transforms (pure)
+export {
+  MAX_INDENT,
+  deleteBlock,
+  deleteSection,
+  duplicateSection,
+  indentBlock,
+  insertBlockAfter,
+  mergeWithPrevious,
+  moveBlock,
+  moveSection,
+  outdentBlock,
+  splitBlock,
+  turnInto,
+  updateBlock,
+} from "./editor/core/transforms";
+export type { TurnIntoTarget } from "./editor/core/transforms";
+
+// History
+export { DEFAULT_COALESCE_WINDOW_MS, DEFAULT_HISTORY_LIMIT, createHistory } from "./editor/core/history";
+export type { History, HistoryEntry, HistoryOptions } from "./editor/core/history";
+
+// Patches (D10)
+export { PatchError, applyPatches, documentPatchSchema, turnIntoTargetSchema } from "./editor/core/patches";
+export type { ApplyPatchesResult, DocumentPatch } from "./editor/core/patches";
+
+// Selection (D7)
+export { caretAt, clampSelection, getSelectedBlockRange, isCollapsed } from "./editor/core/selection";
+export type { BlockSelection, EditorSelection, TextSelection } from "./editor/core/selection";
+
+// Engine
+export { createEditorEngine } from "./editor/core/commands";
+export type {
+  ChangeInfo,
+  ChangeOrigin,
+  EditorCommands,
+  EditorEngine,
+  EditorEngineOptions,
+  EngineListener,
+} from "./editor/core/commands";

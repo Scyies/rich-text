@@ -2,7 +2,7 @@
 
 Publicação progressiva em 5 etapas. As decisões D1–D15 referenciadas estão em [ARCHITECTURE.md](./ARCHITECTURE.md#decisões-de-design-resolvidas).
 
-## v0.1 — Schema (📦 `wealthy-text-editor`)
+## v0.1 — Schema (📦 `wealthy-text-editor`) ✅
 
 **Pacote:** schema + tipos apenas.
 
@@ -14,7 +14,7 @@ Publicação progressiva em 5 etapas. As decisões D1–D15 referenciadas estão
 
 **Arquivos:** `src/editor/core/schema.ts`
 
-## v0.2 — Core Engine (📦 `wealthy-text-editor`)
+## v0.2 — Core Engine (📦 `wealthy-text-editor`) ✅
 
 **Pacote:** motor headless (zero React).
 
