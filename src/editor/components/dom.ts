@@ -311,3 +311,105 @@ export function setSelectionOffsets(root: HTMLElement, start: number, end: numbe
 export function setCaretOffset(root: HTMLElement, offset: number): void {
   setSelectionOffsets(root, offset, offset);
 }
+
+// ---------------------------------------------------------------------------
+// Visual line detection (block-boundary arrow navigation)
+// ---------------------------------------------------------------------------
+
+function getCaretRect(root: HTMLElement): DOMRect | null {
+  const selection = root.ownerDocument.defaultView?.getSelection();
+  if (!selection || selection.rangeCount === 0) {
+    return null;
+  }
+  const range = selection.getRangeAt(0);
+  if (!root.contains(range.startContainer)) {
+    return null;
+  }
+  let rect: DOMRect;
+  try {
+    const rects = range.getClientRects();
+    rect = rects.length > 0 ? rects[0]! : range.getBoundingClientRect();
+  } catch {
+    return null; // measurement unavailable (e.g. jsdom)
+  }
+  // Zero rect: empty block or measurement unavailable (jsdom) — callers
+  // treat it as a single-line block.
+  if (rect.width === 0 && rect.height === 0 && rect.top === 0 && rect.left === 0) {
+    return null;
+  }
+  return rect;
+}
+
+/**
+ * True when the caret sits on the block's first visual (wrapped) line —
+ * the condition under which ArrowUp should leave the block. Errs toward
+ * true when measurement is unavailable.
+ */
+export function isCaretOnFirstLine(root: HTMLElement): boolean {
+  const caretRect = getCaretRect(root);
+  if (caretRect === null) {
+    return true;
+  }
+  const rootRect = root.getBoundingClientRect();
+  return caretRect.top - rootRect.top < caretRect.height * 1.5;
+}
+
+/** True when the caret sits on the block's last visual (wrapped) line. */
+export function isCaretOnLastLine(root: HTMLElement): boolean {
+  const caretRect = getCaretRect(root);
+  if (caretRect === null) {
+    return true;
+  }
+  const rootRect = root.getBoundingClientRect();
+  return rootRect.bottom - caretRect.bottom < caretRect.height * 1.5;
+}
+
+/** Viewport x of the caret — the "column" to preserve across block jumps. */
+export function getCaretViewportX(root: HTMLElement): number | null {
+  return getCaretRect(root)?.left ?? null;
+}
+
+/**
+ * Inline offset on the block's first/last visual line nearest to viewport
+ * x — how ArrowUp/Down keep the column when crossing blocks. Returns null
+ * when hit-testing is unavailable (jsdom; callers fall back to start/end).
+ */
+export function getOffsetNearViewportX(root: HTMLElement, x: number, line: "first" | "last"): number | null {
+  try {
+    const rootRect = root.getBoundingClientRect();
+    if (rootRect.height === 0 && rootRect.width === 0) {
+      return null;
+    }
+    const inset = Math.min(8, rootRect.height / 2);
+    const probeY = line === "first" ? rootRect.top + inset : rootRect.bottom - inset;
+    const probeX = Math.min(Math.max(x, rootRect.left + 1), rootRect.right - 1);
+
+    const doc = root.ownerDocument as Document & {
+      caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+      caretRangeFromPoint?: (x: number, y: number) => Range | null;
+    };
+
+    let node: Node | null = null;
+    let domOffset = 0;
+    if (typeof doc.caretPositionFromPoint === "function") {
+      const position = doc.caretPositionFromPoint(probeX, probeY);
+      if (position !== null) {
+        node = position.offsetNode;
+        domOffset = position.offset;
+      }
+    } else if (typeof doc.caretRangeFromPoint === "function") {
+      const range = doc.caretRangeFromPoint(probeX, probeY);
+      if (range !== null) {
+        node = range.startContainer;
+        domOffset = range.startOffset;
+      }
+    }
+
+    if (node === null || !root.contains(node)) {
+      return null;
+    }
+    return positionToOffset(root, { node, offset: domOffset });
+  } catch {
+    return null;
+  }
+}

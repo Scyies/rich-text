@@ -1,4 +1,4 @@
-import { concatInlineContent, splitInlineContent } from "./inline";
+import { concatInlineContent, getInlineLength, splitInlineContent } from "./inline";
 import { generateBlockId } from "./factories";
 import { getImpliedLevelAt, getSectionRange } from "./sections";
 import {
@@ -7,6 +7,7 @@ import {
   type BlockMeta,
   type HeadingBlock,
   type HeadingLevel,
+  type InlineNode,
   type TextBlock,
   type TextVariant,
   type WealthyDocument,
@@ -236,6 +237,34 @@ export function mergeWithPrevious<TMeta extends BlockMeta>(
   const blocks = [...document.blocks];
   blocks.splice(index - 1, 2, merged);
   return withBlocks(document, blocks);
+}
+
+/**
+ * Splices an inline node (text or atomic object — D6 placeholders,
+ * mentions) into a text-like block at an inline offset. The caret belongs
+ * at `offset + length(node)` afterwards.
+ */
+export function insertInlineNode<TMeta extends BlockMeta>(
+  document: WealthyDocument<TMeta>,
+  blockId: string,
+  offset: number,
+  node: InlineNode,
+): WealthyDocument<TMeta> {
+  const index = requireBlockIndex(document, blockId, "insertInlineNode");
+  const block = document.blocks[index]!;
+  if (!isTextLike(block)) {
+    throw new RangeError(`insertInlineNode: only heading/text blocks accept inline content (got ${block.type})`);
+  }
+  const [left, right] = splitInlineContent(block.content, offset);
+  const content = concatInlineContent(concatInlineContent(left, [node]), right);
+  const blocks = [...document.blocks];
+  blocks[index] = { ...block, content };
+  return withBlocks(document, blocks);
+}
+
+/** Inline length of a node: text length, or 1 for an atomic object. */
+export function getInlineNodeLength(node: InlineNode): number {
+  return getInlineLength([node]);
 }
 
 export function indentBlock<TMeta extends BlockMeta>(

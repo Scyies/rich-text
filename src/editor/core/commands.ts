@@ -4,7 +4,7 @@ import { createHistory, type HistoryEntry, type HistoryOptions } from "./history
 import { applyPatches, type DocumentPatch } from "./patches";
 import { clampSelection, selectionsEqual, type EditorSelection } from "./selection";
 import { getSection, getSectionTree, type Section, type SectionTree } from "./sections";
-import type { Block, BlockMeta, WealthyDocument } from "./schema";
+import type { Block, BlockMeta, InlineNode, WealthyDocument } from "./schema";
 import * as transforms from "./transforms";
 import type { TurnIntoTarget } from "./transforms";
 
@@ -42,6 +42,11 @@ export interface EditorCommands<TMeta extends BlockMeta = BlockMeta> {
   splitBlock(blockId: string, offset: number): string;
   /** Returns the caret offset inside the merged block. */
   mergeWithPrevious(blockId: string): number;
+  /**
+   * Splices an inline node (text or atomic object, e.g. a placeholder
+   * chip) into a text-like block. Returns the caret offset after it.
+   */
+  insertInlineNode(blockId: string, offset: number, node: InlineNode): number;
   indent(blockId: string): void;
   outdent(blockId: string): void;
   moveSection(headingId: string, afterBlockId: string | null): void;
@@ -170,6 +175,13 @@ export function createEditorEngine<TMeta extends BlockMeta = BlockMeta>(
           result: caretOffset,
         };
       });
+    },
+
+    insertInlineNode(blockId, offset, node) {
+      return transact("insertInlineNode", null, (current) => ({
+        document: transforms.insertInlineNode(current, blockId, offset, node),
+        result: offset + transforms.getInlineNodeLength(node),
+      }));
     },
 
     indent(blockId) {

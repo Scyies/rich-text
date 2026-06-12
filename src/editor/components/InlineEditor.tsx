@@ -14,6 +14,8 @@ import {
   getCaretOffset,
   getSelectionOffsets,
   inlineNodesToHtml,
+  isCaretOnFirstLine,
+  isCaretOnLastLine,
   setCaretOffset,
   setSelectionOffsets,
 } from "./dom";
@@ -38,6 +40,10 @@ export interface InlineEditorProps {
   onContentChange(content: InlineNode[], caretOffset: number | null): void;
   /** Fires on caret/selection movement inside the block. */
   onSelectionChange?: ((start: number, end: number) => void) | undefined;
+  /** Fires when the block gains focus. */
+  onFocus?: (() => void) | undefined;
+  /** Fires when the block loses focus. */
+  onBlur?: (() => void) | undefined;
   /** Enter (without Shift). Offset = caret position at the keypress. */
   onEnter?: ((offset: number) => void) | undefined;
   /** Backspace with a collapsed caret at offset 0. */
@@ -61,6 +67,8 @@ export const InlineEditor = forwardRef<InlineEditorHandle, InlineEditorProps>(fu
     content,
     onContentChange,
     onSelectionChange,
+    onFocus,
+    onBlur,
     onEnter,
     onBackspaceAtStart,
     onTab,
@@ -173,18 +181,18 @@ export const InlineEditor = forwardRef<InlineEditorHandle, InlineEditorProps>(fu
       return;
     }
 
+    // Arrow at a block boundary jumps to the neighboring block in ONE
+    // keypress: the trigger is being on the first/last VISUAL line (not at
+    // offset 0/end), so wrapped paragraphs still navigate internally.
     if (event.key === "ArrowUp" && onArrowUp !== undefined) {
-      const offsets = getSelectionOffsets(element);
-      if (offsets !== null && offsets.start === 0 && offsets.end === 0 && onArrowUp()) {
+      if (isCaretOnFirstLine(element) && onArrowUp()) {
         event.preventDefault();
       }
       return;
     }
 
     if (event.key === "ArrowDown" && onArrowDown !== undefined) {
-      const offsets = getSelectionOffsets(element);
-      const length = getInlineLength(domToInlineNodes(element));
-      if (offsets !== null && offsets.start === length && offsets.end === length && onArrowDown()) {
+      if (isCaretOnLastLine(element) && onArrowDown()) {
         event.preventDefault();
       }
     }
@@ -220,7 +228,11 @@ export const InlineEditor = forwardRef<InlineEditorHandle, InlineEditorProps>(fu
       onKeyDown={handleKeyDown}
       onKeyUp={reportSelection}
       onMouseUp={reportSelection}
-      onFocus={reportSelection}
+      onFocus={() => {
+        onFocus?.();
+        reportSelection();
+      }}
+      onBlur={() => onBlur?.()}
     />
   );
 });

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { createHeadingBlock, createTextBlock } from "../core/factories";
+import { createHeadingBlock, createTableBlock, createTextBlock } from "../core/factories";
 import { SCHEMA_VERSION, type Block, type TextBlock, type WealthyDocument } from "../core/schema";
 import { setCaretOffset } from "./dom";
 import { DocumentEditor } from "./DocumentEditor";
@@ -170,6 +170,92 @@ describe("DocumentEditor", () => {
     expect(screen.queryByRole("listbox")).toBeNull();
   });
 
+  it("placeholder is offered only to the focused empty block", () => {
+    const a = createTextBlock({ content: "" });
+    const b = createTextBlock({ content: "" });
+    render(<DocumentEditor value={docWith([a, b])} />);
+
+    const first = getBlockElement(a.id);
+    const second = getBlockElement(b.id);
+    expect(first.getAttribute("data-placeholder")).toBeNull();
+    expect(second.getAttribute("data-placeholder")).toBeNull();
+
+    fireEvent.focus(first);
+    expect(first.getAttribute("data-placeholder")).toBe("Type / for commands…");
+    expect(second.getAttribute("data-placeholder")).toBeNull();
+
+    fireEvent.blur(first);
+    fireEvent.focus(second);
+    expect(first.getAttribute("data-placeholder")).toBeNull();
+    expect(second.getAttribute("data-placeholder")).toBe("Type / for commands…");
+  });
+
+  it("slash menu closes on mousedown outside the menu and its block", () => {
+    const block = createTextBlock({ content: "" });
+    const other = createTextBlock({ content: "elsewhere" });
+    render(<DocumentEditor value={docWith([block, other])} />);
+
+    const element = getBlockElement(block.id);
+    typeInto(element, "/", 1);
+    expect(screen.getByRole("listbox")).toBeTruthy();
+
+    // Mousedown inside the menu keeps it open.
+    fireEvent.mouseDown(screen.getByRole("listbox"));
+    expect(screen.queryByRole("listbox")).not.toBeNull();
+
+    // Mousedown anywhere else closes it.
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("slash menu closes when the block loses focus", () => {
+    const block = createTextBlock({ content: "" });
+    render(<DocumentEditor value={docWith([block])} />);
+
+    const element = getBlockElement(block.id);
+    typeInto(element, "/", 1);
+    expect(screen.getByRole("listbox")).toBeTruthy();
+
+    fireEvent.blur(element);
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("slash menu is positioned (fixed coordinates from the caret/block anchor)", () => {
+    const block = createTextBlock({ content: "" });
+    render(<DocumentEditor value={docWith([block])} />);
+
+    typeInto(getBlockElement(block.id), "/", 1);
+    const menu = screen.getByRole("listbox") as HTMLElement;
+    expect(menu.style.top).not.toBe("");
+    expect(menu.style.left).not.toBe("");
+  });
+
+  it("table controls add and remove rows and columns", () => {
+    const table = createTableBlock({ columnCount: 2, rowCount: 1, showHeader: false });
+    const onChange = vi.fn();
+    const { container } = render(<DocumentEditor value={docWith([table])} onChange={onChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add row" }));
+    let latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect((latest.blocks[0] as ReturnType<typeof createTableBlock>).rows).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add column" }));
+    latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const widened = latest.blocks[0] as ReturnType<typeof createTableBlock>;
+    expect(widened.columns).toHaveLength(3);
+    for (const row of widened.rows) {
+      expect(row.cells).toHaveLength(3);
+    }
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove column" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove row" }));
+    latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const shrunk = latest.blocks[0] as ReturnType<typeof createTableBlock>;
+    expect(shrunk.columns).toHaveLength(2);
+    expect(shrunk.rows).toHaveLength(1);
+    expect(container.querySelectorAll("td")).toHaveLength(2);
+  });
+
   it("block selection via handle click; Delete removes the range in one undo step", () => {
     const a = createTextBlock({ content: "a" });
     const b = createTextBlock({ content: "b" });
@@ -232,6 +318,128 @@ describe("DocumentEditor", () => {
     fireEvent.click(button);
     const latest = onChange.mock.lastCall![0] as WealthyDocument;
     expect(latest.blocks[0]).toMatchObject({ data: { text: "clicked" } });
+  });
+
+  it("a single ArrowDown/ArrowUp at the boundary line jumps between blocks", () => {
+    const a = createTextBlock({ content: "first" });
+    const b = createTextBlock({ content: "second" });
+    render(<DocumentEditor value={docWith([a, b])} />);
+
+    const first = getBlockElement(a.id);
+    const second = getBlockElement(b.id);
+    first.focus();
+    setCaretOffset(first, 2); // mid-text — but single-line, so one press jumps
+    fireEvent.keyDown(first, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(second);
+
+    fireEvent.keyDown(second, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(first);
+  });
+
+  it("apiRef exposes commands: host can insert a placeholder chip at the caret", () => {
+    const block = createTextBlock({ content: "hello" });
+    const onChange = vi.fn();
+    let api: import("../hooks/useDocumentEditor").DocumentEditorApi | null = null;
+    render(
+      <DocumentEditor
+        value={docWith([block])}
+        onChange={onChange}
+        apiRef={(value) => {
+          api = value;
+        }}
+      />,
+    );
+
+    expect(api).not.toBeNull();
+    let caret = 0;
+    act(() => {
+      caret = api!.commands.insertInlineNode(block.id, 5, {
+        type: "object",
+        kind: "placeholder",
+        data: { key: "client", label: "Cliente" },
+      });
+    });
+    expect(caret).toBe(6);
+
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect((latest.blocks[0] as TextBlock).content).toEqual([
+      { type: "text", text: "hello" },
+      { type: "object", kind: "placeholder", data: { key: "client", label: "Cliente" } },
+    ]);
+    // Chip renders as an atomic contenteditable=false element.
+    const chip = document.querySelector(".wte-inline-object");
+    expect(chip?.getAttribute("contenteditable")).toBe("false");
+    expect(chip?.textContent).toBe("Cliente");
+  });
+
+  it("typing {{Cliente}} converts to a placeholder chip with slugified key", () => {
+    const block = createTextBlock({ content: "" });
+    const onChange = vi.fn();
+    render(<DocumentEditor value={docWith([block])} onChange={onChange} />);
+
+    typeInto(getBlockElement(block.id), "O cliente {{Nome do Cliente}}", 29);
+
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect((latest.blocks[0] as TextBlock).content).toEqual([
+      { type: "text", text: "O cliente " },
+      { type: "object", kind: "placeholder", data: { key: "nome_do_cliente", label: "Nome do Cliente" } },
+    ]);
+  });
+
+  it("inlineTagToNode can be customized or disabled", () => {
+    const block = createTextBlock({ content: "" });
+    const onChange = vi.fn();
+    const { unmount } = render(
+      <DocumentEditor
+        value={docWith([block])}
+        onChange={onChange}
+        inlineTagToNode={(text) => ({ type: "object", kind: "mention", data: { name: text } })}
+      />,
+    );
+    typeInto(getBlockElement(block.id), "{{ana}}", 7);
+    let latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect((latest.blocks[0] as TextBlock).content).toEqual([
+      { type: "object", kind: "mention", data: { name: "ana" } },
+    ]);
+    unmount();
+
+    const plain = createTextBlock({ content: "" });
+    const onChangeDisabled = vi.fn();
+    render(<DocumentEditor value={docWith([plain])} onChange={onChangeDisabled} inlineTagToNode={false} />);
+    typeInto(getBlockElement(plain.id), "{{ana}}", 7);
+    latest = onChangeDisabled.mock.lastCall![0] as WealthyDocument;
+    expect((latest.blocks[0] as TextBlock).content).toEqual([{ type: "text", text: "{{ana}}" }]);
+  });
+
+  it("custom slash items appear in the menu and apply with the query", () => {
+    const block = createTextBlock({ content: "" });
+    const onChange = vi.fn();
+    render(
+      <DocumentEditor
+        value={docWith([block])}
+        onChange={onChange}
+        slashItems={[
+          {
+            id: "placeholder",
+            label: "Placeholder",
+            keywords: ["campo"],
+            apply: ({ insertInlineNode, query }) =>
+              insertInlineNode({ type: "object", kind: "placeholder", data: { label: query || "Campo" } }),
+          },
+        ]}
+      />,
+    );
+
+    const element = getBlockElement(block.id);
+    typeInto(element, "/", 1);
+    const option = screen.getAllByRole("option").find((candidate) => candidate.textContent === "Placeholder");
+    expect(option).toBeTruthy();
+    fireEvent.mouseDown(option!);
+
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect((latest.blocks[0] as TextBlock).content).toEqual([
+      { type: "object", kind: "placeholder", data: { label: "Campo" } },
+    ]);
   });
 
   it("readOnly renders non-editable blocks without handles", () => {

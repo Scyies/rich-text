@@ -12,8 +12,13 @@ export { useBlockEditor } from "./editor/hooks/useBlockEditor";
 export type { BlockEditorApi, UseBlockEditorOptions } from "./editor/hooks/useBlockEditor";
 
 // Components (v0.4)
-export { DocumentEditor } from "./editor/components/DocumentEditor";
-export type { DocumentEditorProps, RenderBlockProps } from "./editor/components/DocumentEditor";
+export { DocumentEditor, defaultInlineTagToNode } from "./editor/components/DocumentEditor";
+export type {
+  CustomSlashItem,
+  DocumentEditorProps,
+  RenderBlockProps,
+  SlashItemContext,
+} from "./editor/components/DocumentEditor";
 export { BlockEditor } from "./editor/components/BlockEditor";
 export type { BlockEditorProps } from "./editor/components/BlockEditor";
 export { InlineEditor } from "./editor/components/InlineEditor";

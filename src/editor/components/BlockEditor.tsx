@@ -35,7 +35,22 @@ export function BlockEditor<TMeta extends BlockMeta = BlockMeta>(props: BlockEdi
   const block = editor.block;
 
   return (
-    <div className={["wte-block-editor", props.className].filter(Boolean).join(" ")}>
+    <div
+      className={["wte-block-editor", props.className].filter(Boolean).join(" ")}
+      onKeyDown={(event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+          event.preventDefault();
+          if (event.shiftKey) {
+            editor.redo();
+          } else {
+            editor.undo();
+          }
+        } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
+          event.preventDefault();
+          editor.redo();
+        }
+      }}
+    >
       {(block.type === "heading" || block.type === "text") && (
         <InlineEditor
           as={block.type === "heading" ? (`h${block.level}` as "h1") : "p"}
@@ -55,7 +70,7 @@ export function BlockEditor<TMeta extends BlockMeta = BlockMeta>(props: BlockEdi
         <TableView
           block={block as TableBlock}
           readOnly={readOnly}
-          onRowsChange={(rows) => editor.update({ rows })}
+          onTableChange={(patch) => editor.update(patch)}
         />
       )}
 

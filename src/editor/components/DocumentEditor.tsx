@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -24,6 +25,8 @@ import type {
   WealthyDocument,
 } from "../core/schema";
 import { useDocumentEditor, type DocumentEditorApi } from "../hooks/useDocumentEditor";
+import { getInlineNodeLength } from "../core/transforms";
+import { getCaretViewportX, getOffsetNearViewportX } from "./dom";
 import { matchInputRule } from "./inputRules";
 import { FloatingToolbar } from "./FloatingToolbar";
 import { InlineEditor, type InlineEditorHandle } from "./InlineEditor";
@@ -46,6 +49,35 @@ export interface RenderBlockProps<TMeta extends BlockMeta = BlockMeta> {
   update(patch: Record<string, unknown>): void;
 }
 
+export interface SlashItemContext<TMeta extends BlockMeta = BlockMeta> {
+  blockId: string;
+  /** The text typed after "/" when the item was applied. */
+  query: string;
+  /** Inserts an inline node where the "/" was typed and places the caret after it. */
+  insertInlineNode(node: InlineNode): void;
+  commands: DocumentEditorApi<TMeta>["commands"];
+}
+
+/** Host-provided slash menu entry (shown after the core block types). */
+export interface CustomSlashItem<TMeta extends BlockMeta = BlockMeta> extends SlashMenuItem {
+  apply(context: SlashItemContext<TMeta>): void;
+}
+
+/**
+ * Default `{{label}}` handler: a placeholder chip whose key is the
+ * slugified label — `{{Nome do Cliente}}` → key "nome_do_cliente".
+ */
+export function defaultInlineTagToNode(label: string): InlineNode {
+  const key = label
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return { type: "object", kind: "placeholder", data: { key: key.length > 0 ? key : "campo", label } };
+}
+
 export interface DocumentEditorProps<TMeta extends BlockMeta = BlockMeta> {
   value: WealthyDocument<TMeta>;
   onChange?: ((document: WealthyDocument<TMeta>, info: ChangeInfo) => void) | undefined;
@@ -58,7 +90,20 @@ export interface DocumentEditorProps<TMeta extends BlockMeta = BlockMeta> {
   className?: string | undefined;
   /** Renderer for custom (plugin/host) blocks. */
   renderBlock?: ((props: RenderBlockProps<TMeta>) => ReactNode) | undefined;
+  /** Extra slash menu items (shown after the core block types). */
+  slashItems?: CustomSlashItem<TMeta>[] | undefined;
+  /**
+   * Typing `{{text}}` converts it to an inline node (D6 chip). Defaults to
+   * a placeholder chip with the text as label; return null to leave the
+   * text untouched; pass `false` to disable the rule.
+   */
+  inlineTagToNode?: ((text: string) => InlineNode | null) | false | undefined;
   ariaLabel?: string | undefined;
+  /**
+   * Escape hatch to the headless editor API (commands, selection,
+   * sections) — e.g. to insert placeholder chips from host UI.
+   */
+  apiRef?: React.Ref<DocumentEditorApi<TMeta>> | undefined;
 }
 
 interface FocusRequest {
@@ -72,6 +117,8 @@ interface SlashState {
   /** Inline offset of the "/" character. */
   slashOffset: number;
   query: string;
+  /** Viewport anchor captured when the menu opened (caret position). */
+  anchor: { x: number; y: number };
 }
 
 interface DropIndicator {
@@ -99,6 +146,24 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
   });
   const { commands, engine } = editor;
   const document = editor.document;
+
+  // Expose the headless API to the host (React 19 ref-as-prop).
+  useEffect(() => {
+    const ref = props.apiRef;
+    if (ref === undefined || ref === null) {
+      return;
+    }
+    if (typeof ref === "function") {
+      ref(editor);
+      return () => {
+        ref(null);
+      };
+    }
+    ref.current = editor;
+    return () => {
+      ref.current = null;
+    };
+  }, [props.apiRef, editor]);
 
   // ---- per-block InlineEditor handles + focus requests ----
   const editorsRef = useRef(new Map<string, InlineEditorHandle>());
@@ -128,11 +193,33 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
   }, []);
 
   // ---- slash menu ----
+  const getSlashAnchor = useCallback((blockId: string): { x: number; y: number } => {
+    if (typeof window !== "undefined") {
+      try {
+        const selection = window.getSelection();
+        if (selection !== null && selection.rangeCount > 0) {
+          const rect = selection.getRangeAt(0).getBoundingClientRect();
+          if (rect.left !== 0 || rect.bottom !== 0) {
+            return { x: rect.left, y: rect.bottom };
+          }
+        }
+      } catch {
+        // fall through to the block element
+      }
+    }
+    const rect = editorsRef.current.get(blockId)?.getElement()?.getBoundingClientRect();
+    return rect !== undefined ? { x: rect.left, y: rect.bottom } : { x: 0, y: 0 };
+  }, []);
+
   const [slash, setSlash] = useState<SlashState | null>(null);
   const [slashIndex, setSlashIndex] = useState(0);
+  const allSlashItems = useMemo(
+    () => [...CORE_SLASH_ITEMS, ...(props.slashItems ?? [])],
+    [props.slashItems],
+  );
   const slashItems = useMemo(
-    () => (slash === null ? [] : filterSlashItems(CORE_SLASH_ITEMS, slash.query)),
-    [slash],
+    () => (slash === null ? [] : filterSlashItems(allSlashItems, slash.query)),
+    [slash, allSlashItems],
   );
 
   const closeSlash = useCallback(() => {
@@ -155,6 +242,21 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
       const [, tail] = splitInlineContent(rest, 1 + slash.query.length);
       const stripped = concatInlineContent(head, tail);
       commands.updateBlock(current.id, { content: stripped });
+
+      // Host-provided items take precedence over core ids.
+      const customItem = props.slashItems?.find((candidate) => candidate.id === item.id);
+      if (customItem !== undefined) {
+        customItem.apply({
+          blockId: current.id,
+          query: slash.query,
+          commands,
+          insertInlineNode: (node) => {
+            const caret = commands.insertInlineNode(current.id, slash.slashOffset, node);
+            requestFocus(current.id, caret);
+          },
+        });
+        return;
+      }
 
       switch (item.id) {
         case "heading-1":
@@ -181,7 +283,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
       }
       requestFocus(current.id, slash.slashOffset);
     },
-    [slash, engine, commands, closeSlash, requestFocus],
+    [slash, engine, commands, closeSlash, requestFocus, props.slashItems],
   );
 
   // ---- content change pipeline (input rules + slash detection) ----
@@ -206,6 +308,25 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
         }
       }
 
+      // Inline tag rule: a just-closed `{{label}}` becomes an inline chip.
+      if (props.inlineTagToNode !== false && caret !== null) {
+        const tagMatch = /\{\{([^{}]+)\}\}$/.exec(plain.slice(0, caret));
+        if (tagMatch !== null) {
+          const node = (props.inlineTagToNode ?? defaultInlineTagToNode)(tagMatch[1]!.trim());
+          if (node !== null) {
+            const start = caret - tagMatch[0].length;
+            const [left, rest] = splitInlineContent(inline, start);
+            const [, right] = splitInlineContent(rest, tagMatch[0].length);
+            commands.updateBlock(blockId, {
+              content: concatInlineContent(concatInlineContent(left, [node]), right),
+            });
+            requestFocus(blockId, start + getInlineNodeLength(node));
+            closeSlash();
+            return;
+          }
+        }
+      }
+
       // Slash menu: open on a just-typed "/", track the query while open.
       if (slash !== null && slash.blockId === blockId) {
         if (plain[slash.slashOffset] !== "/" || caret === null || caret <= slash.slashOffset) {
@@ -215,14 +336,53 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
           setSlashIndex(0);
         }
       } else if (!readOnly && caret !== null && caret > 0 && plain[caret - 1] === "/") {
-        setSlash({ blockId, slashOffset: caret - 1, query: "" });
+        setSlash({ blockId, slashOffset: caret - 1, query: "", anchor: getSlashAnchor(blockId) });
         setSlashIndex(0);
       }
 
       commands.updateBlock(blockId, { content: inline });
     },
-    [engine, commands, slash, closeSlash, requestFocus, readOnly],
+    [engine, commands, slash, closeSlash, requestFocus, readOnly, getSlashAnchor, props.inlineTagToNode],
   );
+
+  // ---- focused-block tracking (placeholder display, slash lifetime) ----
+  const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
+
+  const handleEditorFocus = useCallback((blockId: string) => {
+    setFocusedBlockId(blockId);
+  }, []);
+
+  /** Closes the slash menu when its block loses focus (outside click, tabbing away). */
+  const handleEditorBlur = useCallback(
+    (blockId: string) => {
+      setFocusedBlockId((current) => (current === blockId ? null : current));
+      if (slash !== null && slash.blockId === blockId) {
+        closeSlash();
+      }
+    },
+    [slash, closeSlash],
+  );
+
+  // Blur events are unreliable in some environments (and don't cover every
+  // outside-click path) — while the menu is open, any mousedown outside the
+  // menu and its block closes it.
+  useEffect(() => {
+    if (slash === null || typeof window === "undefined") {
+      return;
+    }
+    const handleMouseDown = (event: MouseEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest(".wte-slash-menu") != null) {
+        return;
+      }
+      const blockElement = target?.closest("[data-block-id]");
+      if (!(blockElement instanceof HTMLElement) || blockElement.dataset["blockId"] !== slash.blockId) {
+        closeSlash();
+      }
+    };
+    window.document.addEventListener("mousedown", handleMouseDown, true);
+    return () => window.document.removeEventListener("mousedown", handleMouseDown, true);
+  }, [slash, closeSlash]);
 
   // ---- keyboard structure ----
   const handleEnter = useCallback(
@@ -288,10 +448,20 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
       if (index === -1) {
         return false;
       }
+      // Preserve the caret's column across the jump (like native editors).
+      const sourceElement = editorsRef.current.get(blockId)?.getElement();
+      const caretX = sourceElement != null ? getCaretViewportX(sourceElement) : null;
+
       for (let cursor = index + direction; cursor >= 0 && cursor < blocks.length; cursor += direction) {
         const candidate = blocks[cursor]!;
-        if (isTextLike(candidate) && editorsRef.current.has(candidate.id)) {
-          requestFocus(candidate.id, direction === -1 ? Number.MAX_SAFE_INTEGER : 0);
+        const handle = editorsRef.current.get(candidate.id);
+        if (isTextLike(candidate) && handle !== undefined) {
+          let offset: number | null = null;
+          const targetElement = handle.getElement();
+          if (caretX !== null && targetElement !== null) {
+            offset = getOffsetNearViewportX(targetElement, caretX, direction === -1 ? "last" : "first");
+          }
+          requestFocus(candidate.id, offset ?? (direction === -1 ? Number.MAX_SAFE_INTEGER : 0));
           return true;
         }
       }
@@ -333,6 +503,22 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
 
   const handleContainerKeyDown = useCallback(
     (event: ReactKeyboardEvent) => {
+      // Engine-owned history (D8): browser-native undo must never run
+      // inside the contenteditables.
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        if (event.shiftKey) {
+          commands.redo();
+        } else {
+          commands.undo();
+        }
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
+        event.preventDefault();
+        commands.redo();
+        return;
+      }
       const selection = engine.getSelection();
       if (selection?.type !== "blocks") {
         return;
@@ -502,7 +688,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
           block={block as Block}
           editor={editor as unknown as DocumentEditorApi}
           readOnly={readOnly}
-          placeholder={placeholder}
+          placeholder={focusedBlockId === block.id ? placeholder : undefined}
           selected={selectedBlockIds.has(block.id)}
           collapsed={block.type === "heading" && editor.isSectionCollapsed(block.id)}
           dropIndicator={dropIndicator?.blockId === block.id ? dropIndicator.position : null}
@@ -518,6 +704,8 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
           onEnter={handleEnter}
           onBackspaceAtStart={handleBackspaceAtStart}
           onTab={handleTab}
+          onEditorFocus={handleEditorFocus}
+          onEditorBlur={handleEditorBlur}
           onMoveFocus={moveFocus}
           onHandleClick={handleHandleClick}
           onToggleCollapsed={editor.toggleSectionCollapsed}
@@ -535,6 +723,13 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
           highlightedIndex={slashIndex}
           onSelect={applySlashItem}
           onHighlight={setSlashIndex}
+          style={{
+            top: slash.anchor.y + 6,
+            left: Math.max(
+              8,
+              Math.min(slash.anchor.x, (typeof window !== "undefined" ? window.innerWidth : 1280) - 248),
+            ),
+          }}
         />
       )}
 
@@ -553,7 +748,7 @@ interface BlockRowProps {
   block: Block;
   editor: DocumentEditorApi;
   readOnly: boolean;
-  placeholder: string;
+  placeholder: string | undefined;
   selected: boolean;
   collapsed: boolean;
   dropIndicator: "before" | "after" | null;
@@ -565,6 +760,8 @@ interface BlockRowProps {
   onEnter(blockId: string, offset: number): void;
   onBackspaceAtStart(blockId: string): void;
   onTab(blockId: string, shift: boolean): void;
+  onEditorFocus(blockId: string): void;
+  onEditorBlur(blockId: string): void;
   onMoveFocus(blockId: string, direction: -1 | 1): boolean;
   onHandleClick(blockId: string, shiftKey: boolean): void;
   onToggleCollapsed(headingId: string): void;
@@ -590,6 +787,8 @@ function BlockRow({
   onEnter,
   onBackspaceAtStart,
   onTab,
+  onEditorFocus,
+  onEditorBlur,
   onMoveFocus,
   onHandleClick,
   onToggleCollapsed,
@@ -677,6 +876,8 @@ function BlockRow({
               style={block.align !== undefined ? { textAlign: block.align } : undefined}
               onContentChange={(nodes, caret) => onContentChange(block.id, nodes, caret)}
               onSelectionChange={(start, end) => onSelectionChange(block.id, start, end)}
+              onFocus={() => onEditorFocus(block.id)}
+              onBlur={() => onEditorBlur(block.id)}
               onEnter={(offset) => onEnter(block.id, offset)}
               onBackspaceAtStart={() => onBackspaceAtStart(block.id)}
               onTab={(shift) => onTab(block.id, shift)}
@@ -703,6 +904,8 @@ function BlockRow({
               style={block.align !== undefined ? { textAlign: block.align } : undefined}
               onContentChange={(nodes, caret) => onContentChange(block.id, nodes, caret)}
               onSelectionChange={(start, end) => onSelectionChange(block.id, start, end)}
+              onFocus={() => onEditorFocus(block.id)}
+              onBlur={() => onEditorBlur(block.id)}
               onEnter={(offset) => onEnter(block.id, offset)}
               onBackspaceAtStart={() => onBackspaceAtStart(block.id)}
               onTab={(shift) => onTab(block.id, shift)}
@@ -717,7 +920,7 @@ function BlockRow({
           <TableView
             block={block as TableBlock}
             readOnly={readOnly}
-            onRowsChange={(rows) => commandsUpdateBlock(block.id, { rows })}
+            onTableChange={(patch) => commandsUpdateBlock(block.id, patch)}
           />
         )}
 

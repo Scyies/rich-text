@@ -1,0 +1,67 @@
+// @vitest-environment jsdom
+import { StrictMode, useState } from "react";
+import { fireEvent, render } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { createTextBlock } from "../core/factories";
+import { SCHEMA_VERSION, type TextBlock, type WealthyDocument } from "../core/schema";
+import { setCaretOffset } from "./dom";
+import { DocumentEditor } from "./DocumentEditor";
+
+describe("typing coalescing through the component stack", () => {
+  it("one Ctrl+Z reverts a whole typing run (uncontrolled)", () => {
+    const block = createTextBlock({ content: "" });
+    const value: WealthyDocument = { schemaVersion: SCHEMA_VERSION, blocks: [block] };
+    const onChange = vi.fn();
+    const { container } = render(<DocumentEditor value={value} onChange={onChange} />);
+
+    const element = container.querySelector(".wte-inline-editor") as HTMLElement;
+    element.focus();
+    for (const text of ["a", "ab", "abc"]) {
+      element.textContent = text;
+      setCaretOffset(element, text.length);
+      fireEvent.input(element);
+    }
+
+    fireEvent.keyDown(container.querySelector(".wte-editor")!, { key: "z", ctrlKey: true });
+
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect((latest.blocks[0] as TextBlock).content).toEqual([]);
+  });
+
+  it("one Ctrl+Z reverts a whole typing run (StrictMode + controlled echo, like the demo)", () => {
+    const block = createTextBlock({ content: "" });
+    const initial: WealthyDocument = { schemaVersion: SCHEMA_VERSION, blocks: [block] };
+    let latest: WealthyDocument = initial;
+
+    function Controlled() {
+      const [doc, setDoc] = useState(initial);
+      return (
+        <DocumentEditor
+          value={doc}
+          onChange={(next) => {
+            latest = next;
+            setDoc(next);
+          }}
+        />
+      );
+    }
+
+    const { container } = render(
+      <StrictMode>
+        <Controlled />
+      </StrictMode>,
+    );
+
+    const element = container.querySelector(".wte-inline-editor") as HTMLElement;
+    element.focus();
+    for (const text of ["a", "ab", "abc"]) {
+      element.textContent = text;
+      setCaretOffset(element, text.length);
+      fireEvent.input(element);
+    }
+
+    fireEvent.keyDown(container.querySelector(".wte-editor")!, { key: "z", ctrlKey: true });
+
+    expect((latest.blocks[0] as TextBlock).content).toEqual([]);
+  });
+});

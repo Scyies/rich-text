@@ -1,0 +1,103 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  color: #1c2733;
+  background: #f6f7f8;
+}
+
+.demo {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.demo__header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 20px;
+  background: #fff;
+  border-bottom: 1px solid #e2e6ea;
+}
+
+.demo__header h1 {
+  font-size: 16px;
+  margin: 0;
+}
+
+.demo__meta {
+  color: #6b7682;
+  font-size: 13px;
+  flex: 1;
+}
+
+.demo__header button {
+  border: 1px solid #d4d9de;
+  background: #fff;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.demo__main {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+}
+
+.demo__main--split {
+  grid-template-columns: 3fr 2fr;
+}
+
+.demo__editor {
+  overflow-y: auto;
+  padding: 32px 48px;
+}
+
+.demo__editor .wte-editor {
+  max-width: 760px;
+  margin: 0 auto;
+  background: #fff;
+  border: 1px solid #e2e6ea;
+  border-radius: 10px;
+  padding: 40px 48px;
+  min-height: 70vh;
+}
+
+.demo__json {
+  overflow: auto;
+  border-left: 1px solid #e2e6ea;
+  background: #0f172a;
+  color: #cbd5e1;
+}
+
+.demo__json pre {
+  margin: 0;
+  padding: 16px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.demo-callout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fef9e7;
+  border: 1px solid #f3e2a8;
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.demo-callout input {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  outline: none;
+}

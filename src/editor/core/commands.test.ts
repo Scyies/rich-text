@@ -88,6 +88,22 @@ describe("createEditorEngine", () => {
     expect(engine.getDocument().blocks).toHaveLength(1);
   });
 
+  it("insertInlineNode returns the caret offset after the inserted node", () => {
+    const block = createTextBlock({ content: "hello" });
+    const engine = createEditorEngine({ value: docWith([block]) });
+
+    const caret = engine.commands.insertInlineNode(block.id, 5, {
+      type: "object",
+      kind: "placeholder",
+      data: { key: "k" },
+    });
+    expect(caret).toBe(6); // atomic object counts as 1 inline unit
+    expect((engine.getDocument().blocks[0] as TextBlock).content).toHaveLength(2);
+
+    engine.commands.undo();
+    expect((engine.getDocument().blocks[0] as TextBlock).content).toEqual([{ type: "text", text: "hello" }]);
+  });
+
   it("applyPatches is undoable as a single step", () => {
     const heading = createHeadingBlock({ level: 1, content: "A" });
     const paragraph = createTextBlock({ content: "body" });

@@ -118,7 +118,8 @@
   line-height: 1.6;
 }
 
-.wte-inline-editor[data-empty="true"]::before {
+/* Placeholder only on the focused empty line (Notion behavior). */
+.wte-inline-editor[data-empty="true"]:focus::before {
   content: attr(data-placeholder);
   color: var(--wte-muted);
   pointer-events: none;
@@ -174,6 +175,43 @@ h6.wte-inline-editor { font-size: 1.05em; }
 .wte-table th {
   background: rgba(0, 0, 0, 0.03);
   font-weight: 600;
+}
+
+.wte-table-wrapper {
+  position: relative;
+}
+
+.wte-table__controls {
+  display: flex;
+  gap: 4px;
+  margin: 4px 0 2px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.wte-table-wrapper:hover .wte-table__controls,
+.wte-table-wrapper:focus-within .wte-table__controls {
+  opacity: 1;
+}
+
+.wte-table__controls button {
+  border: 1px solid var(--wte-border, #d4d9de);
+  background: var(--wte-surface, #fff);
+  border-radius: 5px;
+  padding: 2px 8px;
+  font-size: 0.8em;
+  color: var(--wte-muted, #6b7682);
+  cursor: pointer;
+}
+
+.wte-table__controls button:hover:not(:disabled) {
+  background: var(--wte-accent-soft, rgba(37, 99, 235, 0.12));
+  color: var(--wte-accent, #2563eb);
+}
+
+.wte-table__controls button:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 /* ---- slash menu ---- */

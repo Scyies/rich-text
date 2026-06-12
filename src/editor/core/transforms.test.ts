@@ -7,6 +7,7 @@ import {
   duplicateSection,
   indentBlock,
   insertBlockAfter,
+  insertInlineNode,
   mergeWithPrevious,
   moveBlock,
   moveSection,
@@ -177,6 +178,33 @@ describe("splitBlock / mergeWithPrevious", () => {
     const paragraph = createTextBlock();
     expect(() => mergeWithPrevious(docWith([paragraph]), paragraph.id)).toThrow(RangeError);
     expect(() => mergeWithPrevious(docWith([table, paragraph]), paragraph.id)).toThrow(RangeError);
+  });
+});
+
+describe("insertInlineNode", () => {
+  it("splices an inline object at the offset, leaving text intact", () => {
+    const block = createTextBlock({ content: "hello world" });
+    const chip = { type: "object" as const, kind: "placeholder", data: { key: "name" } };
+    const next = insertInlineNode(docWith([block]), block.id, 6, chip);
+    expect((next.blocks[0] as Block & { content: unknown }).content).toEqual([
+      { type: "text", text: "hello " },
+      chip,
+      { type: "text", text: "world" },
+    ]);
+  });
+
+  it("inserts text nodes and merges with same-marked neighbors", () => {
+    const block = createTextBlock({ content: "ab" });
+    const next = insertInlineNode(docWith([block]), block.id, 1, { type: "text", text: "X" });
+    expect((next.blocks[0] as Block & { content: unknown }).content).toEqual([{ type: "text", text: "aXb" }]);
+  });
+
+  it("rejects non-text blocks and out-of-range offsets", () => {
+    const table = createTableBlock({ columnCount: 1, rowCount: 0 });
+    const chip = { type: "object" as const, kind: "x", data: {} };
+    expect(() => insertInlineNode(docWith([table]), table.id, 0, chip)).toThrow(RangeError);
+    const block = createTextBlock({ content: "ab" });
+    expect(() => insertInlineNode(docWith([block]), block.id, 5, chip)).toThrow(RangeError);
   });
 });
 
