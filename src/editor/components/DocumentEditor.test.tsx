@@ -744,6 +744,44 @@ describe("DocumentEditor — paste (D11)", () => {
   });
 });
 
+describe("DocumentEditor — trailing non-editable block", () => {
+  const separator = () => ({ id: crypto.randomUUID(), type: "custom" as const, kind: "sep", data: {} });
+
+  it("ArrowDown past a trailing non-editable block adds and focuses a new line", () => {
+    const foo = createTextBlock({ content: "foo" });
+    const onChange = vi.fn();
+    render(<DocumentEditor value={docWith([foo, separator()])} onChange={onChange} />);
+
+    const element = getBlockElement(foo.id);
+    element.focus();
+    setCaretOffset(element, 3);
+    fireEvent.keyDown(element, { key: "ArrowDown" });
+
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect(latest.blocks).toHaveLength(3);
+    expect(latest.blocks[2]).toMatchObject({ type: "text", variant: "paragraph", content: [] });
+  });
+
+  it("renders a trailing click target that adds a line, then hides itself", () => {
+    const foo = createTextBlock({ content: "foo" });
+    const onChange = vi.fn();
+    const { container } = render(<DocumentEditor value={docWith([foo, separator()])} onChange={onChange} />);
+
+    fireEvent.mouseDown(within(container).getByRole("button", { name: "Add a line below" }));
+
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect(latest.blocks).toHaveLength(3);
+    expect(latest.blocks[2]).toMatchObject({ type: "text", content: [] });
+    // The last block is editable again, so the affordance is gone.
+    expect(within(container).queryByRole("button", { name: "Add a line below" })).toBeNull();
+  });
+
+  it("does not show the trailing affordance when the last block is editable", () => {
+    const { container } = render(<DocumentEditor value={docWith([createTextBlock({ content: "only" })])} />);
+    expect(within(container).queryByRole("button", { name: "Add a line below" })).toBeNull();
+  });
+});
+
 describe("test isolation", () => {
   // Runs last: after dozens of render() calls above. If afterEach(cleanup)
   // were missing, those renders would accumulate and this count would be > 1.

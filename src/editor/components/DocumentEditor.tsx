@@ -607,6 +607,16 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     [engine, commands],
   );
 
+  // Adds an empty paragraph at the very end of the document and focuses it —
+  // the on-demand way out of a trailing non-editable block (separator, table,
+  // custom), which has no caret position after it.
+  const addTrailingParagraph = useCallback(() => {
+    const blocks = engine.getDocument().blocks;
+    const last = blocks[blocks.length - 1];
+    const newId = commands.insertBlockAfter(last?.id ?? null, createTextBlock({ content: [] }) as Block<TMeta>);
+    requestFocus(newId, 0);
+  }, [engine, commands, requestFocus]);
+
   const moveFocus = useCallback(
     (blockId: string, direction: -1 | 1): boolean => {
       const blocks = engine.getDocument().blocks;
@@ -631,9 +641,18 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
           return true;
         }
       }
+      // Going down with no editable block below: if a non-editable block sits at
+      // the end of the document, add a fresh trailing line and land in it.
+      if (direction === 1) {
+        const last = blocks[blocks.length - 1];
+        if (last !== undefined && !isTextLike(last)) {
+          addTrailingParagraph();
+          return true;
+        }
+      }
       return false;
     },
-    [engine, requestFocus],
+    [engine, requestFocus, addTrailingParagraph],
   );
 
   // ---- selection: inline tracking + block multi-select ----
@@ -873,6 +892,11 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     [slash, slashItems, slashIndex, applySlashItem, closeSlash],
   );
 
+  // A non-editable block at the end of the document has no caret position after
+  // it — offer a click target to add (and focus) a trailing line.
+  const lastBlock = document.blocks[document.blocks.length - 1];
+  const showTrailingAdd = !readOnly && lastBlock !== undefined && !isTextLike(lastBlock);
+
   // ---- render ----
   return (
     <div
@@ -922,6 +946,19 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
           commandsUpdateBlock={commands.updateBlock}
         />
       ))}
+
+      {showTrailingAdd && (
+        <div
+          className="wte-trailing-line"
+          role="button"
+          tabIndex={-1}
+          aria-label="Add a line below"
+          onMouseDown={(event) => {
+            event.preventDefault();
+            addTrailingParagraph();
+          }}
+        />
+      )}
 
       {slash !== null && (
         <SlashMenu

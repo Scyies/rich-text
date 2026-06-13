@@ -106,6 +106,17 @@
   user-select: none;
 }
 
+/* Click target to add a line after a trailing non-editable block. */
+.wte-trailing-line {
+  min-height: 1.5em;
+  cursor: text;
+  border-radius: var(--wte-radius);
+}
+
+.wte-trailing-line:hover {
+  background: var(--wte-accent-soft);
+}
+
 /* ---- inline editor ---- */
 
 .wte-inline-editor {
