@@ -71,7 +71,7 @@ Publicação progressiva em 5 etapas. As decisões D1–D15 referenciadas estão
 
 **Pacote:** fechar o restante da v0.5 antes de promover para release estável.
 
-- Rich paste HTML→schema (Word/Docs/web, fallback texto puro) (D11)
+- **Rich paste HTML→schema (Word/Docs/web, fallback texto puro) (D11) ✅**
 - Decisão final de CSS: manter `styles.css` global `.wte-*` ou migrar para CSS Modules
 - i18n: dicionários pt-BR + en, prop `locale`
 - README com exemplos completos de uso
@@ -102,6 +102,17 @@ Publicação progressiva em 5 etapas. As decisões D1–D15 referenciadas estão
 > (underline/highlight) e descarta `color`; docx faz best-effort (code→monospace,
 > color só se hex, highlight descartado). Verificação docx: descompacta o `.docx` e checa
 > `word/document.xml` (jszip, devDep).
+
+> Nota de implementação (Rich paste — feito): `src/editor/components/paste.ts` (lado
+> React, depende de `DOMParser`; `[]` sem DOM). `parseHtmlToBlocks` inverte o exporter
+> HTML — headings, parágrafos, listas aninhadas por indent, tabelas, `<hr>`→separator,
+> divs recursivos, inline via `domToInlineNodes` (whitespace solto entre blocos é
+> ignorado). `parseClipboardToBlocks` prefere HTML e sempre cai para texto puro (D11);
+> `parsePlainTextToBlocks` quebra por `\n`. Handler `onPaste` no `DocumentEditor`:
+> parágrafo único → splice inline no bloco atual; senão split + inserção atômica via
+> `applyPatches` (`insert_block_after`/`delete_block` — um único undo), com substituição
+> quando a linha está vazia. Markdown paste fica fora (não-objetivo). Verificado no
+> navegador (preview): paste de bloco e inline interceptados e renderizados, sem erros.
 
 ## Validação de release
 

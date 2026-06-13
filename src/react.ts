@@ -44,6 +44,14 @@ export {
 export { matchInputRule } from "./editor/components/inputRules";
 export type { InputRuleMatch } from "./editor/components/inputRules";
 
+// Paste (D11) — clipboard HTML → blocks, with a plain-text fallback
+export {
+  parseClipboardToBlocks,
+  parseHtmlToBlocks,
+  parsePlainTextToBlocks,
+} from "./editor/components/paste";
+export type { ClipboardPayload } from "./editor/components/paste";
+
 // Plugins (D5/D6) — block + inline-object renderers, slash/toolbar items
 export { buildPluginRegistry } from "./editor/plugins/registry";
 export type { PluginRegistry } from "./editor/plugins/registry";

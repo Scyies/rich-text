@@ -667,6 +667,83 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
   });
 });
 
+describe("DocumentEditor — paste (D11)", () => {
+  type Api = import("../hooks/useDocumentEditor").DocumentEditorApi;
+
+  function setup(blocks: Block[]) {
+    const onChange = vi.fn();
+    let api: Api | null = null;
+    render(
+      <DocumentEditor
+        value={docWith(blocks)}
+        onChange={onChange}
+        apiRef={(value) => {
+          api = value;
+        }}
+      />,
+    );
+    return { onChange, getApi: () => api! };
+  }
+
+  function paste(api: Api, blockId: string, offset: number, payload: { html?: string; text?: string }): void {
+    const element = getBlockElement(blockId);
+    element.focus();
+    act(() => api.setSelection({ type: "text", blockId, anchor: offset, focus: offset }));
+    const clipboardData = {
+      getData: (type: string) => (type === "text/html" ? (payload.html ?? "") : (payload.text ?? "")),
+    };
+    fireEvent.paste(element, { clipboardData });
+  }
+
+  function summary(doc: WealthyDocument): string[] {
+    return doc.blocks.map((block) =>
+      block.type === "text" || block.type === "heading"
+        ? block.content.map((node) => (node.type === "text" ? node.text : "▢")).join("")
+        : `[${block.type === "custom" ? block.kind : block.type}]`,
+    );
+  }
+
+  it("pastes multi-line plain text as paragraphs after the caret", () => {
+    const block = createTextBlock({ content: "abc" });
+    const { onChange, getApi } = setup([block]);
+    paste(getApi(), block.id, 3, { text: "X\nY" });
+    expect(summary(onChange.mock.lastCall![0] as WealthyDocument)).toEqual(["abc", "X", "Y"]);
+  });
+
+  it("splices a single pasted paragraph inline at the caret", () => {
+    const block = createTextBlock({ content: "abcdef" });
+    const { onChange, getApi } = setup([block]);
+    paste(getApi(), block.id, 3, { html: "<p>XY</p>" });
+    expect(summary(onChange.mock.lastCall![0] as WealthyDocument)).toEqual(["abcXYdef"]);
+  });
+
+  it("pastes rich HTML (heading + paragraph) replacing an empty line", () => {
+    const block = createTextBlock({ content: "" });
+    const { onChange, getApi } = setup([block]);
+    paste(getApi(), block.id, 0, { html: "<h2>H</h2><p>P</p>" });
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect(latest.blocks.map((b) => b.type)).toEqual(["heading", "text"]);
+    expect(summary(latest)).toEqual(["H", "P"]);
+  });
+
+  it("maps a pasted <hr> to the separator block", () => {
+    const block = createTextBlock({ content: "" });
+    const { onChange, getApi } = setup([block]);
+    paste(getApi(), block.id, 0, { html: "<p>a</p><hr><p>b</p>" });
+    expect(summary(onChange.mock.lastCall![0] as WealthyDocument)).toEqual(["a", "[separator]", "b"]);
+  });
+
+  it("is a single undo step (atomic block paste)", () => {
+    const block = createTextBlock({ content: "abc" });
+    const { onChange, getApi } = setup([block]);
+    paste(getApi(), block.id, 3, { text: "X\nY" });
+    act(() => {
+      getApi().commands.undo();
+    });
+    expect(summary(onChange.mock.lastCall![0] as WealthyDocument)).toEqual(["abc"]);
+  });
+});
+
 describe("test isolation", () => {
   // Runs last: after dozens of render() calls above. If afterEach(cleanup)
   // were missing, those renders would accumulate and this count would be > 1.

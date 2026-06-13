@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ClipboardEvent as ReactClipboardEvent,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -15,7 +16,7 @@ import { getInlineLength, getInlineText, splitInlineContent, concatInlineContent
 import { getActiveMarks, toggleMark } from "../core/marks";
 import { getHeadingNumbers, getListItemNumbers, formatHeadingNumber } from "../core/numbering";
 import { getSelectedBlockRange } from "../core/selection";
-import { createTableBlock } from "../core/factories";
+import { createTableBlock, createTextBlock } from "../core/factories";
 import type {
   Block,
   BlockMeta,
@@ -31,6 +32,7 @@ import { buildPluginRegistry } from "../plugins/registry";
 import type { CustomSlashItem, EditorPlugin, RenderBlockProps } from "../plugins/types";
 import { getCaretViewportX, getOffsetNearViewportX, offsetOfInlineObject, type InlineRenderConfig } from "./dom";
 import { matchInputRule } from "./inputRules";
+import { parseClipboardToBlocks } from "./paste";
 import { ChipPopover } from "./ChipPopover";
 import { FloatingToolbar, type FloatingToolbarExtraItem } from "./FloatingToolbar";
 import { InlineEditor, type InlineEditorHandle } from "./InlineEditor";
@@ -455,6 +457,99 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     };
   }, [chipEdit]);
 
+  // ---- rich paste (D11) ----
+  const handlePaste = useCallback(
+    (event: ReactClipboardEvent) => {
+      if (readOnly) {
+        return;
+      }
+      const selection = engine.getSelection();
+      if (selection?.type !== "text") {
+        return;
+      }
+      const currentDocument = engine.getDocument();
+      const block = currentDocument.blocks.find((candidate) => candidate.id === selection.blockId);
+      if (block === undefined || !isTextLike(block)) {
+        return;
+      }
+      // Only intercept when a top-level block editor is focused — paste inside
+      // a table cell falls through to the browser's default for now.
+      const targetElement = editorsRef.current.get(block.id)?.getElement();
+      if (targetElement == null || targetElement.ownerDocument.activeElement !== targetElement) {
+        return;
+      }
+
+      const html = event.clipboardData.getData("text/html");
+      const text = event.clipboardData.getData("text/plain");
+      if (html.trim().length === 0 && text.length === 0) {
+        return;
+      }
+      const pasted = parseClipboardToBlocks({ html, text });
+      if (pasted.length === 0) {
+        return;
+      }
+      event.preventDefault();
+      closeSlash();
+
+      const start = Math.min(selection.anchor, selection.focus);
+      const end = Math.max(selection.anchor, selection.focus);
+      const [left] = splitInlineContent(block.content, start);
+      const [, right] = splitInlineContent(block.content, end);
+
+      // Inline paste: a single paragraph splices into the current block (keeps its type).
+      const only = pasted.length === 1 ? pasted[0] : undefined;
+      if (only !== undefined && only.type === "text" && only.variant === "paragraph") {
+        const merged = concatInlineContent(concatInlineContent(left, only.content), right);
+        commands.updateBlock(block.id, { content: merged });
+        requestFocus(block.id, getInlineLength(left) + getInlineLength(only.content));
+        return;
+      }
+
+      // Block paste: split the current line, splice the blocks between, as one
+      // atomic (single-undo) transaction through the patch pipeline.
+      const index = currentDocument.blocks.findIndex((candidate) => candidate.id === block.id);
+      const previousId = index > 0 ? currentDocument.blocks[index - 1]!.id : null;
+      const rightBlock = getInlineLength(right) > 0 ? createTextBlock({ content: right }) : null;
+      const patches: unknown[] = [];
+
+      if (getInlineLength(left) === 0 && rightBlock === null) {
+        // Pasting into an empty line replaces it.
+        pasted.forEach((pastedBlock, position) =>
+          patches.push({
+            op: "insert_block_after",
+            afterBlockId: position === 0 ? previousId : pasted[position - 1]!.id,
+            block: pastedBlock,
+          }),
+        );
+        patches.push({ op: "delete_block", blockId: block.id });
+      } else {
+        patches.push({ op: "update_block", blockId: block.id, changes: { content: left } });
+        pasted.forEach((pastedBlock, position) =>
+          patches.push({
+            op: "insert_block_after",
+            afterBlockId: position === 0 ? block.id : pasted[position - 1]!.id,
+            block: pastedBlock,
+          }),
+        );
+        if (rightBlock !== null) {
+          patches.push({ op: "insert_block_after", afterBlockId: pasted[pasted.length - 1]!.id, block: rightBlock });
+        }
+      }
+      commands.applyPatches(patches);
+
+      // Caret goes to the remainder, else the end of the last text-like pasted block.
+      if (rightBlock !== null) {
+        requestFocus(rightBlock.id, 0);
+      } else {
+        const lastTextLike = [...pasted].reverse().find((candidate) => isTextLike(candidate));
+        if (lastTextLike !== undefined && isTextLike(lastTextLike)) {
+          requestFocus(lastTextLike.id, getInlineLength(lastTextLike.content));
+        }
+      }
+    },
+    [readOnly, engine, commands, requestFocus, closeSlash],
+  );
+
   // ---- keyboard structure ----
   const handleEnter = useCallback(
     (blockId: string, offset: number) => {
@@ -787,6 +882,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
       aria-label={props.ariaLabel ?? "Document editor"}
       onKeyDown={handleContainerKeyDown}
       onMouseDown={handleEditorMouseDown}
+      onPaste={handlePaste}
     >
       {visibleBlocks.map((block) => (
         <BlockRow
