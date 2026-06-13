@@ -64,6 +64,10 @@ export type {
   CreateTextBlockInput,
 } from "./editor/core/factories";
 
+// Built-in custom block helpers
+export { createSeparatorBlock, SEPARATOR_BLOCK_KIND } from "./editor/plugins/separator-core";
+export type { CreateSeparatorBlockInput } from "./editor/plugins/separator-core";
+
 // Serialization
 export { deserializeDocument, serializeDocument } from "./editor/core/serialization";
 

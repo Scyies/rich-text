@@ -48,27 +48,33 @@ Publicação progressiva em 5 etapas. As decisões D1–D15 referenciadas estão
 **Pacote:** componentes de UI.
 
 - `DocumentEditor` / `BlockEditor`
-- Contenteditable por bloco + `BlockSelectionOverlay` para multi-select (D7)
+- Contenteditable por bloco + seleção de blocos via handles (D7)
 - Enter/Backspace/Tab: split, merge, indent — cada linha é um bloco (D2)
 - Input rules markdown: `# `, `- `, `1. `, Tab/Shift+Tab, Backspace reverte (D11)
 - `SlashMenu` com tipos do core + plugins (D11)
 - Drag and drop de blocos e seções (re-nivelamento, D4)
 - Collapse/expand de seções na UI
-- `Toolbar`, `FloatingMenu`
-- shadcn/ui primitives copiados em `internal/ui/`
+- `FloatingToolbar`
 
-**Arquivos:** `src/editor/components/`, `src/internal/ui/`
+**Arquivos:** `src/editor/components/`
 
-## v0.5 — Estilo, i18n, Plugins, Paste (📦 `wealthy-text-editor`)
+## v0.5-alpha — Plugins e Exporters (📦 `wealthy-text-editor`) ✅ parcial
 
-**Pacote:** polimento final para v1.0.
+**Pacote:** validação antecipada das extensões e dos exporters antes do polimento final.
 
-- Rich paste HTML→schema (Word/Docs/web, fallback texto puro) (D11)
-- CSS Modules + `styles.css` global da lib
-- i18n: dicionários pt-BR + en, prop `locale`
 - **Sistema de plugins: block types custom, inline objects, slash items (D5, D6) ✅**
 - **Exporters como subpath entries: `/export-docx`, `/export-html`, `/export-markdown` (D12) ✅**
-- README com exemplos de uso
+- Edição de chips por `inlineObjects[].renderEditor` ✅
+- `package.json` expõe root core, `/react`, exporters e `styles.css` ✅
+
+## v0.5 — Polimento final para v1.0 (📦 `wealthy-text-editor`) ⏳
+
+**Pacote:** fechar o restante da v0.5 antes de promover para release estável.
+
+- Rich paste HTML→schema (Word/Docs/web, fallback texto puro) (D11)
+- Decisão final de CSS: manter `styles.css` global `.wte-*` ou migrar para CSS Modules
+- i18n: dicionários pt-BR + en, prop `locale`
+- README com exemplos completos de uso
 - Documentação de API pública
 - CI: build, lint, test, publish automático
 
@@ -81,9 +87,8 @@ Publicação progressiva em 5 etapas. As decisões D1–D15 referenciadas estão
 > o chip continua um token nativo no contenteditable (D16 intacto) e o popover é um overlay
 > do `DocumentEditor` (mesmo padrão de `SlashMenu`/`FloatingToolbar`), não portais React.
 > Núcleo ganhou os transforms/commands puros `updateInlineObject`/`removeInlineNode`.
-> `commands`/`onInit` do esboço da ARCHITECTURE foram adiados (sem consumidor na v0.5;
-> aditivos depois). A prop do componente chama-se `plugins` (não `extensions`); as
-> referências a `extensions` em README/ARCHITECTURE serão alinhadas no passo de docs.
+> `commands`/`onInit` do esboço inicial de plugins foram adiados (sem consumidor na v0.5;
+> aditivos depois). A prop do componente chama-se `plugins` (não `extensions`).
 
 > Nota de implementação (Exporters — feito): três entradas tsup achatadas
 > (`dist/{html,markdown,docx}.js`) mapeadas em `package.json` para
@@ -97,6 +102,17 @@ Publicação progressiva em 5 etapas. As decisões D1–D15 referenciadas estão
 > (underline/highlight) e descarta `color`; docx faz best-effort (code→monospace,
 > color só se hex, highlight descartado). Verificação docx: descompacta o `.docx` e checa
 > `word/document.xml` (jszip, devDep).
+
+## Validação de release
+
+Antes de publicar qualquer pacote:
+
+```bash
+pnpm validate:release
+```
+
+Esse script roda testes, typecheck, build, `pnpm pack --dry-run` e um smoke test das entradas
+`wealthy-text-editor`, `/react`, `/export-html`, `/export-markdown` e `/export-docx`.
 
 ## v1.0 — Stable
 
@@ -123,7 +139,8 @@ Publicação progressiva em 5 etapas. As decisões D1–D15 referenciadas estão
 | v0.2 Core Engine | 5-7 dias | v0.1 |
 | v0.3 Hooks | 3-5 dias | v0.2 |
 | v0.4 Componentes | 7-10 dias | v0.3 |
-| v0.5 Estilo/i18n/Plugins/Paste | 5-7 dias | v0.4 |
+| v0.5-alpha Plugins/Exporters | feito | v0.4 |
+| v0.5 Estilo/i18n/Paste/Docs/CI | 5-7 dias | v0.5-alpha |
 | v1.0 Stable | 2-3 dias | v0.5 |
 
 Total estimado: ~25-35 dias de trabalho.

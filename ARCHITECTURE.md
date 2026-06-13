@@ -9,8 +9,8 @@
 | Camada | Tecnologia |
 |---|---|
 | Bundle | tsup (ESM + CJS + .d.ts, múltiplos entry points) |
-| UI primitives | shadcn/ui copiado internamente + CSS Modules |
-| CSS | CSS Modules com prefixo `.wte-` |
+| UI primitives | Componentes React próprios |
+| CSS | `styles.css` global com prefixo `.wte-` |
 | Schema | Zod |
 | Texto inline | Contenteditable custom (um por bloco) |
 | Gerenciador de pacotes | pnpm |
@@ -97,10 +97,10 @@ wealthy-text-editor/
 │   │   ├── components/
 │   │   │   ├── DocumentEditor.tsx       # API principal (multi-bloco)
 │   │   │   ├── BlockEditor.tsx          # API secundária (bloco único)
-│   │   │   ├── Toolbar.tsx
+│   │   │   ├── FloatingToolbar.tsx
 │   │   │   ├── SlashMenu.tsx
-│   │   │   ├── FloatingMenu.tsx
-│   │   │   └── BlockSelectionOverlay.tsx
+│   │   │   ├── ChipPopover.tsx
+│   │   │   └── TableView.tsx
 │   │   ├── core/
 │   │   │   ├── schema.ts               # Zod schemas + types
 │   │   │   ├── sections.ts             # getSectionTree / getSection (derivação pura)
@@ -123,9 +123,6 @@ wealthy-text-editor/
 │   │       ├── docx.ts                 # entry: wealthy-text-editor/export-docx
 │   │       ├── html.ts                 # entry: wealthy-text-editor/export-html
 │   │       └── markdown.ts             # entry: wealthy-text-editor/export-markdown
-│   ├── internal/
-│   │   ├── ui/                          # shadcn copiado + *.module.css
-│   │   └── utils/cn.ts
 │   └── index.ts
 ├── styles.css
 ├── package.json
@@ -210,9 +207,8 @@ type InlineMark =
   value={document}            // inicial; troca de referência = troca de documento
   onChange={handleChange}     // a cada transação
   onCommit={handleCommit}     // blur / idle / save explícito
-  locale="pt-BR"
-  extensions={[]}
-  readonly={false}
+  plugins={[]}
+  readOnly={false}
   renderBlock?: (props: RenderBlockProps) => React.ReactNode
 />
 ```
@@ -255,10 +251,8 @@ interface EditorPlugin {
   name: string
   blockTypes?: BlockTypeRegistration[]       // CustomBlock kinds + renderers
   inlineObjects?: InlineObjectRegistration[] // InlineObjectNode kinds + renderers
-  commands?: CommandRegistration[]
-  slashMenuItems?: SlashMenuItem[]
-  toolbarItems?: ToolbarItem[]
-  onInit?: (ctx: EditorContext) => void
+  slashItems?: CustomSlashItem[]
+  toolbarItems?: ToolbarItemRegistration[]
 }
 ```
 
@@ -272,10 +266,9 @@ interface EditorPlugin {
 
 ## Estilo
 
-- CSS Modules com prefixo `.wte-` para escopo.
+- `styles.css` global com classes prefixadas por `.wte-`.
 - Variáveis CSS definidas na lib (não dependem do theme do host).
 - Host importa: `import "wealthy-text-editor/styles.css"`.
-- Componentes shadcn copiados para `internal/ui/` com imports relativos.
 - Nenhuma dependência de Tailwind config do host.
 
 ## Dependências
@@ -288,10 +281,8 @@ interface EditorPlugin {
 ### Runtime (inline/bundled)
 
 - `zod` (schema validation)
-- `clsx` + `tailwind-merge` (`cn()` utility)
-- shadcn/ui primitives copiados (Button, Input, DropdownMenu, Popover, Tooltip, Separator)
 - `docx` (apenas no entry `export-docx`)
 
 ## Licenciamento
 
-Os componentes shadcn/ui copiados são MIT license (compatível). A lib inteira será distribuída sob MIT.
+A lib inteira será distribuída sob MIT.

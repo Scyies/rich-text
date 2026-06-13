@@ -1,10 +1,12 @@
 {
   "name": "wealthy-text-editor",
-  "version": "0.4.0",
+  "version": "0.5.0-alpha.0",
   "description": "Schema-first, headless, block-based rich text editor for React.",
   "license": "MIT",
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "**/*.css"
+  ],
   "files": [
     "dist",
     "styles.css"
@@ -45,7 +47,9 @@
     "demo": "vite --config demo/vite.config.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "smoke:exports": "node scripts/smoke-exports.mjs",
+    "validate:release": "pnpm test && pnpm typecheck && pnpm build && pnpm pack --dry-run && pnpm smoke:exports"
   },
   "dependencies": {
     "docx": "^9.7.1",

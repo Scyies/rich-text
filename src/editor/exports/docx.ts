@@ -1,5 +1,6 @@
 import {
   AlignmentType,
+  BorderStyle,
   Document,
   ExternalHyperlink,
   HeadingLevel,
@@ -13,6 +14,7 @@ import {
   type FileChild,
   type IRunOptions,
 } from "docx";
+import { SEPARATOR_BLOCK_KIND } from "../plugins/separator-core";
 import type {
   Align,
   Block,
@@ -148,6 +150,20 @@ function tableToDocx(block: TableBlock, options: DocxExportOptions): Table {
   return new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE } });
 }
 
+function separatorToDocx(): Paragraph {
+  return new Paragraph({
+    border: {
+      bottom: {
+        style: BorderStyle.SINGLE,
+        size: 6,
+        color: "A8B0BA",
+        space: 1,
+      },
+    },
+    children: [],
+  });
+}
+
 function blockToDocx(block: Block, options: DocxExportOptions): FileChild | FileChild[] {
   switch (block.type) {
     case "heading": {
@@ -163,6 +179,9 @@ function blockToDocx(block: Block, options: DocxExportOptions): FileChild | File
     case "table":
       return tableToDocx(block, options);
     case "custom":
+      if (options.renderCustomBlock === undefined && block.kind === SEPARATOR_BLOCK_KIND) {
+        return separatorToDocx();
+      }
       return (
         options.renderCustomBlock?.(block) ??
         new Paragraph({ children: [new TextRun({ text: `[${block.kind}]`, italics: true })] })

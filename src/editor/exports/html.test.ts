@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createCustomBlock, createHeadingBlock, createTableBlock, createTextBlock } from "../core/factories";
+import { createSeparatorBlock } from "../plugins/separator-core";
 import { SCHEMA_VERSION, type Block, type WealthyDocument } from "../core/schema";
 import { exportHtml } from "./html";
 
@@ -100,6 +101,11 @@ describe("exportHtml", () => {
       createCustomBlock({ kind: "widget", data: {} }),
     ]);
     expect(exportHtml(doc)).toBe("<p>@ana</p>\n<!-- custom block: widget -->");
+  });
+
+  it("renders the built-in separator custom block as an hr", () => {
+    const doc = docWith([createTextBlock({ content: "before" }), createSeparatorBlock(), createTextBlock({ content: "after" })]);
+    expect(exportHtml(doc)).toBe("<p>before</p>\n<hr>\n<p>after</p>");
   });
 
   it("emits text-align styles from align", () => {

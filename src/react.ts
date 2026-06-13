@@ -47,6 +47,9 @@ export type { InputRuleMatch } from "./editor/components/inputRules";
 // Plugins (D5/D6) — block + inline-object renderers, slash/toolbar items
 export { buildPluginRegistry } from "./editor/plugins/registry";
 export type { PluginRegistry } from "./editor/plugins/registry";
+export { separatorPlugin } from "./editor/plugins/separator";
+export { createSeparatorBlock, SEPARATOR_BLOCK_KIND } from "./editor/plugins/separator-core";
+export type { CreateSeparatorBlockInput } from "./editor/plugins/separator-core";
 export type {
   BlockTypeRegistration,
   EditorPlugin,

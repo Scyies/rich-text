@@ -1,4 +1,5 @@
 import { getHeadingNumbers, formatHeadingNumber } from "../core/numbering";
+import { SEPARATOR_BLOCK_KIND } from "../plugins/separator-core";
 import type {
   Block,
   BlockMeta,
@@ -205,7 +206,12 @@ export function exportHtml(document: WealthyDocument<BlockMeta>, options: HtmlEx
         parts.push(renderTable(block, options));
         break;
       case "custom":
-        parts.push(options.renderCustomBlock?.(block) ?? `<!-- custom block: ${escapeHtml(block.kind)} -->`);
+        parts.push(
+          options.renderCustomBlock?.(block) ??
+            (block.kind === SEPARATOR_BLOCK_KIND
+              ? "<hr>"
+              : `<!-- custom block: ${escapeHtml(block.kind)} -->`),
+        );
         break;
     }
   }

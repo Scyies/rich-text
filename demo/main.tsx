@@ -4,12 +4,14 @@ import {
   SCHEMA_VERSION,
   createCustomBlock,
   createHeadingBlock,
+  createSeparatorBlock,
   createTableBlock,
   createTextBlock,
   type WealthyDocument,
 } from "wealthy-text-editor";
 import {
   DocumentEditor,
+  separatorPlugin,
   type CustomSlashItem,
   type DocumentEditorApi,
   type EditorPlugin,
@@ -117,6 +119,7 @@ function buildSampleDocument(): WealthyDocument {
       createTextBlock({ variant: "bullet", content: "First supporting fact" }),
       createTextBlock({ variant: "bullet", content: "Second supporting fact" }),
       createTextBlock({ variant: "bullet", content: "Nested detail", indent: 1 }),
+      createSeparatorBlock(),
       createHeadingBlock({ level: 2, content: "Do Direito" }),
       createTextBlock({ variant: "numbered", content: "First legal ground" }),
       createTextBlock({ variant: "numbered", content: "Second legal ground" }),
@@ -168,7 +171,7 @@ function App() {
         <div className="demo__editor">
           <DocumentEditor
             apiRef={apiRef}
-            plugins={[minutaPlugin]}
+            plugins={[minutaPlugin, separatorPlugin]}
             value={document}
             onChange={setDocument}
             onCommit={() => setLastCommit(new Date().toLocaleTimeString())}

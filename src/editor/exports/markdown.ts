@@ -1,4 +1,5 @@
 import { getHeadingNumbers, formatHeadingNumber, getListItemNumbers } from "../core/numbering";
+import { SEPARATOR_BLOCK_KIND } from "../plugins/separator-core";
 import type {
   Block,
   BlockMeta,
@@ -184,7 +185,10 @@ export function exportMarkdown(
         parts.push(renderTable(block, options));
         break;
       case "custom":
-        parts.push(options.renderCustomBlock?.(block) ?? `<!-- custom block: ${block.kind} -->`);
+        parts.push(
+          options.renderCustomBlock?.(block) ??
+            (block.kind === SEPARATOR_BLOCK_KIND ? "---" : `<!-- custom block: ${block.kind} -->`),
+        );
         break;
     }
   }

@@ -2,6 +2,8 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHeadingBlock, createTableBlock, createTextBlock } from "../core/factories";
+import { createSeparatorBlock } from "../plugins/separator-core";
+import { separatorPlugin } from "../plugins/separator";
 import { SCHEMA_VERSION, type Block, type TextBlock, type WealthyDocument } from "../core/schema";
 import { setCaretOffset } from "./dom";
 import { DocumentEditor } from "./DocumentEditor";
@@ -258,6 +260,31 @@ describe("DocumentEditor", () => {
     expect(shrunk.columns).toHaveLength(2);
     expect(shrunk.rows).toHaveLength(1);
     expect(container.querySelectorAll("td")).toHaveLength(2);
+  });
+
+  it("renders table cells by column id, not cell array order", () => {
+    const table = createTableBlock({ columnCount: 2, rowCount: 1, showHeader: false });
+    const [firstColumn, secondColumn] = table.columns;
+    const row = table.rows[0]!;
+    const firstCell = row.cells.find((cell) => cell.columnId === firstColumn!.id)!;
+    const secondCell = row.cells.find((cell) => cell.columnId === secondColumn!.id)!;
+    const shuffledTable = {
+      ...table,
+      rows: [
+        {
+          ...row,
+          cells: [
+            { ...secondCell, blocks: [createTextBlock({ content: "second column" })] },
+            { ...firstCell, blocks: [createTextBlock({ content: "first column" })] },
+          ],
+        },
+      ],
+    };
+
+    const { container } = render(<DocumentEditor value={docWith([shuffledTable])} />);
+
+    const cells = Array.from(container.querySelectorAll("td")).map((cell) => cell.textContent);
+    expect(cells).toEqual(["first column", "second column"]);
   });
 
   it("block selection via handle click; Delete removes the range in one undo step", () => {
@@ -618,6 +645,25 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
     expect((latest.blocks[0] as TextBlock).content).toEqual([
       { type: "object", kind: "placeholder", data: { label: "Campo" } },
     ]);
+  });
+
+  it("separatorPlugin renders separator blocks and adds a slash command", () => {
+    const block = createTextBlock({ content: "" });
+    const onChange = vi.fn();
+    const { container } = render(
+      <DocumentEditor value={docWith([createSeparatorBlock(), block])} onChange={onChange} plugins={[separatorPlugin]} />,
+    );
+
+    expect(container.querySelector(".wte-separator")).toBeTruthy();
+
+    typeInto(getBlockElement(block.id), "/", 1);
+    typeInto(getBlockElement(block.id), "/sep", 4);
+    const option = screen.getAllByRole("option").find((candidate) => candidate.textContent?.includes("Separator"));
+    expect(option).toBeTruthy();
+    fireEvent.mouseDown(option!);
+
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect(latest.blocks[2]).toMatchObject({ type: "custom", kind: "separator" });
   });
 });
 

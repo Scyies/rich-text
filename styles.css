@@ -330,6 +330,15 @@ h6.wte-inline-editor { font-size: 1.05em; }
   font-size: 0.85em;
 }
 
+/* ---- built-in custom blocks ---- */
+
+.wte-separator {
+  height: 1px;
+  width: 100%;
+  margin: 0.75em 0;
+  background: var(--wte-border);
+}
+
 /* ---- single-block editor ---- */
 
 .wte-block-editor .wte-inline-editor {

@@ -20,6 +20,8 @@ pnpm add wealthy-text-editor
 ## Uso básico
 
 ```tsx
+import { useState } from 'react';
+import { createEmptyDocument } from 'wealthy-text-editor';
 import { DocumentEditor } from 'wealthy-text-editor/react';
 import 'wealthy-text-editor/styles.css';
 
@@ -74,23 +76,31 @@ editor.commands.applyPatches(patches);
 editor.commands.undo(); editor.commands.redo();
 ```
 
-### i18n
+### Status de i18n
 
-```tsx
-<DocumentEditor locale="pt-BR" />
-<DocumentEditor locale="en" />
-```
+i18n ainda não está implementado. A prop `locale` permanece planejada para a finalização da v0.5.
 
 ### Plugins
 
 ```ts
-import { DocumentEditor } from "wealthy-text-editor/react"
+import { createSeparatorBlock } from "wealthy-text-editor"
+import { DocumentEditor, separatorPlugin } from "wealthy-text-editor/react"
 import { myPlugin } from "./my-plugin"
 
-<DocumentEditor extensions={[myPlugin]} />
+<DocumentEditor plugins={[separatorPlugin, myPlugin]} />
 ```
 
-> **Entradas do pacote:** `wealthy-text-editor` (raiz) é o core sem React — schema, engine, transforms, patches — seguro para uso no servidor (ex.: aplicar patches de LLM). `wealthy-text-editor/react` contém hooks e componentes.
+`separatorPlugin` is a built-in custom-block plugin. It adds a `/separator` command and renders blocks created with `createSeparatorBlock()`.
+
+### Exporters
+
+```ts
+import { exportHtml } from "wealthy-text-editor/export-html"
+import { exportMarkdown } from "wealthy-text-editor/export-markdown"
+import { exportDocx } from "wealthy-text-editor/export-docx"
+```
+
+> **Entradas do pacote:** `wealthy-text-editor` (raiz) é o core sem React — schema, engine, transforms, patches — seguro para uso no servidor (ex.: aplicar patches de LLM). `wealthy-text-editor/react` contém hooks e componentes. Os exporters vivem em subpaths separados para manter a entrada raiz livre de React e evitar carregar `docx` fora de `wealthy-text-editor/export-docx`.
 
 ## Schema
 
@@ -111,7 +121,7 @@ Veja a [documentação completa do schema](./ARCHITECTURE.md#schema).
 | v0.2   | Core engine (commands/transforms)     |
 | v0.3   | Hooks React                           |
 | v0.4   | Componentes React                     |
-| v0.5   | CSS Modules, i18n, plugins, exporters |
+| v0.5   | Plugins/exporters feitos; paste, i18n, docs e CI pendentes |
 | v1.0   | API estável                           |
 
 Detalhes em [ROADMAP.md](./ROADMAP.md).

@@ -2,6 +2,7 @@ import { Packer, Paragraph, TextRun } from "docx";
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { createCustomBlock, createHeadingBlock, createTableBlock, createTextBlock } from "../core/factories";
+import { createSeparatorBlock } from "../plugins/separator-core";
 import { SCHEMA_VERSION, type Block, type WealthyDocument } from "../core/schema";
 import { exportDocx, type DocxExportOptions } from "./docx";
 
@@ -84,5 +85,11 @@ describe("exportDocx", () => {
     const { xml } = await documentXml(doc);
     expect(xml).toContain("@ana");
     expect(xml).toContain("[widget]"); // default custom-block fallback
+  });
+
+  it("renders the built-in separator custom block as a paragraph border", async () => {
+    const { xml } = await documentXml(docWith([createSeparatorBlock()]));
+    expect(xml).toContain("<w:pBdr>");
+    expect(xml).toContain("<w:bottom");
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createCustomBlock, createHeadingBlock, createTableBlock, createTextBlock } from "../core/factories";
+import { createSeparatorBlock } from "../plugins/separator-core";
 import { SCHEMA_VERSION, type Block, type WealthyDocument } from "../core/schema";
 import { exportMarkdown } from "./markdown";
 
@@ -75,5 +76,10 @@ describe("exportMarkdown", () => {
     ).toBe("Hi {{Name}}\n\n> note");
 
     expect(exportMarkdown(doc)).toBe("Hi Name\n\n<!-- custom block: callout -->");
+  });
+
+  it("renders the built-in separator custom block as a horizontal rule", () => {
+    const doc = docWith([createTextBlock({ content: "before" }), createSeparatorBlock(), createTextBlock({ content: "after" })]);
+    expect(exportMarkdown(doc)).toBe("before\n\n---\n\nafter");
   });
 });

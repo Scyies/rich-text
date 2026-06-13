@@ -17,15 +17,15 @@ export interface TableViewProps {
 }
 
 export function TableView({ block, readOnly = false, onTableChange }: TableViewProps) {
-  function updateCellBlock(rowIndex: number, cellIndex: number, blockIndex: number, content: InlineNode[]): void {
+  function updateCellBlock(rowIndex: number, columnId: string, blockIndex: number, content: InlineNode[]): void {
     const rows = block.rows.map((row, currentRowIndex) => {
       if (currentRowIndex !== rowIndex) {
         return row;
       }
       return {
         ...row,
-        cells: row.cells.map((cell, currentCellIndex) => {
-          if (currentCellIndex !== cellIndex) {
+        cells: row.cells.map((cell) => {
+          if (cell.columnId !== columnId) {
             return cell;
           }
           return {
@@ -84,13 +84,13 @@ export function TableView({ block, readOnly = false, onTableChange }: TableViewP
     ? [block.rows[0], ...block.rows.slice(1)]
     : [undefined, ...block.rows];
 
-  function renderCell(cellBlocks: TextBlock[], rowIndex: number, cellIndex: number) {
+  function renderCell(cellBlocks: TextBlock[], rowIndex: number, columnId: string) {
     return cellBlocks.map((cellBlock, blockIndex) => (
       <InlineEditor
         key={cellBlock.id}
         content={cellBlock.content}
         readOnly={readOnly}
-        onContentChange={(content) => updateCellBlock(rowIndex, cellIndex, blockIndex, content)}
+        onContentChange={(content) => updateCellBlock(rowIndex, columnId, blockIndex, content)}
         ariaLabel="Table cell"
       />
     ));
@@ -102,11 +102,14 @@ export function TableView({ block, readOnly = false, onTableChange }: TableViewP
         {headerRow !== undefined && (
           <thead>
             <tr>
-              {headerRow.cells.map((cell, cellIndex) => (
-                <th key={cell.columnId} style={columnStyle(block, cell.columnId)}>
-                  {renderCell(cell.blocks, 0, cellIndex)}
-                </th>
-              ))}
+              {block.columns.map((column) => {
+                const cell = headerRow.cells.find((candidate) => candidate.columnId === column.id);
+                return (
+                  <th key={column.id} style={columnStyle(block, column.id)}>
+                    {cell !== undefined ? renderCell(cell.blocks, 0, column.id) : null}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
         )}
@@ -115,11 +118,14 @@ export function TableView({ block, readOnly = false, onTableChange }: TableViewP
             const rowIndex = block.showHeader ? bodyIndex + 1 : bodyIndex;
             return (
               <tr key={row.id}>
-                {row.cells.map((cell, cellIndex) => (
-                  <td key={cell.columnId} style={columnStyle(block, cell.columnId)}>
-                    {renderCell(cell.blocks, rowIndex, cellIndex)}
-                  </td>
-                ))}
+                {block.columns.map((column) => {
+                  const cell = row.cells.find((candidate) => candidate.columnId === column.id);
+                  return (
+                    <td key={column.id} style={columnStyle(block, column.id)}>
+                      {cell !== undefined ? renderCell(cell.blocks, rowIndex, column.id) : null}
+                    </td>
+                  );
+                })}
               </tr>
             );
           })}
