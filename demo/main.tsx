@@ -10,14 +10,15 @@ import {
 } from "wealthy-text-editor";
 import { DocumentEditor, type CustomSlashItem, type DocumentEditorApi } from "wealthy-text-editor/react";
 
+// Slash inserts a generic placeholder; the {{Label}} syntax is the path
+// for a specifically-named one (the filter text isn't the label).
 const placeholderSlashItem: CustomSlashItem = {
   id: "placeholder",
   label: "Placeholder",
   hint: "{{}}",
   keywords: ["campo", "placeholder", "tag"],
-  apply: ({ insertInlineNode, query }) => {
-    const label = query.trim().length > 0 ? query.trim() : "Campo";
-    insertInlineNode({ type: "object", kind: "placeholder", data: { key: label.toLowerCase(), label } });
+  apply: ({ insertInlineNode }) => {
+    insertInlineNode({ type: "object", kind: "placeholder", data: { key: "campo", label: "Campo" } });
   },
 };
 import "wealthy-text-editor/styles.css";
