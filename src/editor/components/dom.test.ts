@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { domToInlineNodes, getSelectionOffsets, inlineNodesToHtml, setCaretOffset } from "./dom";
+import {
+  domToInlineNodes,
+  getSelectionOffsets,
+  inlineNodesToHtml,
+  offsetOfInlineObject,
+  setCaretOffset,
+  type InlineRenderConfig,
+} from "./dom";
 import type { InlineNode } from "../core/schema";
 
 function element(html: string): HTMLElement {
@@ -33,6 +40,52 @@ describe("inlineNodesToHtml", () => {
     expect(html).toContain('data-wte-object="placeholder"');
     expect(html).toContain('contenteditable="false"');
     expect(html).toContain(">Cliente</span>");
+  });
+
+  it("applies per-kind label, class, and interactive flag from inlineRenderers", () => {
+    const renderers = new Map<string, InlineRenderConfig>([
+      [
+        "placeholder",
+        {
+          getLabel: (node) => (typeof node.data["value"] === "string" ? node.data["value"] : "empty"),
+          getClassName: (node) => (node.data["value"] !== undefined ? "filled" : "empty-chip"),
+          interactive: true,
+        },
+      ],
+    ]);
+    const html = inlineNodesToHtml(
+      [{ type: "object", kind: "placeholder", data: { label: "Cliente", value: "Ana" } }],
+      renderers,
+    );
+    expect(html).toContain("wte-inline-object--interactive");
+    expect(html).toContain("filled");
+    expect(html).toContain(">Ana</span>");
+  });
+
+  it("falls back to the default pill when a kind has no renderer", () => {
+    const renderers = new Map<string, InlineRenderConfig>();
+    const html = inlineNodesToHtml([{ type: "object", kind: "mention", data: { label: "X" } }], renderers);
+    expect(html).toContain('class="wte-inline-object"');
+    expect(html).toContain(">X</span>");
+  });
+});
+
+describe("offsetOfInlineObject", () => {
+  it("returns the inline offset where a chip begins", () => {
+    const content: InlineNode[] = [
+      { type: "text", text: "Hi " },
+      { type: "object", kind: "placeholder", data: {} },
+      { type: "text", text: " there" },
+    ];
+    const root = element(inlineNodesToHtml(content));
+    const chip = root.querySelector("[data-wte-object]")!;
+    expect(offsetOfInlineObject(root, chip)).toBe(3);
+  });
+
+  it("returns null for an element outside the root", () => {
+    const root = element("abc");
+    const other = element('<span data-wte-object="x">y</span>');
+    expect(offsetOfInlineObject(root, other.querySelector("[data-wte-object]")!)).toBeNull();
   });
 });
 

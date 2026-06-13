@@ -101,3 +101,64 @@ body {
   font: inherit;
   outline: none;
 }
+
+/* Placeholder chip states (host-styled via the plugin's getClassName). */
+.wte-inline-object.empty {
+  background: #fff4e5;
+  border-color: #f0c47b;
+  color: #92600a;
+}
+
+.wte-inline-object.filled {
+  background: #e7f6ec;
+  border-color: #9bd6ad;
+  color: #1d6b38;
+}
+
+/* Click-to-fill popover (rendered by the plugin's renderEditor). */
+.demo-fill {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 220px;
+}
+
+.demo-fill label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #6b7682;
+}
+
+.demo-fill input {
+  border: 1px solid #d4d9de;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+}
+
+.demo-fill__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.demo-fill__actions button {
+  border: 1px solid #d4d9de;
+  background: #fff;
+  border-radius: 6px;
+  padding: 4px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.demo-fill__actions button[type="submit"] {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
+.demo-fill__remove {
+  color: #b4231f;
+}

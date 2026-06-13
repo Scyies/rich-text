@@ -12,9 +12,11 @@ import {
   moveBlock,
   moveSection,
   outdentBlock,
+  removeInlineNodeAt,
   splitBlock,
   turnInto,
   updateBlock,
+  updateInlineObjectAt,
 } from "./transforms";
 
 function docWith(blocks: Block[]): WealthyDocument {
@@ -205,6 +207,60 @@ describe("insertInlineNode", () => {
     expect(() => insertInlineNode(docWith([table]), table.id, 0, chip)).toThrow(RangeError);
     const block = createTextBlock({ content: "ab" });
     expect(() => insertInlineNode(docWith([block]), block.id, 5, chip)).toThrow(RangeError);
+  });
+});
+
+describe("updateInlineObjectAt", () => {
+  function blockWithChip() {
+    return createTextBlock({
+      content: [
+        { type: "text", text: "Hi " },
+        { type: "object", kind: "placeholder", data: { key: "name", label: "Name" }, meta: { src: "a" } },
+        { type: "text", text: "!" },
+      ],
+    });
+  }
+
+  it("replaces the object's data in place, keeping kind", () => {
+    const block = blockWithChip();
+    const next = updateInlineObjectAt(docWith([block]), block.id, 3, { data: { key: "name", value: "Ana" } });
+    expect((next.blocks[0] as Block & { content: unknown }).content).toEqual([
+      { type: "text", text: "Hi " },
+      { type: "object", kind: "placeholder", data: { key: "name", value: "Ana" }, meta: { src: "a" } },
+      { type: "text", text: "!" },
+    ]);
+  });
+
+  it("keeps existing data/meta when not in the patch", () => {
+    const block = blockWithChip();
+    const next = updateInlineObjectAt(docWith([block]), block.id, 3, { meta: { src: "b" } });
+    const chip = (next.blocks[0] as Block & { content: { meta: unknown; data: unknown }[] }).content[1]!;
+    expect(chip.meta).toEqual({ src: "b" });
+    expect(chip.data).toEqual({ key: "name", label: "Name" });
+  });
+
+  it("throws when the offset is not on an inline object", () => {
+    const block = blockWithChip();
+    expect(() => updateInlineObjectAt(docWith([block]), block.id, 0, { data: {} })).toThrow(RangeError);
+  });
+});
+
+describe("removeInlineNodeAt", () => {
+  it("removes the inline object at the offset, merging neighboring text", () => {
+    const block = createTextBlock({
+      content: [
+        { type: "text", text: "Hi " },
+        { type: "object", kind: "placeholder", data: { key: "name" } },
+        { type: "text", text: "there" },
+      ],
+    });
+    const next = removeInlineNodeAt(docWith([block]), block.id, 3);
+    expect((next.blocks[0] as Block & { content: unknown }).content).toEqual([{ type: "text", text: "Hi there" }]);
+  });
+
+  it("throws past the end of the content", () => {
+    const block = createTextBlock({ content: "ab" });
+    expect(() => removeInlineNodeAt(docWith([block]), block.id, 2)).toThrow(RangeError);
   });
 });
 

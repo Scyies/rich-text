@@ -1,5 +1,22 @@
 import { normalizeInlineContent } from "../core/inline";
-import type { InlineMark, InlineNode } from "../core/schema";
+import type { InlineMark, InlineNode, InlineObjectNode } from "../core/schema";
+
+/**
+ * Per-`kind` chip rendering, derived from the plugin registry. Kept React-free
+ * (label/class are strings) so the contenteditable HTML stays plugin-agnostic;
+ * the interactive popover is rendered separately by DocumentEditor.
+ */
+export interface InlineRenderConfig {
+  getLabel?: ((node: InlineObjectNode) => string) | undefined;
+  getClassName?: ((node: InlineObjectNode) => string | undefined) | undefined;
+  /** Chip is clickable (the kind has a renderEditor) → adds the interactive class. */
+  interactive?: boolean | undefined;
+}
+
+function defaultObjectLabel(node: InlineObjectNode): string {
+  const label = node.data["label"];
+  return typeof label === "string" && label.length > 0 ? label : node.kind;
+}
 
 /**
  * DOM ↔ model conversion for the per-block contenteditable (D7/D16).
@@ -53,7 +70,10 @@ function wrapWithMark(html: string, mark: InlineMark): string {
   }
 }
 
-export function inlineNodesToHtml(content: InlineNode[]): string {
+export function inlineNodesToHtml(
+  content: InlineNode[],
+  inlineRenderers?: ReadonlyMap<string, InlineRenderConfig>,
+): string {
   let html = "";
   for (const node of content) {
     if (node.type === "text") {
@@ -66,12 +86,14 @@ export function inlineNodesToHtml(content: InlineNode[]): string {
       }
       html += nodeHtml;
     } else {
-      const label =
-        typeof node.data["label"] === "string" && node.data["label"].length > 0
-          ? node.data["label"]
-          : node.kind;
+      const config = inlineRenderers?.get(node.kind);
+      const label = config?.getLabel?.(node) ?? defaultObjectLabel(node);
+      const customClass = config?.getClassName?.(node);
+      const className = ["wte-inline-object", config?.interactive === true ? "wte-inline-object--interactive" : null, customClass ?? null]
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+        .join(" ");
       const payload = escapeAttribute(JSON.stringify({ data: node.data, meta: node.meta }));
-      html += `<span class="wte-inline-object" data-wte-object="${escapeAttribute(node.kind)}" data-wte-payload="${payload}" contenteditable="false">${escapeHtml(label)}</span>`;
+      html += `<span class="${escapeAttribute(className)}" data-wte-object="${escapeAttribute(node.kind)}" data-wte-payload="${payload}" contenteditable="false">${escapeHtml(label)}</span>`;
     }
   }
   return html;
@@ -241,6 +263,23 @@ export function getSelectionOffsets(root: HTMLElement): { start: number; end: nu
 
 export function getCaretOffset(root: HTMLElement): number | null {
   return getSelectionOffsets(root)?.end ?? null;
+}
+
+/**
+ * Inline-unit offset where the given inline-object element begins (the chip
+ * occupies `[offset, offset + 1)`). Used to address a clicked chip for the
+ * edit popover. Returns null if the element is not within `root`.
+ */
+export function offsetOfInlineObject(root: HTMLElement, element: Element): number | null {
+  const parent = element.parentNode;
+  if (parent === null || !root.contains(element)) {
+    return null;
+  }
+  const index = Array.from(parent.childNodes).indexOf(element as ChildNode);
+  if (index === -1) {
+    return null;
+  }
+  return positionToOffset(root, { node: parent, offset: index });
 }
 
 /** Resolves an inline-unit offset to a concrete DOM position (clamped). */

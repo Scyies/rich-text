@@ -104,6 +104,28 @@ describe("createEditorEngine", () => {
     expect((engine.getDocument().blocks[0] as TextBlock).content).toEqual([{ type: "text", text: "hello" }]);
   });
 
+  it("updateInlineObject / removeInlineNode edit a chip in place and are undoable", () => {
+    const block = createTextBlock({
+      content: [
+        { type: "text", text: "Hi " },
+        { type: "object", kind: "placeholder", data: { key: "name", label: "Name" } },
+      ],
+    });
+    const engine = createEditorEngine({ value: docWith([block]) });
+
+    engine.commands.updateInlineObject(block.id, 3, { data: { key: "name", value: "Ana" } });
+    expect((engine.getDocument().blocks[0] as TextBlock).content[1]).toMatchObject({
+      kind: "placeholder",
+      data: { value: "Ana" },
+    });
+
+    engine.commands.removeInlineNode(block.id, 3);
+    expect((engine.getDocument().blocks[0] as TextBlock).content).toEqual([{ type: "text", text: "Hi " }]);
+
+    engine.commands.undo(); // restore the chip
+    expect((engine.getDocument().blocks[0] as TextBlock).content).toHaveLength(2);
+  });
+
   it("applyPatches is undoable as a single step", () => {
     const heading = createHeadingBlock({ level: 1, content: "A" });
     const paragraph = createTextBlock({ content: "body" });

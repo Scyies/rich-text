@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
-import { fireEvent, render } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTableBlock, createTextBlock } from "../core/factories";
 import type { Block, TableBlock, TextBlock } from "../core/schema";
 import { setCaretOffset } from "./dom";
 import { BlockEditor } from "./BlockEditor";
+
+afterEach(cleanup);
 
 describe("BlockEditor", () => {
   it("edits a text block through the same pipeline", () => {

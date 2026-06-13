@@ -66,11 +66,37 @@ Publicação progressiva em 5 etapas. As decisões D1–D15 referenciadas estão
 - Rich paste HTML→schema (Word/Docs/web, fallback texto puro) (D11)
 - CSS Modules + `styles.css` global da lib
 - i18n: dicionários pt-BR + en, prop `locale`
-- Sistema de plugins: block types custom, inline objects, slash items (D5, D6)
-- Exporters como subpath entries: `/export-docx`, `/export-html`, `/export-markdown` (D12)
+- **Sistema de plugins: block types custom, inline objects, slash items (D5, D6) ✅**
+- **Exporters como subpath entries: `/export-docx`, `/export-html`, `/export-markdown` (D12) ✅**
 - README com exemplos de uso
 - Documentação de API pública
 - CI: build, lint, test, publish automático
+
+> Nota de implementação (Plugins — feito): o sistema de plugins (`EditorPlugin`) vive
+> no lado React (`/react`), não em `core/`, pois renderers são React — coerente com o
+> split de duas entradas da v0.4. Registra: block types custom (`blockTypes`, sobrepõe a
+> prop `renderBlock`), inline objects (`inlineObjects`), slash items (`slashItems`, funde
+> com a prop homônima) e toolbar items (`toolbarItems`, enxuto). **Edição de chip** (adiada
+> da v0.4) entregue via `inlineObjects[].renderEditor` no modelo **popover-on-click** —
+> o chip continua um token nativo no contenteditable (D16 intacto) e o popover é um overlay
+> do `DocumentEditor` (mesmo padrão de `SlashMenu`/`FloatingToolbar`), não portais React.
+> Núcleo ganhou os transforms/commands puros `updateInlineObject`/`removeInlineNode`.
+> `commands`/`onInit` do esboço da ARCHITECTURE foram adiados (sem consumidor na v0.5;
+> aditivos depois). A prop do componente chama-se `plugins` (não `extensions`); as
+> referências a `extensions` em README/ARCHITECTURE serão alinhadas no passo de docs.
+
+> Nota de implementação (Exporters — feito): três entradas tsup achatadas
+> (`dist/{html,markdown,docx}.js`) mapeadas em `package.json` para
+> `wealthy-text-editor/export-{html,markdown,docx}`. Todas consomem o modelo puro
+> (zero React). `exportHtml`/`exportMarkdown` retornam string (testes de saída exata);
+> `exportDocx` usa a lib `docx` (única dep pesada, **externalizada** — só carrega via o
+> subpath docx) e retorna um `Document` que o consumidor empacota com `Packer`. Cada um
+> aceita serializers por `kind` (`renderCustomBlock`/`renderInlineObject`) para blocos
+> custom e inline objects (D5/D6); numeração de heading reaproveita `numbering.ts`.
+> Marks sem equivalente: HTML usa `<mark>`/classe de token; Markdown cai para HTML inline
+> (underline/highlight) e descarta `color`; docx faz best-effort (code→monospace,
+> color só se hex, highlight descartado). Verificação docx: descompacta o `.docx` e checa
+> `word/document.xml` (jszip, devDep).
 
 ## v1.0 — Stable
 

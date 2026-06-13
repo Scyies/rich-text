@@ -23,6 +23,21 @@
       "import": "./dist/react.js",
       "require": "./dist/react.cjs"
     },
+    "./export-html": {
+      "types": "./dist/html.d.ts",
+      "import": "./dist/html.js",
+      "require": "./dist/html.cjs"
+    },
+    "./export-markdown": {
+      "types": "./dist/markdown.d.ts",
+      "import": "./dist/markdown.js",
+      "require": "./dist/markdown.cjs"
+    },
+    "./export-docx": {
+      "types": "./dist/docx.d.ts",
+      "import": "./dist/docx.js",
+      "require": "./dist/docx.cjs"
+    },
     "./styles.css": "./styles.css"
   },
   "scripts": {
@@ -33,6 +48,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "docx": "^9.7.1",
     "zod": "^4.1.0"
   },
   "peerDependencies": {
@@ -45,6 +61,7 @@
     "@types/react": "^19.2.17",
     "@vitejs/plugin-react": "^6.0.2",
     "jsdom": "^29.1.1",
+    "jszip": "^3.10.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "tsup": "^8.5.0",

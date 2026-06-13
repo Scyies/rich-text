@@ -47,6 +47,17 @@ export interface EditorCommands<TMeta extends BlockMeta = BlockMeta> {
    * chip) into a text-like block. Returns the caret offset after it.
    */
   insertInlineNode(blockId: string, offset: number, node: InlineNode): number;
+  /**
+   * Edits the inline object at `offset` in place (chip editing, D6):
+   * replaces its data/meta, keeps its kind. Throws if no object is there.
+   */
+  updateInlineObject(
+    blockId: string,
+    offset: number,
+    patch: { data?: Record<string, unknown>; meta?: Record<string, unknown> },
+  ): void;
+  /** Removes the inline node (one inline unit, e.g. a chip) at `offset`. */
+  removeInlineNode(blockId: string, offset: number): void;
   indent(blockId: string): void;
   outdent(blockId: string): void;
   moveSection(headingId: string, afterBlockId: string | null): void;
@@ -181,6 +192,20 @@ export function createEditorEngine<TMeta extends BlockMeta = BlockMeta>(
       return transact("insertInlineNode", null, (current) => ({
         document: transforms.insertInlineNode(current, blockId, offset, node),
         result: offset + transforms.getInlineNodeLength(node),
+      }));
+    },
+
+    updateInlineObject(blockId, offset, patch) {
+      transact("updateInlineObject", null, (current) => ({
+        document: transforms.updateInlineObjectAt(current, blockId, offset, patch),
+        result: undefined,
+      }));
+    },
+
+    removeInlineNode(blockId, offset) {
+      transact("removeInlineNode", null, (current) => ({
+        document: transforms.removeInlineNodeAt(current, blockId, offset),
+        result: undefined,
       }));
     },
 

@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
-import { act, renderHook } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, cleanup, renderHook } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTextBlock } from "../core/factories";
 import type { Block, TextBlock } from "../core/schema";
 import { useBlockEditor, type UseBlockEditorOptions } from "./useBlockEditor";
+
+afterEach(cleanup);
 
 function textContent(text: string) {
   return [{ type: "text" as const, text }];

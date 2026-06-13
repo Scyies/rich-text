@@ -106,9 +106,11 @@ export {
   moveBlock,
   moveSection,
   outdentBlock,
+  removeInlineNodeAt,
   splitBlock,
   turnInto,
   updateBlock,
+  updateInlineObjectAt,
 } from "./editor/core/transforms";
 export type { TurnIntoTarget } from "./editor/core/transforms";
 

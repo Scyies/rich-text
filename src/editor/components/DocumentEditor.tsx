@@ -7,10 +7,11 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
 import type { ChangeInfo } from "../core/commands";
-import { getInlineText, splitInlineContent, concatInlineContent } from "../core/inline";
+import { getInlineLength, getInlineText, splitInlineContent, concatInlineContent } from "../core/inline";
 import { getActiveMarks, toggleMark } from "../core/marks";
 import { getHeadingNumbers, getListItemNumbers, formatHeadingNumber } from "../core/numbering";
 import { getSelectedBlockRange } from "../core/selection";
@@ -26,12 +27,19 @@ import type {
 } from "../core/schema";
 import { useDocumentEditor, type DocumentEditorApi } from "../hooks/useDocumentEditor";
 import { getInlineNodeLength } from "../core/transforms";
-import { getCaretViewportX, getOffsetNearViewportX } from "./dom";
+import { buildPluginRegistry } from "../plugins/registry";
+import type { CustomSlashItem, EditorPlugin, RenderBlockProps } from "../plugins/types";
+import { getCaretViewportX, getOffsetNearViewportX, offsetOfInlineObject, type InlineRenderConfig } from "./dom";
 import { matchInputRule } from "./inputRules";
-import { FloatingToolbar } from "./FloatingToolbar";
+import { ChipPopover } from "./ChipPopover";
+import { FloatingToolbar, type FloatingToolbarExtraItem } from "./FloatingToolbar";
 import { InlineEditor, type InlineEditorHandle } from "./InlineEditor";
 import { CORE_SLASH_ITEMS, filterSlashItems, SlashMenu, type SlashMenuItem } from "./SlashMenu";
 import { TableView } from "./TableView";
+
+// Plugin surface types are defined React-side (renderers are React); re-exported
+// here for back-compat with existing imports from this module.
+export type { CustomSlashItem, RenderBlockProps, SlashItemContext } from "../plugins/types";
 
 /**
  * <DocumentEditor> — the primary multi-block editor (v0.4).
@@ -42,26 +50,6 @@ import { TableView } from "./TableView";
  * (D11), drag-and-drop with section re-leveling (D4), and collapse as
  * view state (D3.4).
  */
-
-export interface RenderBlockProps<TMeta extends BlockMeta = BlockMeta> {
-  block: CustomBlock<TMeta>;
-  readOnly: boolean;
-  update(patch: Record<string, unknown>): void;
-}
-
-export interface SlashItemContext<TMeta extends BlockMeta = BlockMeta> {
-  blockId: string;
-  /** The text typed after "/" when the item was applied. */
-  query: string;
-  /** Inserts an inline node where the "/" was typed and places the caret after it. */
-  insertInlineNode(node: InlineNode): void;
-  commands: DocumentEditorApi<TMeta>["commands"];
-}
-
-/** Host-provided slash menu entry (shown after the core block types). */
-export interface CustomSlashItem<TMeta extends BlockMeta = BlockMeta> extends SlashMenuItem {
-  apply(context: SlashItemContext<TMeta>): void;
-}
 
 /**
  * Default `{{label}}` handler: a placeholder chip whose key is the
@@ -88,9 +76,14 @@ export interface DocumentEditorProps<TMeta extends BlockMeta = BlockMeta> {
   showHeadingNumbers?: boolean | undefined;
   placeholder?: string | undefined;
   className?: string | undefined;
-  /** Renderer for custom (plugin/host) blocks. */
+  /** Plugins (D5/D6): custom block + inline-object renderers, slash/toolbar items. */
+  plugins?: EditorPlugin<TMeta>[] | undefined;
+  /**
+   * Renderer for custom (plugin/host) blocks. A plugin `blockTypes`
+   * registration for the same `kind` takes precedence over this prop.
+   */
   renderBlock?: ((props: RenderBlockProps<TMeta>) => ReactNode) | undefined;
-  /** Extra slash menu items (shown after the core block types). */
+  /** Extra slash menu items (shown after the core block types and plugin items). */
   slashItems?: CustomSlashItem<TMeta>[] | undefined;
   /**
    * Typing `{{text}}` converts it to an inline node (D6 chip). Defaults to
@@ -146,6 +139,20 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
   });
   const { commands, engine } = editor;
   const document = editor.document;
+
+  // ---- plugin registry (D5/D6) ----
+  const registry = useMemo(() => buildPluginRegistry<TMeta>(props.plugins ?? []), [props.plugins]);
+  const inlineRenderers = useMemo<ReadonlyMap<string, InlineRenderConfig>>(() => {
+    const map = new Map<string, InlineRenderConfig>();
+    for (const [kind, registration] of registry.inlineObjects) {
+      map.set(kind, {
+        ...(registration.getLabel !== undefined ? { getLabel: registration.getLabel } : {}),
+        ...(registration.getClassName !== undefined ? { getClassName: registration.getClassName } : {}),
+        interactive: registration.renderEditor !== undefined,
+      });
+    }
+    return map;
+  }, [registry]);
 
   // Expose the headless API to the host (React 19 ref-as-prop).
   useEffect(() => {
@@ -214,8 +221,8 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
   const [slash, setSlash] = useState<SlashState | null>(null);
   const [slashIndex, setSlashIndex] = useState(0);
   const allSlashItems = useMemo(
-    () => [...CORE_SLASH_ITEMS, ...(props.slashItems ?? [])],
-    [props.slashItems],
+    () => [...CORE_SLASH_ITEMS, ...(props.slashItems ?? []), ...registry.slashItems],
+    [props.slashItems, registry],
   );
   const slashItems = useMemo(
     () => (slash === null ? [] : filterSlashItems(allSlashItems, slash.query)),
@@ -243,8 +250,10 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
       const stripped = concatInlineContent(head, tail);
       commands.updateBlock(current.id, { content: stripped });
 
-      // Host-provided items take precedence over core ids.
-      const customItem = props.slashItems?.find((candidate) => candidate.id === item.id);
+      // Host- and plugin-provided items take precedence over core ids.
+      const customItem =
+        props.slashItems?.find((candidate) => candidate.id === item.id) ??
+        registry.slashItems.find((candidate) => candidate.id === item.id);
       if (customItem !== undefined) {
         customItem.apply({
           blockId: current.id,
@@ -283,7 +292,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
       }
       requestFocus(current.id, slash.slashOffset);
     },
-    [slash, engine, commands, closeSlash, requestFocus, props.slashItems],
+    [slash, engine, commands, closeSlash, requestFocus, props.slashItems, registry],
   );
 
   // ---- content change pipeline (input rules + slash detection) ----
@@ -383,6 +392,68 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     window.document.addEventListener("mousedown", handleMouseDown, true);
     return () => window.document.removeEventListener("mousedown", handleMouseDown, true);
   }, [slash, closeSlash]);
+
+  // ---- inline-object chip editing (D6, popover-on-click) ----
+  const [chipEdit, setChipEdit] = useState<{ blockId: string; offset: number; anchor: { x: number; y: number } } | null>(
+    null,
+  );
+  const closeChipEdit = useCallback(() => setChipEdit(null), []);
+
+  // A click on an interactive chip (a kind with renderEditor) opens its
+  // popover. preventDefault stops a caret from landing on the atomic chip.
+  const handleEditorMouseDown = useCallback(
+    (event: ReactMouseEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      const chip = target?.closest("[data-wte-object]");
+      if (!(chip instanceof HTMLElement)) {
+        return;
+      }
+      const kind = chip.dataset["wteObject"];
+      const registration = kind !== undefined ? registry.inlineObjects.get(kind) : undefined;
+      if (registration?.renderEditor === undefined || readOnly) {
+        return; // non-interactive chip — leave the click to the browser
+      }
+      const blockElement = chip.closest("[data-block-id]");
+      const blockId = blockElement instanceof HTMLElement ? blockElement.dataset["blockId"] : undefined;
+      const rootElement = blockId !== undefined ? editorsRef.current.get(blockId)?.getElement() : undefined;
+      if (blockId === undefined || rootElement == null) {
+        return;
+      }
+      const offset = offsetOfInlineObject(rootElement, chip);
+      if (offset === null) {
+        return;
+      }
+      event.preventDefault();
+      const rect = chip.getBoundingClientRect();
+      setChipEdit({ blockId, offset, anchor: { x: rect.left, y: rect.bottom } });
+    },
+    [registry, readOnly],
+  );
+
+  // Outside-click / Escape close the popover — block blur does NOT, since the
+  // user is interacting with the popover (which lives outside the block).
+  useEffect(() => {
+    if (chipEdit === null || typeof window === "undefined") {
+      return;
+    }
+    const handleMouseDown = (event: MouseEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest(".wte-chip-popover") == null) {
+        setChipEdit(null);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setChipEdit(null);
+      }
+    };
+    window.document.addEventListener("mousedown", handleMouseDown, true);
+    window.document.addEventListener("keydown", handleKeyDown, true);
+    return () => {
+      window.document.removeEventListener("mousedown", handleMouseDown, true);
+      window.document.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, [chipEdit]);
 
   // ---- keyboard structure ----
   const handleEnter = useCallback(
@@ -641,6 +712,40 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     [document, editor.hiddenBlockIds],
   );
 
+  // Resolve the chip under edit from (blockId, offset) every render so the
+  // popover tracks the live model (and closes if the object went away).
+  const chipEditState = useMemo(() => {
+    if (chipEdit === null) {
+      return null;
+    }
+    const block = document.blocks.find((candidate) => candidate.id === chipEdit.blockId);
+    if (block === undefined || !isTextLike(block) || chipEdit.offset > getInlineLength(block.content)) {
+      return null;
+    }
+    const [, rest] = splitInlineContent(block.content, chipEdit.offset);
+    const node = rest[0];
+    if (node === undefined || node.type !== "object") {
+      return null;
+    }
+    const renderEditor = registry.inlineObjects.get(node.kind)?.renderEditor;
+    if (renderEditor === undefined) {
+      return null;
+    }
+    return { node, renderEditor, blockId: chipEdit.blockId, offset: chipEdit.offset, anchor: chipEdit.anchor };
+  }, [chipEdit, document, registry]);
+
+  const toolbarExtraItems = useMemo<FloatingToolbarExtraItem[]>(
+    () =>
+      registry.toolbarItems.map((item) => ({
+        id: item.id,
+        label: item.label,
+        ...(item.title !== undefined ? { title: item.title } : {}),
+        active: item.isActive?.(activeMarkTypes) ?? false,
+        onClick: () => item.apply({ commands, selection: engine.getSelection() }),
+      })),
+    [registry, activeMarkTypes, commands, engine],
+  );
+
   // ---- slash menu keyboard interception ----
   const interceptKeyDown = useCallback(
     (blockId: string, event: ReactKeyboardEvent): boolean => {
@@ -681,6 +786,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
       aria-multiline
       aria-label={props.ariaLabel ?? "Document editor"}
       onKeyDown={handleContainerKeyDown}
+      onMouseDown={handleEditorMouseDown}
     >
       {visibleBlocks.map((block) => (
         <BlockRow
@@ -712,6 +818,10 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
           onDropIndicatorChange={setDropIndicator}
           onDropBlock={handleDrop}
           onInterceptKeyDown={interceptKeyDown}
+          inlineRenderers={inlineRenderers}
+          blockRenderers={
+            registry.blockRenderers as unknown as ReadonlyMap<string, (props: RenderBlockProps) => ReactNode>
+          }
           renderBlock={renderBlock as DocumentEditorProps["renderBlock"]}
           commandsUpdateBlock={commands.updateBlock}
         />
@@ -734,7 +844,33 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
       )}
 
       {toolbarTarget !== undefined && !readOnly && (
-        <FloatingToolbar activeMarkTypes={activeMarkTypes} onToggleMark={handleToggleMark} style={toolbarStyle} />
+        <FloatingToolbar
+          activeMarkTypes={activeMarkTypes}
+          onToggleMark={handleToggleMark}
+          extraItems={toolbarExtraItems}
+          style={toolbarStyle}
+        />
+      )}
+
+      {chipEditState !== null && (
+        <ChipPopover
+          style={{
+            top: chipEditState.anchor.y + 6,
+            left: Math.max(
+              8,
+              Math.min(chipEditState.anchor.x, (typeof window !== "undefined" ? window.innerWidth : 1280) - 248),
+            ),
+          }}
+        >
+          {chipEditState.renderEditor(chipEditState.node, {
+            update: (patch) => commands.updateInlineObject(chipEditState.blockId, chipEditState.offset, patch),
+            remove: () => {
+              commands.removeInlineNode(chipEditState.blockId, chipEditState.offset);
+              closeChipEdit();
+            },
+            close: closeChipEdit,
+          })}
+        </ChipPopover>
       )}
     </div>
   );
@@ -768,6 +904,8 @@ interface BlockRowProps {
   onDropIndicatorChange(indicator: DropIndicator | null): void;
   onDropBlock(targetBlockId: string, position: "before" | "after", draggedBlockId: string): void;
   onInterceptKeyDown(blockId: string, event: ReactKeyboardEvent): boolean;
+  inlineRenderers: ReadonlyMap<string, InlineRenderConfig>;
+  blockRenderers: ReadonlyMap<string, (props: RenderBlockProps) => ReactNode>;
   renderBlock: DocumentEditorProps["renderBlock"];
   commandsUpdateBlock(blockId: string, patch: Record<string, unknown>): void;
 }
@@ -795,9 +933,14 @@ function BlockRow({
   onDropIndicatorChange,
   onDropBlock,
   onInterceptKeyDown,
+  inlineRenderers,
+  blockRenderers,
   renderBlock,
   commandsUpdateBlock,
 }: BlockRowProps) {
+  const customRenderer =
+    block.type === "custom" ? (blockRenderers.get(block.kind) ?? renderBlock) : undefined;
+
   const classes = [
     "wte-block",
     `wte-block--${block.type}`,
@@ -884,6 +1027,7 @@ function BlockRow({
               onArrowUp={() => onMoveFocus(block.id, -1)}
               onArrowDown={() => onMoveFocus(block.id, 1)}
               onInterceptKeyDown={(event) => onInterceptKeyDown(block.id, event)}
+              inlineRenderers={inlineRenderers}
             />
           </div>
         )}
@@ -912,6 +1056,7 @@ function BlockRow({
               onArrowUp={() => onMoveFocus(block.id, -1)}
               onArrowDown={() => onMoveFocus(block.id, 1)}
               onInterceptKeyDown={(event) => onInterceptKeyDown(block.id, event)}
+              inlineRenderers={inlineRenderers}
             />
           </div>
         )}
@@ -925,8 +1070,8 @@ function BlockRow({
         )}
 
         {block.type === "custom" &&
-          (renderBlock !== undefined ? (
-            renderBlock({
+          (customRenderer !== undefined ? (
+            customRenderer({
               block: block as CustomBlock,
               readOnly,
               update: (patch) => commandsUpdateBlock(block.id, patch),

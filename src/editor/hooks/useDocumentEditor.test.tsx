@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, renderHook } from "@testing-library/react";
+import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHeadingBlock, createTextBlock } from "../core/factories";
 import { SCHEMA_VERSION, type Block, type TextBlock, type WealthyDocument } from "../core/schema";
@@ -14,6 +14,7 @@ function textContent(text: string) {
 }
 
 afterEach(() => {
+  cleanup();
   vi.useRealTimers();
 });
 

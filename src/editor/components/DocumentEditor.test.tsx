@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHeadingBlock, createTableBlock, createTextBlock } from "../core/factories";
 import { SCHEMA_VERSION, type Block, type TextBlock, type WealthyDocument } from "../core/schema";
 import { setCaretOffset } from "./dom";
 import { DocumentEditor } from "./DocumentEditor";
+
+// Unmount after each test so renders don't accumulate in the shared jsdom
+// document (otherwise document-wide queries can pick up a prior test's nodes).
+afterEach(cleanup);
 
 function docWith(blocks: Block[]): WealthyDocument {
   return { schemaVersion: SCHEMA_VERSION, blocks };
@@ -447,5 +451,181 @@ describe("DocumentEditor", () => {
     const { container } = render(<DocumentEditor value={docWith([block])} readOnly />);
     expect(container.querySelector(".wte-block__handle")).toBeNull();
     expect(container.querySelector(".wte-inline-editor")?.getAttribute("contenteditable")).toBe("false");
+  });
+});
+
+describe("DocumentEditor — plugins (D5/D6)", () => {
+  function chipBlock() {
+    return createTextBlock({
+      content: [
+        { type: "text", text: "Olá " },
+        { type: "object", kind: "placeholder", data: { key: "nome", label: "Nome" } },
+      ],
+    });
+  }
+
+  const fillablePlaceholder: import("../plugins/types").EditorPlugin = {
+    name: "placeholder",
+    inlineObjects: [
+      {
+        kind: "placeholder",
+        getLabel: (node) =>
+          typeof node.data["value"] === "string" && node.data["value"].length > 0
+            ? node.data["value"]
+            : `{${String(node.data["label"] ?? node.kind)}}`,
+        getClassName: (node) => (node.data["value"] !== undefined ? "filled" : "empty"),
+        renderEditor: (node, { update, remove }) => (
+          <div>
+            <input
+              aria-label="fill"
+              defaultValue={typeof node.data["value"] === "string" ? node.data["value"] : ""}
+              onChange={(event) => update({ data: { ...node.data, value: event.currentTarget.value } })}
+            />
+            <button type="button" onClick={remove}>
+              remove-chip
+            </button>
+          </div>
+        ),
+      },
+    ],
+  };
+
+  it("renders a custom block via a plugin blockType (and overrides renderBlock)", () => {
+    const custom = { id: crypto.randomUUID(), type: "custom" as const, kind: "callout", data: { text: "from-plugin" } };
+    const { container } = render(
+      <DocumentEditor
+        value={docWith([custom])}
+        renderBlock={() => <span>from-prop</span>}
+        plugins={[
+          { name: "callouts", blockTypes: [{ kind: "callout", render: ({ block }) => <span>{String(block.data["text"])}</span> }] },
+        ]}
+      />,
+    );
+    expect(within(container).getByText("from-plugin")).toBeTruthy();
+    expect(within(container).queryByText("from-prop")).toBeNull();
+  });
+
+  it("renders a chip with the plugin's label/class and the interactive marker", () => {
+    const { container } = render(<DocumentEditor value={docWith([chipBlock()])} plugins={[fillablePlaceholder]} />);
+    const chip = container.querySelector(".wte-inline-object")!;
+    expect(chip.textContent).toBe("{Nome}");
+    expect(chip.className).toContain("empty");
+    expect(chip.className).toContain("wte-inline-object--interactive");
+  });
+
+  it("clicking an interactive chip opens its popover; filling it updates the model", () => {
+    const block = chipBlock();
+    const onChange = vi.fn();
+    const { container } = render(
+      <DocumentEditor value={docWith([block])} onChange={onChange} plugins={[fillablePlaceholder]} />,
+    );
+
+    expect(within(container).queryByRole("dialog")).toBeNull();
+    fireEvent.mouseDown(container.querySelector(".wte-inline-object")!);
+    expect(within(container).getByRole("dialog")).toBeTruthy();
+
+    fireEvent.change(within(container).getByLabelText("fill"), { target: { value: "Ana" } });
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect((latest.blocks[0] as TextBlock).content[1]).toMatchObject({
+      kind: "placeholder",
+      data: { key: "nome", label: "Nome", value: "Ana" },
+    });
+    // The chip's visible label now reflects the filled value.
+    expect(container.querySelector(".wte-inline-object")!.textContent).toBe("Ana");
+  });
+
+  it("the popover's remove() deletes the chip", () => {
+    const block = chipBlock();
+    const onChange = vi.fn();
+    const { container } = render(
+      <DocumentEditor value={docWith([block])} onChange={onChange} plugins={[fillablePlaceholder]} />,
+    );
+
+    fireEvent.mouseDown(container.querySelector(".wte-inline-object")!);
+    fireEvent.click(within(container).getByRole("button", { name: "remove-chip" }));
+
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect((latest.blocks[0] as TextBlock).content).toEqual([{ type: "text", text: "Olá " }]);
+    expect(within(container).queryByRole("dialog")).toBeNull();
+  });
+
+  it("a non-interactive chip (no renderEditor) does not open a popover", () => {
+    const plugin: import("../plugins/types").EditorPlugin = {
+      name: "static",
+      inlineObjects: [{ kind: "placeholder", getLabel: () => "static" }],
+    };
+    const { container } = render(<DocumentEditor value={docWith([chipBlock()])} plugins={[plugin]} />);
+    const chip = container.querySelector(".wte-inline-object")!;
+    expect(chip.className).not.toContain("wte-inline-object--interactive");
+    fireEvent.mouseDown(chip);
+    expect(within(container).queryByRole("dialog")).toBeNull();
+  });
+
+  it("a plugin toolbar item renders in the floating toolbar over a selection and fires", () => {
+    const block = createTextBlock({ content: "abcdef" });
+    const applied = vi.fn();
+    let api: import("../hooks/useDocumentEditor").DocumentEditorApi | null = null;
+    const { container } = render(
+      <DocumentEditor
+        value={docWith([block])}
+        apiRef={(value) => {
+          api = value;
+        }}
+        plugins={[{ name: "tb", toolbarItems: [{ id: "star", label: "★", title: "Star", apply: () => applied() }] }]}
+      />,
+    );
+
+    // A non-collapsed text selection brings up the floating toolbar.
+    act(() => api!.setSelection({ type: "text", blockId: block.id, anchor: 0, focus: 3 }));
+    const star = within(container).getByRole("button", { name: "★" });
+    fireEvent.mouseDown(star);
+    expect(applied).toHaveBeenCalledTimes(1);
+  });
+
+  it("a plugin slash item appears in the menu and applies", () => {
+    const block = createTextBlock({ content: "" });
+    const onChange = vi.fn();
+    const { container } = render(
+      <DocumentEditor
+        value={docWith([block])}
+        onChange={onChange}
+        plugins={[
+          {
+            name: "ph",
+            slashItems: [
+              {
+                id: "ph-insert",
+                label: "Campo",
+                keywords: ["placeholder"],
+                apply: ({ insertInlineNode }) =>
+                  insertInlineNode({ type: "object", kind: "placeholder", data: { label: "Campo" } }),
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    // Open the menu with "/", then confirm the plugin item is listed.
+    typeInto(getBlockElement(block.id), "/", 1);
+    const option = within(container)
+      .getAllByRole("option")
+      .find((candidate) => candidate.textContent?.includes("Campo"));
+    expect(option).toBeTruthy();
+    fireEvent.mouseDown(option!);
+
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect((latest.blocks[0] as TextBlock).content).toEqual([
+      { type: "object", kind: "placeholder", data: { label: "Campo" } },
+    ]);
+  });
+});
+
+describe("test isolation", () => {
+  // Runs last: after dozens of render() calls above. If afterEach(cleanup)
+  // were missing, those renders would accumulate and this count would be > 1.
+  it("unmounts previous renders so only the current editor is in the document", () => {
+    render(<DocumentEditor value={docWith([createTextBlock({ content: "only" })])} />);
+    expect(document.querySelectorAll(".wte-editor")).toHaveLength(1);
   });
 });

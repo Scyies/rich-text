@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 import { StrictMode, useState } from "react";
-import { fireEvent, render } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTextBlock } from "../core/factories";
 import { SCHEMA_VERSION, type TextBlock, type WealthyDocument } from "../core/schema";
 import { setCaretOffset } from "./dom";
 import { DocumentEditor } from "./DocumentEditor";
+
+afterEach(cleanup);
 
 describe("typing coalescing through the component stack", () => {
   it("one Ctrl+Z reverts a whole typing run (uncontrolled)", () => {

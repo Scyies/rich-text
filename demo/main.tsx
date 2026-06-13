@@ -8,7 +8,14 @@ import {
   createTextBlock,
   type WealthyDocument,
 } from "wealthy-text-editor";
-import { DocumentEditor, type CustomSlashItem, type DocumentEditorApi } from "wealthy-text-editor/react";
+import {
+  DocumentEditor,
+  type CustomSlashItem,
+  type DocumentEditorApi,
+  type EditorPlugin,
+} from "wealthy-text-editor/react";
+import "wealthy-text-editor/styles.css";
+import "./demo.css";
 
 // Slash inserts a generic placeholder; the {{Label}} syntax is the path
 // for a specifically-named one (the filter text isn't the label).
@@ -21,8 +28,68 @@ const placeholderSlashItem: CustomSlashItem = {
     insertInlineNode({ type: "object", kind: "placeholder", data: { key: "campo", label: "Campo" } });
   },
 };
-import "wealthy-text-editor/styles.css";
-import "./demo.css";
+
+function stringField(data: Record<string, unknown>, key: string): string {
+  const value = data[key];
+  return typeof value === "string" ? value : "";
+}
+
+// Everything domain-specific rides on one plugin (v0.5): the placeholder chip
+// (with a click-to-fill popover), the slash item that inserts it, and a
+// host-rendered "callout" custom block — the whole plugin surface, dogfooded.
+const minutaPlugin: EditorPlugin = {
+  name: "minuta-demo",
+  slashItems: [placeholderSlashItem],
+  inlineObjects: [
+    {
+      kind: "placeholder",
+      getLabel: (node) => {
+        const value = stringField(node.data, "value");
+        return value.length > 0 ? value : stringField(node.data, "label") || "campo";
+      },
+      getClassName: (node) => (stringField(node.data, "value").length > 0 ? "filled" : "empty"),
+      renderEditor: (node, { update, remove, close }) => {
+        const label = stringField(node.data, "label") || "Campo";
+        return (
+          <form
+            className="demo-fill"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const input = event.currentTarget.elements.namedItem("value") as HTMLInputElement;
+              update({ data: { ...node.data, value: input.value } });
+              close();
+            }}
+          >
+            <label>
+              {label}
+              <input name="value" autoFocus defaultValue={stringField(node.data, "value")} placeholder="Preencher…" />
+            </label>
+            <div className="demo-fill__actions">
+              <button type="button" className="demo-fill__remove" onClick={remove}>
+                Remover
+              </button>
+              <button type="submit">Salvar</button>
+            </div>
+          </form>
+        );
+      },
+    },
+  ],
+  blockTypes: [
+    {
+      kind: "callout",
+      render: ({ block, update }) => (
+        <div className="demo-callout">
+          <span aria-hidden>💡</span>
+          <input
+            value={stringField(block.data, "text")}
+            onChange={(event) => update({ data: { ...block.data, text: event.target.value } })}
+          />
+        </div>
+      ),
+    },
+  ],
+};
 
 function buildSampleDocument(): WealthyDocument {
   return {
@@ -35,7 +102,7 @@ function buildSampleDocument(): WealthyDocument {
           { type: "text", text: "wealthy-text-editor", marks: [{ type: "bold" }] },
           { type: "text", text: " pipeline end to end. Try " },
           { type: "text", text: "markdown rules", marks: [{ type: "italic" }] },
-          { type: "text", text: " (\"# \", \"- \", \"1. \"), the slash menu (\"/\"), {{tags}} for placeholders, Tab/Shift+Tab, drag handles, and the heading chevrons." },
+          { type: "text", text: " (\"# \", \"- \", \"1. \"), the slash menu (\"/\"), {{tags}} for placeholders (click a chip to fill it), Tab/Shift+Tab, drag handles, and the heading chevrons." },
         ],
       }),
       createHeadingBlock({ level: 2, content: "Dos Fatos" }),
@@ -54,7 +121,7 @@ function buildSampleDocument(): WealthyDocument {
       createTextBlock({ variant: "numbered", content: "First legal ground" }),
       createTextBlock({ variant: "numbered", content: "Second legal ground" }),
       createTableBlock({ columnCount: 3, rowCount: 2 }),
-      createCustomBlock({ kind: "callout", data: { text: "Host-rendered custom block (renderBlock prop)." } }),
+      createCustomBlock({ kind: "callout", data: { text: "Host-rendered custom block (plugin blockType)." } }),
       createTextBlock({ content: "" }),
     ],
   };
@@ -101,21 +168,12 @@ function App() {
         <div className="demo__editor">
           <DocumentEditor
             apiRef={apiRef}
-            slashItems={[placeholderSlashItem]}
+            plugins={[minutaPlugin]}
             value={document}
             onChange={setDocument}
             onCommit={() => setLastCommit(new Date().toLocaleTimeString())}
             commitIdleMs={1500}
             showHeadingNumbers
-            renderBlock={({ block, update }) => (
-              <div className="demo-callout">
-                <span aria-hidden>💡</span>
-                <input
-                  value={String(block.data["text"] ?? "")}
-                  onChange={(event) => update({ data: { ...block.data, text: event.target.value } })}
-                />
-              </div>
-            )}
           />
         </div>
         {showJson && (

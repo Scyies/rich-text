@@ -18,6 +18,7 @@ import {
   isCaretOnLastLine,
   setCaretOffset,
   setSelectionOffsets,
+  type InlineRenderConfig,
 } from "./dom";
 
 /**
@@ -54,6 +55,8 @@ export interface InlineEditorProps {
   onArrowDown?: (() => boolean) | undefined;
   /** Intercepts keys (slash menu navigation); return true to swallow. */
   onInterceptKeyDown?: ((event: KeyboardEvent) => boolean) | undefined;
+  /** Per-kind chip rendering (from the plugin registry). */
+  inlineRenderers?: ReadonlyMap<string, InlineRenderConfig> | undefined;
   as?: ElementType | undefined;
   className?: string | undefined;
   style?: CSSProperties | undefined;
@@ -75,6 +78,7 @@ export const InlineEditor = forwardRef<InlineEditorHandle, InlineEditorProps>(fu
     onArrowUp,
     onArrowDown,
     onInterceptKeyDown,
+    inlineRenderers,
     as: Tag = "div",
     className,
     style,
@@ -94,7 +98,7 @@ export const InlineEditor = forwardRef<InlineEditorHandle, InlineEditorProps>(fu
     if (element === null || content === lastEmittedRef.current) {
       return;
     }
-    const html = inlineNodesToHtml(content);
+    const html = inlineNodesToHtml(content, inlineRenderers);
     if (element.innerHTML === html) {
       return;
     }
@@ -105,7 +109,7 @@ export const InlineEditor = forwardRef<InlineEditorHandle, InlineEditorProps>(fu
       const length = getInlineLength(content);
       setSelectionOffsets(element, Math.min(offsets.start, length), Math.min(offsets.end, length));
     }
-  }, [content]);
+  }, [content, inlineRenderers]);
 
   useImperativeHandle(
     ref,

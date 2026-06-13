@@ -267,6 +267,70 @@ export function getInlineNodeLength(node: InlineNode): number {
   return getInlineLength([node]);
 }
 
+/**
+ * Replaces the inline object that begins at `offset` with one carrying the
+ * given `data`/`meta` (each replaced wholesale when provided, otherwise the
+ * existing value is kept). The object's `kind` is preserved. Throws if the
+ * node at `offset` is not an inline object. This is the chip-editing entry
+ * point (D6): the popover edits a placeholder/mention in place.
+ */
+export function updateInlineObjectAt<TMeta extends BlockMeta>(
+  document: WealthyDocument<TMeta>,
+  blockId: string,
+  offset: number,
+  patch: { data?: Record<string, unknown>; meta?: Record<string, unknown> },
+): WealthyDocument<TMeta> {
+  const index = requireBlockIndex(document, blockId, "updateInlineObjectAt");
+  const block = document.blocks[index]!;
+  if (!isTextLike(block)) {
+    throw new RangeError(`updateInlineObjectAt: only heading/text blocks hold inline content (got ${block.type})`);
+  }
+  const [left, rest] = splitInlineContent(block.content, offset);
+  const target = rest[0];
+  if (target === undefined || target.type !== "object") {
+    throw new RangeError(`updateInlineObjectAt: no inline object at offset ${offset} in block ${blockId}`);
+  }
+  const nextData = patch.data ?? target.data;
+  const nextMeta = patch.meta ?? target.meta;
+  const updated: InlineNode = {
+    type: "object",
+    kind: target.kind,
+    data: nextData,
+    ...(nextMeta !== undefined ? { meta: nextMeta } : {}),
+  };
+  const [, right] = splitInlineContent(rest, 1);
+  const content = concatInlineContent(concatInlineContent(left, [updated]), right);
+  const blocks = [...document.blocks];
+  blocks[index] = { ...block, content };
+  return withBlocks(document, blocks);
+}
+
+/**
+ * Removes the single inline node (one inline unit) at `offset` — the chip a
+ * popover's `remove()` deletes, or any one atomic object. Throws on an
+ * out-of-range offset or a non-text-like block.
+ */
+export function removeInlineNodeAt<TMeta extends BlockMeta>(
+  document: WealthyDocument<TMeta>,
+  blockId: string,
+  offset: number,
+): WealthyDocument<TMeta> {
+  const index = requireBlockIndex(document, blockId, "removeInlineNodeAt");
+  const block = document.blocks[index]!;
+  if (!isTextLike(block)) {
+    throw new RangeError(`removeInlineNodeAt: only heading/text blocks hold inline content (got ${block.type})`);
+  }
+  const [left, rest] = splitInlineContent(block.content, offset);
+  if (rest.length === 0) {
+    throw new RangeError(`removeInlineNodeAt: no inline node at offset ${offset} in block ${blockId}`);
+  }
+  const [, right] = splitInlineContent(rest, 1);
+  const content = concatInlineContent(left, right);
+  const blocks = [...document.blocks];
+  blocks[index] = { ...block, content };
+  return withBlocks(document, blocks);
+}
+
 export function indentBlock<TMeta extends BlockMeta>(
   document: WealthyDocument<TMeta>,
   blockId: string,

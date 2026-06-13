@@ -43,3 +43,15 @@ export {
 // Input rules
 export { matchInputRule } from "./editor/components/inputRules";
 export type { InputRuleMatch } from "./editor/components/inputRules";
+
+// Plugins (D5/D6) — block + inline-object renderers, slash/toolbar items
+export { buildPluginRegistry } from "./editor/plugins/registry";
+export type { PluginRegistry } from "./editor/plugins/registry";
+export type {
+  BlockTypeRegistration,
+  EditorPlugin,
+  InlineObjectEditorContext,
+  InlineObjectRegistration,
+  ToolbarItemContext,
+  ToolbarItemRegistration,
+} from "./editor/plugins/types";

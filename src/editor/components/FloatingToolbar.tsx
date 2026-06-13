@@ -6,9 +6,20 @@ import type { InlineMark } from "../core/schema";
  * a block. Purely presentational; DocumentEditor owns position and state.
  */
 
+/** Pre-bound custom toolbar button (DocumentEditor binds active/onClick from plugin items). */
+export interface FloatingToolbarExtraItem {
+  id: string;
+  label: string;
+  title?: string | undefined;
+  active?: boolean | undefined;
+  onClick(): void;
+}
+
 export interface FloatingToolbarProps {
   activeMarkTypes: ReadonlySet<InlineMark["type"]>;
   onToggleMark(mark: InlineMark): void;
+  /** Extra buttons (from plugins) shown after the mark buttons. */
+  extraItems?: FloatingToolbarExtraItem[] | undefined;
   style?: CSSProperties | undefined;
 }
 
@@ -20,7 +31,7 @@ const BUTTONS: Array<{ mark: InlineMark; label: string; title: string }> = [
   { mark: { type: "code" }, label: "</>", title: "Code" },
 ];
 
-export function FloatingToolbar({ activeMarkTypes, onToggleMark, style }: FloatingToolbarProps) {
+export function FloatingToolbar({ activeMarkTypes, onToggleMark, extraItems, style }: FloatingToolbarProps) {
   return (
     <div className="wte-floating-toolbar" role="toolbar" aria-label="Text formatting" style={style}>
       {BUTTONS.map(({ mark, label, title }) => (
@@ -40,6 +51,25 @@ export function FloatingToolbar({ activeMarkTypes, onToggleMark, style }: Floati
           }}
         >
           {label}
+        </button>
+      ))}
+      {extraItems?.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          title={item.title}
+          aria-pressed={item.active === true}
+          className={
+            item.active === true
+              ? "wte-floating-toolbar__button wte-floating-toolbar__button--active"
+              : "wte-floating-toolbar__button"
+          }
+          onMouseDown={(event) => {
+            event.preventDefault(); // keep the text selection alive
+            item.onClick();
+          }}
+        >
+          {item.label}
         </button>
       ))}
     </div>
