@@ -3,6 +3,7 @@ import type { ChangeInfo } from "../core/commands";
 import type { Block, BlockMeta, CustomBlock, TableBlock } from "../core/schema";
 import { useBlockEditor } from "../hooks/useBlockEditor";
 import { resolveMessages, MessagesProvider, type EditorMessages, type Locale } from "../i18n";
+import type { RenderBlockProps } from "../plugins/types";
 import { InlineEditor } from "./InlineEditor";
 import { TableView } from "./TableView";
 
@@ -24,9 +25,8 @@ export interface BlockEditorProps<TMeta extends BlockMeta = BlockMeta> {
   /** Per-string overrides on top of the resolved `locale`. */
   messages?: Partial<EditorMessages> | undefined;
   className?: string | undefined;
-  renderBlock?:
-    | ((props: { block: CustomBlock<TMeta>; readOnly: boolean; update(patch: Record<string, unknown>): void }) => ReactNode)
-    | undefined;
+  ariaLabel?: string | undefined;
+  renderBlock?: ((props: RenderBlockProps<TMeta>) => ReactNode) | undefined;
 }
 
 export function BlockEditor<TMeta extends BlockMeta = BlockMeta>(props: BlockEditorProps<TMeta>) {
@@ -47,6 +47,9 @@ export function BlockEditor<TMeta extends BlockMeta = BlockMeta>(props: BlockEdi
     <MessagesProvider messages={messages}>
     <div
       className={["wte-block-editor", props.className].filter(Boolean).join(" ")}
+      role="textbox"
+      aria-multiline
+      aria-label={props.ariaLabel ?? messages.documentAriaLabel}
       onKeyDown={(event) => {
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
           event.preventDefault();

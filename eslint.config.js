@@ -12,7 +12,7 @@ import globals from "globals";
  */
 export default tseslint.config(
   {
-    ignores: ["dist/**", "node_modules/**", "coverage/**", "components/**", "shared/**", "scripts/**"],
+    ignores: ["dist/**", "demo/dist/**", "node_modules/**", "coverage/**", "components/**", "shared/**", "scripts/**"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

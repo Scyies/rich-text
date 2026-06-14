@@ -74,7 +74,7 @@ export function SlashMenu({ items, highlightedIndex, onSelect, onHighlight, styl
       ) : (
         items.map((item, index) => (
           <button
-            key={item.id}
+            key={`${item.id}:${index}`}
             type="button"
             role="option"
             aria-selected={index === highlightedIndex}

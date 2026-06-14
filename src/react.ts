@@ -21,28 +21,6 @@ export type {
 } from "./editor/components/DocumentEditor";
 export { BlockEditor } from "./editor/components/BlockEditor";
 export type { BlockEditorProps } from "./editor/components/BlockEditor";
-export { InlineEditor } from "./editor/components/InlineEditor";
-export type { InlineEditorHandle, InlineEditorProps } from "./editor/components/InlineEditor";
-export { TableView } from "./editor/components/TableView";
-export type { TableViewProps } from "./editor/components/TableView";
-export { SlashMenu, CORE_SLASH_ITEMS, buildCoreSlashItems, filterSlashItems } from "./editor/components/SlashMenu";
-export type { SlashMenuItem, SlashMenuProps } from "./editor/components/SlashMenu";
-export { FloatingToolbar } from "./editor/components/FloatingToolbar";
-export type { FloatingToolbarProps } from "./editor/components/FloatingToolbar";
-
-// DOM ↔ model utilities (useful for host-built block renderers)
-export {
-  domToInlineNodes,
-  getCaretOffset,
-  getSelectionOffsets,
-  inlineNodesToHtml,
-  setCaretOffset,
-  setSelectionOffsets,
-} from "./editor/components/dom";
-
-// Input rules
-export { matchInputRule } from "./editor/components/inputRules";
-export type { InputRuleMatch } from "./editor/components/inputRules";
 
 // Paste (D11) — clipboard HTML → blocks, with a plain-text fallback
 export {
@@ -57,8 +35,6 @@ export { resolveMessages, en, ptBR, DEFAULT_LOCALE, MessagesProvider, useMessage
 export type { EditorMessages, Locale } from "./editor/i18n";
 
 // Plugins (D5/D6) — block + inline-object renderers, slash/toolbar items
-export { buildPluginRegistry } from "./editor/plugins/registry";
-export type { PluginRegistry } from "./editor/plugins/registry";
 export { separatorPlugin } from "./editor/plugins/separator";
 export { createSeparatorBlock, SEPARATOR_BLOCK_KIND } from "./editor/plugins/separator-core";
 export type { CreateSeparatorBlockInput } from "./editor/plugins/separator-core";

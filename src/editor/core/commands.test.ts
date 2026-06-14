@@ -55,16 +55,13 @@ describe("createEditorEngine", () => {
   });
 
   it("typing coalesces: one undo reverts the whole run, structural ops break it", () => {
-    let time = 0;
     const block = createTextBlock({ content: "" });
-    const engine = createEditorEngine({ value: docWith([block]), now: () => time, coalesceWindowMs: 1000 });
+    const engine = createEditorEngine({ value: docWith([block]), coalesceWindowMs: 60_000 });
 
-    for (const [step, text] of ["h", "he", "hel", "hell", "hello"].entries()) {
-      time = step * 100;
+    for (const text of ["h", "he", "hel", "hell", "hello"]) {
       engine.commands.updateBlock(block.id, { content: textContent(text) });
     }
     engine.commands.turnInto(block.id, { type: "heading", level: 1 }); // structural — own entry
-    time = 600;
     engine.commands.updateBlock(block.id, { content: textContent("hello!") });
 
     engine.commands.undo(); // revert the "!" typing run

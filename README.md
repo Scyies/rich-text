@@ -16,9 +16,11 @@ Wealthy Text Editor é uma biblioteca React para edição de documentos estrutur
 
 ```bash
 pnpm add wealthy-text-editor
+# se usar wealthy-text-editor/export-docx:
+pnpm add docx
 ```
 
-`react` e `react-dom` (v19) são peer deps. O subpath `wealthy-text-editor/export-docx` depende de `docx` (carregado só quando você importa esse subpath).
+`react`, `react-dom` (v19) e `docx` são peer deps. `docx` só é necessário para quem importa `wealthy-text-editor/export-docx`.
 
 ## Uso básico
 
@@ -59,7 +61,7 @@ function App() {
 | `locale`              | `"en" \| "pt-BR"`                              | Locale do chrome interno (default `en`).                   |
 | `messages`            | `Partial<EditorMessages>`                      | Override por-string sobre o `locale`.                      |
 | `renderBlock`         | `(props) => ReactNode`                         | Renderer de blocos custom (um plugin do mesmo `kind` tem precedência). |
-| `apiRef`              | `Ref<DocumentEditorApi<TMeta>>`                | Acesso ao engine headless (commands/selection/seções).    |
+| `ref`                 | `Ref<DocumentEditorApi<TMeta>>`                | Acesso ao engine headless (commands/selection/seções).    |
 
 ## Commands
 
@@ -223,17 +225,20 @@ const md = exportMarkdown(doc);          // string
 const blob = await Packer.toBlob(exportDocx(doc)); // exportDocx → docx `Document`
 ```
 
+HTML e Markdown aceitam `headingNumbers: true` para prefixar headings com a numeração computada.
 Cada exporter aceita serializers por `kind` (`renderCustomBlock` / `renderInlineObject`) para
 blocos custom e inline objects. A numeração de headings reaproveita `getHeadingNumbers`.
 `exportDocx` retorna um `Document` da lib `docx`, que você empacota com `Packer` (`toBlob`,
-`toBuffer`, …).
+`toBuffer`, …). O exporter DOCX é mínimo em v1.0: não tenta ser um engine de templates, e
+`TableColumn.width` ainda não é refletido no DOCX. No HTML, `TableColumn.width` sai via
+`<colgroup>`.
 
 ## Superfície pública (por entrada)
 
 | Entrada                            | O que contém                                                                 |
 | ---------------------------------- | --------------------------------------------------------------------------- |
-| `wealthy-text-editor`              | **Core, sem React** — schema + types, factories, serialização, inline utils, sections, numbering, transforms, history, patches (D10), selection, marks, engine (`createEditorEngine`), e os helpers `createSeparatorBlock`/`SEPARATOR_BLOCK_KIND`. Seguro no servidor. |
-| `wealthy-text-editor/react`        | Hooks (`useDocumentEditor`, `useBlockEditor`), componentes (`DocumentEditor`, `BlockEditor`, `InlineEditor`, `TableView`, `SlashMenu`, `FloatingToolbar`), utils DOM↔modelo, input rules, paste, i18n (`resolveMessages`/`MessagesProvider`/`useMessages`/`en`/`ptBR`), e o sistema de plugins (`buildPluginRegistry`, `separatorPlugin`, tipos). |
+| `wealthy-text-editor`              | **Core, sem React** — types do modelo, validadores (`validateDocument`/`safeValidateDocument`), factories, serialização, inline utils, sections, numbering, transforms, patches (D10), selection, marks, engine (`createEditorEngine`), e os helpers `createSeparatorBlock`/`SEPARATOR_BLOCK_KIND`. Seguro no servidor. Schemas Zod crus e history internals não fazem parte da API estável. |
+| `wealthy-text-editor/react`        | Hooks (`useDocumentEditor`, `useBlockEditor`), componentes (`DocumentEditor`, `BlockEditor`), paste parsers, i18n (`resolveMessages`/`MessagesProvider`/`useMessages`/`en`/`ptBR`), `separatorPlugin` e tipos de plugins. UI interna, helpers DOM/caret, input rules, slash menu, toolbar e registry não fazem parte da API estável. |
 | `wealthy-text-editor/export-html`     | `exportHtml`                                                              |
 | `wealthy-text-editor/export-markdown` | `exportMarkdown`                                                          |
 | `wealthy-text-editor/export-docx`     | `exportDocx` (depende de `docx`)                                          |
@@ -246,13 +251,38 @@ blocos custom e inline objects. A numeração de headings reaproveita `getHeadin
 ## Schema
 
 ```typescript
-type Block<TMeta> = HeadingBlock<TMeta> | TextBlock<TMeta> | TableBlock<TMeta> | CustomBlock<TMeta>
-type WealthyDocument<TMeta> = { schemaVersion: 1; blocks: Block<TMeta>[]; meta?: TMeta }
+type Block<TBlockMeta> =
+  | HeadingBlock<TBlockMeta>
+  | TextBlock<TBlockMeta>
+  | TableBlock<TBlockMeta>
+  | CustomBlock<TBlockMeta>
+
+type WealthyDocument<
+  TBlockMeta = BlockMeta,
+  TDocMeta = BlockMeta,
+> = {
+  schemaVersion: 1
+  blocks: Block<TBlockMeta>[]
+  meta?: TDocMeta
+}
 ```
 
 O documento é uma **lista plana** — cada linha é um bloco. Seções (heading + conteúdo seguinte)
 são **derivadas** dos níveis de heading, nunca armazenadas. O host anexa dados de domínio via
 `meta` (round-trip intacto) e registra blocos/inlines custom via plugins.
+
+`schemaVersion: 1` é o formato wire congelado para v1.0; versões futuras precisam de uma
+história explícita de migração.
+
+## CSS estável
+
+A folha global usa prefixo `.wte-*`. Para v1.0, considere estáveis:
+`.wte-editor`, `.wte-block`, `.wte-inline-editor`, `.wte-inline-object`, `.wte-table`,
+`.wte-separator` e as variables `--wte-foreground`, `--wte-muted`, `--wte-border`,
+`--wte-accent`, `--wte-accent-soft`, `--wte-surface`, `--wte-radius`.
+
+Demais classes (`.wte-floating-toolbar*`, `.wte-slash-menu*`, `.wte-block__*`,
+`.wte-chip-popover`, etc.) são internas/unstable.
 
 Veja a [documentação completa do schema](./ARCHITECTURE.md#schema).
 

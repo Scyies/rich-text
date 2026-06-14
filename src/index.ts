@@ -1,26 +1,8 @@
 // Schema + types (v0.1)
 export {
   SCHEMA_VERSION,
-  alignSchema,
-  blockIdSchema,
-  blockSchema,
-  customBlockSchema,
-  documentSchema,
-  headingBlockSchema,
-  headingLevelSchema,
-  inlineMarkSchema,
-  inlineNodeSchema,
-  inlineObjectNodeSchema,
   isBlockOfType,
-  metaSchema,
   safeValidateDocument,
-  tableBlockSchema,
-  tableCellSchema,
-  tableColumnSchema,
-  tableRowSchema,
-  textBlockSchema,
-  textNodeSchema,
-  textVariantSchema,
   validateDocument,
 } from "./editor/core/schema";
 
@@ -118,12 +100,8 @@ export {
 } from "./editor/core/transforms";
 export type { TurnIntoTarget } from "./editor/core/transforms";
 
-// History
-export { DEFAULT_COALESCE_WINDOW_MS, DEFAULT_HISTORY_LIMIT, createHistory } from "./editor/core/history";
-export type { History, HistoryEntry, HistoryOptions } from "./editor/core/history";
-
 // Patches (D10)
-export { PatchError, applyPatches, documentPatchSchema, turnIntoTargetSchema } from "./editor/core/patches";
+export { PatchError, applyPatches } from "./editor/core/patches";
 export type { ApplyPatchesResult, DocumentPatch } from "./editor/core/patches";
 
 // Selection (D7)

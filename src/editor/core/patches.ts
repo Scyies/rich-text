@@ -95,16 +95,19 @@ export class PatchError extends Error {
   }
 }
 
-export interface ApplyPatchesResult<TMeta extends BlockMeta = BlockMeta> {
-  document: WealthyDocument<TMeta>;
+export interface ApplyPatchesResult<
+  TMeta extends BlockMeta = BlockMeta,
+  TDocMeta extends BlockMeta = BlockMeta,
+> {
+  document: WealthyDocument<TMeta, TDocMeta>;
   /** The validated patches that were applied, in order. */
   applied: DocumentPatch[];
 }
 
-export function applyPatches<TMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta>,
+export function applyPatches<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
   patches: unknown,
-): ApplyPatchesResult<TMeta> {
+): ApplyPatchesResult<TMeta, TDocMeta> {
   const parsed = z.array(documentPatchSchema).safeParse(patches);
   if (!parsed.success) {
     throw new PatchError(`applyPatches: invalid patches: ${parsed.error.message}`, null, {
@@ -137,15 +140,19 @@ export function applyPatches<TMeta extends BlockMeta>(
   return { document: result, applied: parsed.data };
 }
 
-function applyPatch<TMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta>,
+function applyPatch<TMeta extends BlockMeta, TDocMeta extends BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
   patch: DocumentPatch,
-): WealthyDocument<TMeta> {
+): WealthyDocument<TMeta, TDocMeta> {
   switch (patch.op) {
     case "update_block":
       return updateBlock(document, patch.blockId, patch.changes);
     case "insert_block_after":
-      return insertBlockAfter(document, patch.afterBlockId, patch.block as WealthyDocument<TMeta>["blocks"][number]);
+      return insertBlockAfter(
+        document,
+        patch.afterBlockId,
+        patch.block as WealthyDocument<TMeta, TDocMeta>["blocks"][number],
+      );
     case "delete_block":
       return deleteBlock(document, patch.blockId);
     case "move_block":

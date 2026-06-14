@@ -367,7 +367,7 @@ describe("DocumentEditor", () => {
     expect(document.activeElement).toBe(first);
   });
 
-  it("apiRef exposes commands: host can insert a placeholder chip at the caret", () => {
+  it("ref exposes commands: host can insert a placeholder chip at the caret", () => {
     const block = createTextBlock({ content: "hello" });
     const onChange = vi.fn();
     let api: import("../hooks/useDocumentEditor").DocumentEditorApi | null = null;
@@ -375,7 +375,7 @@ describe("DocumentEditor", () => {
       <DocumentEditor
         value={docWith([block])}
         onChange={onChange}
-        apiRef={(value) => {
+        ref={(value) => {
           api = value;
         }}
       />,
@@ -595,7 +595,7 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
     const { container } = render(
       <DocumentEditor
         value={docWith([block])}
-        apiRef={(value) => {
+        ref={(value) => {
           api = value;
         }}
         plugins={[{ name: "tb", toolbarItems: [{ id: "star", label: "★", title: "Star", apply: () => applied() }] }]}
@@ -647,6 +647,58 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
     ]);
   });
 
+  it("shows slash items as core → host → plugin and applies host before plugin on duplicate id", () => {
+    const block = createTextBlock({ content: "" });
+    const onChange = vi.fn();
+    const { container } = render(
+      <DocumentEditor
+        value={docWith([block])}
+        onChange={onChange}
+        slashItems={[
+          {
+            id: "duplicate",
+            label: "Host duplicate",
+            apply: ({ insertInlineNode }) =>
+              insertInlineNode({ type: "object", kind: "source", data: { source: "host" } }),
+          },
+        ]}
+        plugins={[
+          {
+            name: "plugin",
+            slashItems: [
+              {
+                id: "duplicate",
+                label: "Plugin duplicate",
+                apply: ({ insertInlineNode }) =>
+                  insertInlineNode({ type: "object", kind: "source", data: { source: "plugin" } }),
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    typeInto(getBlockElement(block.id), "/", 1);
+    const labels = within(container).getAllByRole("option").map((option) => option.textContent);
+    expect(labels.slice(0, 7)).toEqual([
+      "Heading 1#",
+      "Heading 2##",
+      "Heading 3###",
+      "Text¶",
+      "Bulleted list•",
+      "Numbered list1.",
+      "Table⊞",
+    ]);
+    expect(labels.slice(7)).toEqual(["Host duplicate", "Plugin duplicate"]);
+
+    fireEvent.mouseDown(within(container).getByText("Plugin duplicate"));
+
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect((latest.blocks[0] as TextBlock).content).toEqual([
+      { type: "object", kind: "source", data: { source: "host" } },
+    ]);
+  });
+
   it("separatorPlugin renders separator blocks and adds a slash command", () => {
     const block = createTextBlock({ content: "" });
     const onChange = vi.fn();
@@ -677,7 +729,7 @@ describe("DocumentEditor — paste (D11)", () => {
       <DocumentEditor
         value={docWith(blocks)}
         onChange={onChange}
-        apiRef={(value) => {
+        ref={(value) => {
           api = value;
         }}
       />,

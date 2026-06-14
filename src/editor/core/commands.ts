@@ -1,6 +1,6 @@
 import { generateBlockId } from "./factories";
 import { getInlineLength } from "./inline";
-import { createHistory, type HistoryEntry, type HistoryOptions } from "./history";
+import { createHistory, type HistoryEntry } from "./history";
 import { applyPatches, type DocumentPatch } from "./patches";
 import { clampSelection, selectionsEqual, type EditorSelection } from "./selection";
 import { getSection, getSectionTree, type Section, type SectionTree } from "./sections";
@@ -23,18 +23,28 @@ export interface ChangeInfo {
   command?: string;
 }
 
-export type EngineListener<TMeta extends BlockMeta = BlockMeta> = (
-  document: WealthyDocument<TMeta>,
+export type EngineListener<
+  TBlockMeta extends BlockMeta = BlockMeta,
+  TDocMeta extends BlockMeta = BlockMeta,
+> = (
+  document: WealthyDocument<TBlockMeta, TDocMeta>,
   info: ChangeInfo,
 ) => void;
 
-export interface EditorEngineOptions<TMeta extends BlockMeta = BlockMeta> extends HistoryOptions {
-  value: WealthyDocument<TMeta>;
+export interface EditorEngineOptions<
+  TBlockMeta extends BlockMeta = BlockMeta,
+  TDocMeta extends BlockMeta = BlockMeta,
+> {
+  value: WealthyDocument<TBlockMeta, TDocMeta>;
+  /** Maximum undo depth; engine creation time only. */
+  limit?: number;
+  /** Edits with the same coalesce key within this window merge. */
+  coalesceWindowMs?: number;
 }
 
-export interface EditorCommands<TMeta extends BlockMeta = BlockMeta> {
+export interface EditorCommands<TBlockMeta extends BlockMeta = BlockMeta> {
   updateBlock(blockId: string, patch: Record<string, unknown>): void;
-  insertBlockAfter(afterBlockId: string | null, block: Block<TMeta>): string;
+  insertBlockAfter(afterBlockId: string | null, block: Block<TBlockMeta>): string;
   deleteBlock(blockId: string): void;
   moveBlock(blockId: string, afterBlockId: string | null): void;
   turnInto(blockId: string, target: TurnIntoTarget): void;
@@ -70,31 +80,37 @@ export interface EditorCommands<TMeta extends BlockMeta = BlockMeta> {
   redo(): boolean;
 }
 
-export interface EditorEngine<TMeta extends BlockMeta = BlockMeta> {
-  getDocument(): WealthyDocument<TMeta>;
+export interface EditorEngine<
+  TBlockMeta extends BlockMeta = BlockMeta,
+  TDocMeta extends BlockMeta = BlockMeta,
+> {
+  getDocument(): WealthyDocument<TBlockMeta, TDocMeta>;
   /** Document switch (D10: new `value` reference) — resets history. */
-  setDocument(document: WealthyDocument<TMeta>): void;
+  setDocument(document: WealthyDocument<TBlockMeta, TDocMeta>): void;
   getSelection(): EditorSelection | null;
   /**
    * Selection updates notify subscribers (origin "selection") but never
    * create history entries.
    */
   setSelection(selection: EditorSelection | null): void;
-  subscribe(listener: EngineListener<TMeta>): () => void;
-  getSectionTree(): SectionTree<TMeta>;
-  getSection(headingId: string): Section<TMeta> | null;
+  subscribe(listener: EngineListener<TBlockMeta, TDocMeta>): () => void;
+  getSectionTree(): SectionTree<TBlockMeta>;
+  getSection(headingId: string): Section<TBlockMeta> | null;
   canUndo(): boolean;
   canRedo(): boolean;
-  commands: EditorCommands<TMeta>;
+  commands: EditorCommands<TBlockMeta>;
 }
 
-export function createEditorEngine<TMeta extends BlockMeta = BlockMeta>(
-  options: EditorEngineOptions<TMeta>,
-): EditorEngine<TMeta> {
+export function createEditorEngine<
+  TBlockMeta extends BlockMeta = BlockMeta,
+  TDocMeta extends BlockMeta = BlockMeta,
+>(
+  options: EditorEngineOptions<TBlockMeta, TDocMeta>,
+): EditorEngine<TBlockMeta, TDocMeta> {
   let document = options.value;
   let selection: EditorSelection | null = null;
-  const history = createHistory<TMeta>(options);
-  const listeners = new Set<EngineListener<TMeta>>();
+  const history = createHistory<TBlockMeta, TDocMeta>(options);
+  const listeners = new Set<EngineListener<TBlockMeta, TDocMeta>>();
 
   function notify(info: ChangeInfo): void {
     for (const listener of listeners) {
@@ -102,7 +118,7 @@ export function createEditorEngine<TMeta extends BlockMeta = BlockMeta>(
     }
   }
 
-  function snapshot(): HistoryEntry<TMeta> {
+  function snapshot(): HistoryEntry<TBlockMeta, TDocMeta> {
     return { document, selection };
   }
 
@@ -114,7 +130,10 @@ export function createEditorEngine<TMeta extends BlockMeta = BlockMeta>(
   function transact<TResult>(
     command: string,
     coalesceKey: string | null,
-    run: (current: WealthyDocument<TMeta>) => { document: WealthyDocument<TMeta>; result: TResult },
+    run: (current: WealthyDocument<TBlockMeta, TDocMeta>) => {
+      document: WealthyDocument<TBlockMeta, TDocMeta>;
+      result: TResult;
+    },
     origin: ChangeOrigin = "command",
   ): TResult {
     const previous = snapshot();
@@ -126,7 +145,7 @@ export function createEditorEngine<TMeta extends BlockMeta = BlockMeta>(
     return result;
   }
 
-  const commands: EditorCommands<TMeta> = {
+  const commands: EditorCommands<TBlockMeta> = {
     updateBlock(blockId, patch) {
       // Pure content updates coalesce (typing); anything else is discrete.
       const keys = Object.keys(patch);

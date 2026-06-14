@@ -8,8 +8,11 @@ import type { EditorSelection } from "./selection";
  * returns to the state before the typing run began.
  */
 
-export interface HistoryEntry<TMeta extends BlockMeta = BlockMeta> {
-  document: WealthyDocument<TMeta>;
+export interface HistoryEntry<
+  TBlockMeta extends BlockMeta = BlockMeta,
+  TDocMeta extends BlockMeta = BlockMeta,
+> {
+  document: WealthyDocument<TBlockMeta, TDocMeta>;
   selection: EditorSelection | null;
 }
 
@@ -22,16 +25,19 @@ export interface HistoryOptions {
   now?: () => number;
 }
 
-export interface History<TMeta extends BlockMeta = BlockMeta> {
+export interface History<
+  TBlockMeta extends BlockMeta = BlockMeta,
+  TDocMeta extends BlockMeta = BlockMeta,
+> {
   /**
    * Records the state being replaced. Call BEFORE applying a change, with
    * the pre-change document. `coalesceKey: null` forces a new entry.
    */
-  record(entry: HistoryEntry<TMeta>, coalesceKey: string | null): void;
+  record(entry: HistoryEntry<TBlockMeta, TDocMeta>, coalesceKey: string | null): void;
   /** Steps back: stores `current` for redo, returns the previous entry. */
-  undo(current: HistoryEntry<TMeta>): HistoryEntry<TMeta> | null;
+  undo(current: HistoryEntry<TBlockMeta, TDocMeta>): HistoryEntry<TBlockMeta, TDocMeta> | null;
   /** Steps forward: stores `current` for undo, returns the next entry. */
-  redo(current: HistoryEntry<TMeta>): HistoryEntry<TMeta> | null;
+  redo(current: HistoryEntry<TBlockMeta, TDocMeta>): HistoryEntry<TBlockMeta, TDocMeta> | null;
   canUndo(): boolean;
   canRedo(): boolean;
   clear(): void;
@@ -40,15 +46,18 @@ export interface History<TMeta extends BlockMeta = BlockMeta> {
 export const DEFAULT_HISTORY_LIMIT = 100;
 export const DEFAULT_COALESCE_WINDOW_MS = 1000;
 
-export function createHistory<TMeta extends BlockMeta = BlockMeta>(
+export function createHistory<
+  TBlockMeta extends BlockMeta = BlockMeta,
+  TDocMeta extends BlockMeta = BlockMeta,
+>(
   options: HistoryOptions = {},
-): History<TMeta> {
+): History<TBlockMeta, TDocMeta> {
   const limit = options.limit ?? DEFAULT_HISTORY_LIMIT;
   const coalesceWindowMs = options.coalesceWindowMs ?? DEFAULT_COALESCE_WINDOW_MS;
   const now = options.now ?? (() => Date.now());
 
-  let undoStack: HistoryEntry<TMeta>[] = [];
-  let redoStack: HistoryEntry<TMeta>[] = [];
+  let undoStack: HistoryEntry<TBlockMeta, TDocMeta>[] = [];
+  let redoStack: HistoryEntry<TBlockMeta, TDocMeta>[] = [];
   let lastKey: string | null = null;
   let lastTime = 0;
 

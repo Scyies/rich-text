@@ -9,6 +9,7 @@ import {
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type Ref,
   type ReactNode,
 } from "react";
 import type { ChangeInfo } from "../core/commands";
@@ -103,7 +104,7 @@ export interface DocumentEditorProps<TMeta extends BlockMeta = BlockMeta> {
    * Escape hatch to the headless editor API (commands, selection,
    * sections) — e.g. to insert placeholder chips from host UI.
    */
-  apiRef?: React.Ref<DocumentEditorApi<TMeta>> | undefined;
+  ref?: Ref<DocumentEditorApi<TMeta>> | undefined;
 }
 
 interface FocusRequest {
@@ -164,7 +165,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
 
   // Expose the headless API to the host (React 19 ref-as-prop).
   useEffect(() => {
-    const ref = props.apiRef;
+    const ref = props.ref;
     if (ref === undefined || ref === null) {
       return;
     }
@@ -178,7 +179,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     return () => {
       ref.current = null;
     };
-  }, [props.apiRef, editor]);
+  }, [props.ref, editor]);
 
   // ---- per-block InlineEditor handles + focus requests ----
   const editorsRef = useRef(new Map<string, InlineEditorHandle>());

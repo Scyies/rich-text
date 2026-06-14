@@ -41,10 +41,10 @@ function requireSectionRange(
   return range;
 }
 
-function withBlocks<TMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta>,
+function withBlocks<TMeta extends BlockMeta, TDocMeta extends BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
   blocks: Block<TMeta>[],
-): WealthyDocument<TMeta> {
+): WealthyDocument<TMeta, TDocMeta> {
   return { ...document, blocks };
 }
 
@@ -56,11 +56,11 @@ function isTextLike(block: Block<BlockMeta>): block is HeadingBlock<BlockMeta> |
 // Block transforms
 // ---------------------------------------------------------------------------
 
-export function insertBlockAfter<TMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta>,
+export function insertBlockAfter<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
   afterBlockId: string | null,
   block: Block<TMeta>,
-): WealthyDocument<TMeta> {
+): WealthyDocument<TMeta, TDocMeta> {
   if (document.blocks.some((existing) => existing.id === block.id)) {
     throw new RangeError(`insertBlockAfter: duplicate block id: ${block.id}`);
   }
@@ -83,11 +83,11 @@ const PATCHABLE_KEYS: Record<Block<BlockMeta>["type"], ReadonlySet<string>> = {
  * re-validated against the schema so an update can never corrupt the
  * document (e.g. heading level 9).
  */
-export function updateBlock<TMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta>,
+export function updateBlock<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
   blockId: string,
   patch: Record<string, unknown>,
-): WealthyDocument<TMeta> {
+): WealthyDocument<TMeta, TDocMeta> {
   const index = requireBlockIndex(document, blockId, "updateBlock");
   const block = document.blocks[index]!;
   const allowed = PATCHABLE_KEYS[block.type];
@@ -102,10 +102,10 @@ export function updateBlock<TMeta extends BlockMeta>(
   return withBlocks(document, blocks);
 }
 
-export function deleteBlock<TMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta>,
+export function deleteBlock<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
   blockId: string,
-): WealthyDocument<TMeta> {
+): WealthyDocument<TMeta, TDocMeta> {
   const index = requireBlockIndex(document, blockId, "deleteBlock");
   const blocks = [...document.blocks];
   blocks.splice(index, 1);
@@ -113,11 +113,11 @@ export function deleteBlock<TMeta extends BlockMeta>(
 }
 
 /** Moves a block after `afterBlockId` (null = to the start of the document). */
-export function moveBlock<TMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta>,
+export function moveBlock<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
   blockId: string,
   afterBlockId: string | null,
-): WealthyDocument<TMeta> {
+): WealthyDocument<TMeta, TDocMeta> {
   if (afterBlockId === blockId) {
     throw new RangeError("moveBlock: cannot move a block after itself");
   }
@@ -142,11 +142,11 @@ export type TurnIntoTarget =
  * type change — containment recomputes automatically). Content, id, meta,
  * and align survive; indent survives text→text and is dropped on →heading.
  */
-export function turnInto<TMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta>,
+export function turnInto<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
   blockId: string,
   target: TurnIntoTarget,
-): WealthyDocument<TMeta> {
+): WealthyDocument<TMeta, TDocMeta> {
   const index = requireBlockIndex(document, blockId, "turnInto");
   const block = document.blocks[index]!;
   if (!isTextLike(block)) {
@@ -186,12 +186,12 @@ export function turnInto<TMeta extends BlockMeta>(
  * heading yields a paragraph (pressing Enter at a heading's end starts body
  * text); any other split keeps the original block type and attrs.
  */
-export function splitBlock<TMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta>,
+export function splitBlock<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
   blockId: string,
   offset: number,
   newBlockId: string = generateBlockId(),
-): WealthyDocument<TMeta> {
+): WealthyDocument<TMeta, TDocMeta> {
   const index = requireBlockIndex(document, blockId, "splitBlock");
   const block = document.blocks[index]!;
   if (!isTextLike(block)) {
@@ -219,10 +219,10 @@ export function splitBlock<TMeta extends BlockMeta>(
  * block's type and attrs win; the caret should land at the previous block's
  * old content length (compute it before calling).
  */
-export function mergeWithPrevious<TMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta>,
+export function mergeWithPrevious<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
   blockId: string,
-): WealthyDocument<TMeta> {
+): WealthyDocument<TMeta, TDocMeta> {
   const index = requireBlockIndex(document, blockId, "mergeWithPrevious");
   if (index === 0) {
     throw new RangeError("mergeWithPrevious: block has no previous block");
@@ -244,12 +244,12 @@ export function mergeWithPrevious<TMeta extends BlockMeta>(
  * mentions) into a text-like block at an inline offset. The caret belongs
  * at `offset + length(node)` afterwards.
  */
-export function insertInlineNode<TMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta>,
+export function insertInlineNode<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
   blockId: string,
   offset: number,
   node: InlineNode,
-): WealthyDocument<TMeta> {
+): WealthyDocument<TMeta, TDocMeta> {
   const index = requireBlockIndex(document, blockId, "insertInlineNode");
   const block = document.blocks[index]!;
   if (!isTextLike(block)) {
@@ -274,12 +274,12 @@ export function getInlineNodeLength(node: InlineNode): number {
  * node at `offset` is not an inline object. This is the chip-editing entry
  * point (D6): the popover edits a placeholder/mention in place.
  */
-export function updateInlineObjectAt<TMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta>,
+export function updateInlineObjectAt<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
   blockId: string,
   offset: number,
   patch: { data?: Record<string, unknown>; meta?: Record<string, unknown> },
-): WealthyDocument<TMeta> {
+): WealthyDocument<TMeta, TDocMeta> {
   const index = requireBlockIndex(document, blockId, "updateInlineObjectAt");
   const block = document.blocks[index]!;
   if (!isTextLike(block)) {
@@ -310,11 +310,11 @@ export function updateInlineObjectAt<TMeta extends BlockMeta>(
  * popover's `remove()` deletes, or any one atomic object. Throws on an
  * out-of-range offset or a non-text-like block.
  */
-export function removeInlineNodeAt<TMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta>,
+export function removeInlineNodeAt<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
   blockId: string,
   offset: number,
-): WealthyDocument<TMeta> {
+): WealthyDocument<TMeta, TDocMeta> {
   const index = requireBlockIndex(document, blockId, "removeInlineNodeAt");
   const block = document.blocks[index]!;
   if (!isTextLike(block)) {
@@ -331,25 +331,25 @@ export function removeInlineNodeAt<TMeta extends BlockMeta>(
   return withBlocks(document, blocks);
 }
 
-export function indentBlock<TMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta>,
+export function indentBlock<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
   blockId: string,
-): WealthyDocument<TMeta> {
+): WealthyDocument<TMeta, TDocMeta> {
   return shiftIndent(document, blockId, 1);
 }
 
-export function outdentBlock<TMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta>,
+export function outdentBlock<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
   blockId: string,
-): WealthyDocument<TMeta> {
+): WealthyDocument<TMeta, TDocMeta> {
   return shiftIndent(document, blockId, -1);
 }
 
-function shiftIndent<TMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta>,
+function shiftIndent<TMeta extends BlockMeta, TDocMeta extends BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
   blockId: string,
   delta: number,
-): WealthyDocument<TMeta> {
+): WealthyDocument<TMeta, TDocMeta> {
   const index = requireBlockIndex(document, blockId, "indent/outdent");
   const block = document.blocks[index]!;
   if (block.type !== "text") {
@@ -379,11 +379,11 @@ function stripIndent<TMeta extends BlockMeta>(block: TextBlock<TMeta>): TextBloc
  * section, and every descendant heading shifts by the same delta,
  * clamped to 1..6.
  */
-export function moveSection<TMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta>,
+export function moveSection<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
   headingId: string,
   afterBlockId: string | null,
-): WealthyDocument<TMeta> {
+): WealthyDocument<TMeta, TDocMeta> {
   const range = requireSectionRange(document, headingId, "moveSection");
   const extracted = document.blocks.slice(range.start, range.end);
   const remaining = [...document.blocks.slice(0, range.start), ...document.blocks.slice(range.end)];
@@ -423,10 +423,10 @@ function clampLevel(level: number): HeadingLevel {
 }
 
 /** Deletes a heading and every block in its section. */
-export function deleteSection<TMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta>,
+export function deleteSection<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
   headingId: string,
-): WealthyDocument<TMeta> {
+): WealthyDocument<TMeta, TDocMeta> {
   const range = requireSectionRange(document, headingId, "deleteSection");
   const blocks = [...document.blocks.slice(0, range.start), ...document.blocks.slice(range.end)];
   return withBlocks(document, blocks);
@@ -437,10 +437,10 @@ export function deleteSection<TMeta extends BlockMeta>(
  * block gets a fresh id (block ids are document-unique); the copy's new
  * heading id is returned alongside the document.
  */
-export function duplicateSection<TMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta>,
+export function duplicateSection<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
   headingId: string,
-): { document: WealthyDocument<TMeta>; newHeadingId: string } {
+): { document: WealthyDocument<TMeta, TDocMeta>; newHeadingId: string } {
   const range = requireSectionRange(document, headingId, "duplicateSection");
   const copies = document.blocks
     .slice(range.start, range.end)

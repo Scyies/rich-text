@@ -54,10 +54,10 @@
     "validate:release": "pnpm lint && pnpm test && pnpm typecheck && pnpm build && pnpm pack --dry-run && pnpm smoke:exports"
   },
   "dependencies": {
-    "docx": "^9.7.1",
     "zod": "^4.1.0"
   },
   "peerDependencies": {
+    "docx": "^9.7.1",
     "react": ">=19",
     "react-dom": ">=19"
   },
@@ -67,6 +67,7 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.17",
     "@vitejs/plugin-react": "^6.0.2",
+    "docx": "^9.7.1",
     "eslint": "^10.5.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.6.0",

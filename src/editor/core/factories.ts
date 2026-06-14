@@ -150,9 +150,12 @@ export function createBlock<TMeta extends BlockMeta = BlockMeta>(input: CreateBl
  * An empty document still contains one empty paragraph: in the flat-line
  * model (D1/D2) the editor always has at least one line to put a caret on.
  */
-export function createEmptyDocument<TMeta extends BlockMeta = BlockMeta>(): WealthyDocument<TMeta> {
+export function createEmptyDocument<
+  TBlockMeta extends BlockMeta = BlockMeta,
+  TDocMeta extends BlockMeta = BlockMeta,
+>(): WealthyDocument<TBlockMeta, TDocMeta> {
   return {
     schemaVersion: SCHEMA_VERSION,
-    blocks: [createTextBlock<TMeta>()],
+    blocks: [createTextBlock<TBlockMeta>()],
   };
 }

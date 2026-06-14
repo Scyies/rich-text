@@ -104,6 +104,14 @@ function alignStyle(align: string | undefined): string {
   return align !== undefined ? ` style="text-align:${align}"` : "";
 }
 
+function tableColumnWidthStyle(column: TableBlock["columns"][number]): string {
+  if (column.width === undefined) {
+    return "";
+  }
+  const unit = column.width.unit === "percent" ? "%" : "px";
+  return ` style="width:${column.width.value}${unit}"`;
+}
+
 function isListBlock(block: Block): block is TextBlock & { variant: "bullet" | "numbered" } {
   return block.type === "text" && (block.variant === "bullet" || block.variant === "numbered");
 }
@@ -164,7 +172,10 @@ function renderTable(block: TableBlock, options: HtmlExportOptions): string {
   };
 
   const rows = [...block.rows];
-  let html = "<table>";
+  const colgroup = `<colgroup>${block.columns
+    .map((column) => `<col${tableColumnWidthStyle(column)}>`)
+    .join("")}</colgroup>`;
+  let html = `<table>${colgroup}`;
   if (block.showHeader && rows.length > 0) {
     html += `<thead>${rowHtml(rows[0]!, "th")}</thead>`;
     rows.shift();

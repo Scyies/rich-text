@@ -49,8 +49,6 @@ export interface DocxExportOptions {
   renderCustomBlock?: ((block: CustomBlock) => FileChild | FileChild[]) | undefined;
   /** Serialize an inline object to its run text. Default: the label/kind. */
   renderInlineObject?: ((node: InlineObjectNode) => string) | undefined;
-  /** Heading-number prefixes are left to Word; this is accepted for parity but unused. */
-  headingNumbers?: boolean | undefined;
 }
 
 const HEADING_BY_LEVEL: Record<WteHeadingLevel, (typeof HeadingLevel)[keyof typeof HeadingLevel]> = {

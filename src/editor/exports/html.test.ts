@@ -74,7 +74,16 @@ describe("exportHtml", () => {
     table.rows[1]!.cells[1]!.blocks = [createTextBlock({ content: "b" })];
     const html = exportHtml(docWith([table]));
     expect(html).toBe(
-      "<table><thead><tr><th>H1</th><th>H2</th></tr></thead><tbody><tr><td>a</td><td>b</td></tr></tbody></table>",
+      "<table><colgroup><col><col></colgroup><thead><tr><th>H1</th><th>H2</th></tr></thead><tbody><tr><td>a</td><td>b</td></tr></tbody></table>",
+    );
+  });
+
+  it("honors table column widths with a colgroup", () => {
+    const table = createTableBlock({ columnCount: 2, rowCount: 1, showHeader: false });
+    table.columns[0] = { ...table.columns[0]!, width: { value: 30, unit: "percent" } };
+    table.columns[1] = { ...table.columns[1]!, width: { value: 180, unit: "px" } };
+    expect(exportHtml(docWith([table]))).toContain(
+      '<colgroup><col style="width:30%"><col style="width:180px"></colgroup>',
     );
   });
 

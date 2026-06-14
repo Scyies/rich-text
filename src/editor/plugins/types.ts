@@ -3,7 +3,6 @@ import type { EditorCommands } from "../core/commands";
 import type { EditorSelection } from "../core/selection";
 import type { BlockMeta, CustomBlock, InlineMark, InlineNode, InlineObjectNode } from "../core/schema";
 import type { DocumentEditorApi } from "../hooks/useDocumentEditor";
-import type { SlashMenuItem } from "../components/SlashMenu";
 
 /**
  * Plugin surface (D5/D6). Plugins register per-`kind` renderers and editor
@@ -72,7 +71,12 @@ export interface SlashItemContext<TMeta extends BlockMeta = BlockMeta> {
 }
 
 /** Host/plugin-provided slash menu entry (shown after the core block types). */
-export interface CustomSlashItem<TMeta extends BlockMeta = BlockMeta> extends SlashMenuItem {
+export interface CustomSlashItem<TMeta extends BlockMeta = BlockMeta> {
+  id: string;
+  label: string;
+  /** Short hint shown right of the label, e.g. "#" or "1.". */
+  hint?: string;
+  keywords?: string[];
   apply(context: SlashItemContext<TMeta>): void;
 }
 

@@ -136,10 +136,10 @@ function App() {
   const [lastCommit, setLastCommit] = useState<string>("—");
   const [showJson, setShowJson] = useState(true);
   const [locale, setLocale] = useState<Locale>("en");
-  const apiRef = useRef<DocumentEditorApi | null>(null);
+  const editorRef = useRef<DocumentEditorApi | null>(null);
 
   function insertPlaceholderAtCaret() {
-    const api = apiRef.current;
+    const api = editorRef.current;
     const selection = api?.selection;
     if (api == null || selection?.type !== "text") {
       return;
@@ -179,7 +179,7 @@ function App() {
       <main className={showJson ? "demo__main demo__main--split" : "demo__main"}>
         <div className="demo__editor">
           <DocumentEditor
-            apiRef={apiRef}
+            ref={editorRef}
             plugins={[minutaPlugin, separatorPlugin]}
             value={document}
             onChange={setDocument}

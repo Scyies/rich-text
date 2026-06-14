@@ -257,10 +257,13 @@ export const documentSchema = z
     });
   });
 
-export interface WealthyDocument<TMeta extends BlockMeta = BlockMeta> {
+export interface WealthyDocument<
+  TBlockMeta extends BlockMeta = BlockMeta,
+  TDocMeta extends BlockMeta = BlockMeta,
+> {
   schemaVersion: typeof SCHEMA_VERSION;
-  blocks: Block<TMeta>[];
-  meta?: Record<string, unknown> | undefined;
+  blocks: Block<TBlockMeta>[];
+  meta?: TDocMeta | undefined;
 }
 
 // Compile-time guarantee that the hand-written generic interfaces stay in
