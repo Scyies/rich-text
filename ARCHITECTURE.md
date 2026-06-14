@@ -117,8 +117,9 @@ wealthy-text-editor/
 │   │   │   ├── types.ts                # EditorPlugin interface
 │   │   │   └── registry.ts
 │   │   ├── i18n/
-│   │   │   ├── pt-BR.ts
-│   │   │   └── en.ts
+│   │   │   ├── messages.ts             # EditorMessages + dicionários en/pt-BR + resolveMessages (React-free)
+│   │   │   ├── context.tsx             # MessagesProvider / useMessages (default en)
+│   │   │   └── index.ts
 │   │   └── exports/
 │   │       ├── docx.ts                 # entry: wealthy-text-editor/export-docx
 │   │       ├── html.ts                 # entry: wealthy-text-editor/export-html

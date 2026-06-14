@@ -15,6 +15,7 @@ import {
   type CustomSlashItem,
   type DocumentEditorApi,
   type EditorPlugin,
+  type Locale,
 } from "wealthy-text-editor/react";
 import "wealthy-text-editor/styles.css";
 import "./demo.css";
@@ -134,6 +135,7 @@ function App() {
   const [document, setDocument] = useState(buildSampleDocument);
   const [lastCommit, setLastCommit] = useState<string>("—");
   const [showJson, setShowJson] = useState(true);
+  const [locale, setLocale] = useState<Locale>("en");
   const apiRef = useRef<DocumentEditorApi | null>(null);
 
   function insertPlaceholderAtCaret() {
@@ -166,6 +168,13 @@ function App() {
         <button type="button" onClick={() => setShowJson((value) => !value)}>
           {showJson ? "Hide JSON" : "Show JSON"}
         </button>
+        <button
+          type="button"
+          data-testid="locale-toggle"
+          onClick={() => setLocale((value) => (value === "en" ? "pt-BR" : "en"))}
+        >
+          locale: {locale}
+        </button>
       </header>
       <main className={showJson ? "demo__main demo__main--split" : "demo__main"}>
         <div className="demo__editor">
@@ -177,6 +186,7 @@ function App() {
             onCommit={() => setLastCommit(new Date().toLocaleTimeString())}
             commitIdleMs={1500}
             showHeadingNumbers
+            locale={locale}
           />
         </div>
         {showJson && (

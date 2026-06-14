@@ -67,16 +67,16 @@ Publicação progressiva em 5 etapas. As decisões D1–D15 referenciadas estão
 - Edição de chips por `inlineObjects[].renderEditor` ✅
 - `package.json` expõe root core, `/react`, exporters e `styles.css` ✅
 
-## v0.5 — Polimento final para v1.0 (📦 `wealthy-text-editor`) ⏳
+## v0.5 — Polimento final para v1.0 (📦 `wealthy-text-editor`) ✅
 
 **Pacote:** fechar o restante da v0.5 antes de promover para release estável.
 
 - **Rich paste HTML→schema (Word/Docs/web, fallback texto puro) (D11) ✅**
-- Decisão final de CSS: manter `styles.css` global `.wte-*` ou migrar para CSS Modules
-- i18n: dicionários pt-BR + en, prop `locale`
-- README com exemplos completos de uso
-- Documentação de API pública
-- CI: build, lint, test, publish automático
+- **Decisão final de CSS: manter `styles.css` global `.wte-*` (resolvido — sem migração para CSS Modules) ✅**
+- **i18n: dicionários `en` + `pt-BR`, prop `locale` (+ `messages` override) ✅**
+- **README com exemplos completos de uso ✅**
+- **Documentação de API pública (README §"Superfície pública") ✅**
+- **CI: lint (ESLint flat), test, typecheck, build, smoke; publish em tag `v*` (GitHub Actions) ✅**
 
 > Nota de implementação (Plugins — feito): o sistema de plugins (`EditorPlugin`) vive
 > no lado React (`/react`), não em `core/`, pois renderers são React — coerente com o
@@ -103,6 +103,32 @@ Publicação progressiva em 5 etapas. As decisões D1–D15 referenciadas estão
 > color só se hex, highlight descartado). Verificação docx: descompacta o `.docx` e checa
 > `word/document.xml` (jszip, devDep).
 
+> Nota de implementação (Docs + CI — feito): README reescrito (instalação, uso, props,
+> commands, i18n, plugins com edição de chip, paste, exporters com `Packer`, e a tabela
+> "Superfície pública" enumerando as 6 entradas). ESLint flat config (`eslint.config.js`):
+> `@eslint/js` + `typescript-eslint` recommended (sem type-check, p/ velocidade) +
+> `react-hooks` (`rules-of-hooks` error, `exhaustive-deps` warn). Escopo: `src` + `demo`;
+> os dirs legados `components/`/`shared/` (Minuta pré-extração, fora do tsconfig) e
+> `scripts/` são ignorados. Único fix de código: `cause` no `SyntaxError` de
+> `deserializeDocument`; dois `exhaustive-deps` intencionais documentados com disable.
+> Script `lint` (`--max-warnings 0`) entrou no `validate:release` (primeiro passo).
+> Workflow `.github/workflows/ci.yml`: job `validate` (pnpm + Node 24 → `validate:release`)
+> em push/PR; job `publish` em tag `v*`, com dist-tag derivado da versão (prerelease →
+> `alpha`, estável → `latest`) e provenance (precisa do secret `NPM_TOKEN`).
+>
+> Nota de implementação (i18n — feito): `src/editor/i18n/` — `messages.ts`
+> (React-free: interface `EditorMessages`, dicionários `en`/`ptBR`, `resolveMessages`)
+> + `context.tsx` (React: `MessagesProvider`/`useMessages`, default = `en`). **Default é
+> `en`** (decisão do usuário; `pt-BR` via `locale="pt-BR"`) — diverge do handoff, que
+> sugeria `pt-BR`. Só o chrome do core é localizado; strings de plugin ficam com o autor
+> do plugin. `DocumentEditor`/`BlockEditor` ganharam props `locale?` e `messages?` (override
+> raso), resolvem as mensagens num `useMemo` e envolvem a subárvore no provider; os leafs
+> (`SlashMenu`, `FloatingToolbar`, `TableView`, `ChipPopover`, `BlockRow`) leem via
+> `useMessages()`. Itens de slash do core vêm de `buildCoreSlashItems(messages)`;
+> `CORE_SLASH_ITEMS` permanece exportado (labels `en`, back-compat). Testes: paridade de
+> chaves en/pt-BR + troca de locale no componente. Verificado no navegador (toggle de locale
+> no demo).
+>
 > Nota de implementação (Rich paste — feito): `src/editor/components/paste.ts` (lado
 > React, depende de `DOMParser`; `[]` sem DOM). `parseHtmlToBlocks` inverte o exporter
 > HTML — headings, parágrafos, listas aninhadas por indent, tabelas, `<hr>`→separator,

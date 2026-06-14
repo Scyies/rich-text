@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { useMessages } from "../i18n";
 
 /**
  * Fixed-position overlay hosting an inline object's click-to-edit/fill UI
@@ -12,8 +13,9 @@ export interface ChipPopoverProps {
 }
 
 export function ChipPopover({ children, style }: ChipPopoverProps) {
+  const messages = useMessages();
   return (
-    <div className="wte-chip-popover" role="dialog" aria-label="Edit field" style={style}>
+    <div className="wte-chip-popover" role="dialog" aria-label={messages.chipEditAriaLabel} style={style}>
       {children}
     </div>
   );

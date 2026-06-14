@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { en, useMessages, type EditorMessages } from "../i18n";
 
 /**
  * Slash command menu (D11). Opened by typing "/" in a text block; the
@@ -15,15 +16,34 @@ export interface SlashMenuItem {
   keywords?: string[];
 }
 
-export const CORE_SLASH_ITEMS: SlashMenuItem[] = [
-  { id: "heading-1", label: "Heading 1", hint: "#", keywords: ["h1", "title", "titulo"] },
-  { id: "heading-2", label: "Heading 2", hint: "##", keywords: ["h2", "subtitle"] },
-  { id: "heading-3", label: "Heading 3", hint: "###", keywords: ["h3"] },
-  { id: "paragraph", label: "Text", hint: "¶", keywords: ["p", "paragraph", "texto"] },
-  { id: "bullet", label: "Bulleted list", hint: "•", keywords: ["ul", "bullet", "lista"] },
-  { id: "numbered", label: "Numbered list", hint: "1.", keywords: ["ol", "ordered", "lista"] },
-  { id: "table", label: "Table", hint: "⊞", keywords: ["table", "tabela", "grid"] },
+/** Locale-independent shape of the core items; labels come from messages. */
+const CORE_SLASH_ITEM_SPECS: Array<{
+  id: string;
+  label: (m: EditorMessages) => string;
+  hint: string;
+  keywords: string[];
+}> = [
+  { id: "heading-1", label: (m) => m.slashHeading1, hint: "#", keywords: ["h1", "title", "titulo"] },
+  { id: "heading-2", label: (m) => m.slashHeading2, hint: "##", keywords: ["h2", "subtitle"] },
+  { id: "heading-3", label: (m) => m.slashHeading3, hint: "###", keywords: ["h3"] },
+  { id: "paragraph", label: (m) => m.slashText, hint: "¶", keywords: ["p", "paragraph", "texto"] },
+  { id: "bullet", label: (m) => m.slashBulletedList, hint: "•", keywords: ["ul", "bullet", "lista"] },
+  { id: "numbered", label: (m) => m.slashNumberedList, hint: "1.", keywords: ["ol", "ordered", "lista"] },
+  { id: "table", label: (m) => m.slashTable, hint: "⊞", keywords: ["table", "tabela", "grid"] },
 ];
+
+/** Builds the core block-type slash items with localized labels. */
+export function buildCoreSlashItems(messages: EditorMessages): SlashMenuItem[] {
+  return CORE_SLASH_ITEM_SPECS.map((spec) => ({
+    id: spec.id,
+    label: spec.label(messages),
+    hint: spec.hint,
+    keywords: spec.keywords,
+  }));
+}
+
+/** Core slash items with English labels (back-compat; default locale chrome). */
+export const CORE_SLASH_ITEMS: SlashMenuItem[] = buildCoreSlashItems(en);
 
 export function filterSlashItems(items: SlashMenuItem[], query: string): SlashMenuItem[] {
   const needle = query.trim().toLowerCase();
@@ -46,10 +66,11 @@ export interface SlashMenuProps {
 }
 
 export function SlashMenu({ items, highlightedIndex, onSelect, onHighlight, style }: SlashMenuProps) {
+  const messages = useMessages();
   return (
-    <div className="wte-slash-menu" role="listbox" aria-label="Block types" style={style}>
+    <div className="wte-slash-menu" role="listbox" aria-label={messages.slashMenuAriaLabel} style={style}>
       {items.length === 0 ? (
-        <div className="wte-slash-menu__empty">No results</div>
+        <div className="wte-slash-menu__empty">{messages.slashNoResults}</div>
       ) : (
         items.map((item, index) => (
           <button

@@ -33,10 +33,11 @@ import type { CustomSlashItem, EditorPlugin, RenderBlockProps } from "../plugins
 import { getCaretViewportX, getOffsetNearViewportX, offsetOfInlineObject, type InlineRenderConfig } from "./dom";
 import { matchInputRule } from "./inputRules";
 import { parseClipboardToBlocks } from "./paste";
+import { resolveMessages, MessagesProvider, useMessages, type EditorMessages, type Locale } from "../i18n";
 import { ChipPopover } from "./ChipPopover";
 import { FloatingToolbar, type FloatingToolbarExtraItem } from "./FloatingToolbar";
 import { InlineEditor, type InlineEditorHandle } from "./InlineEditor";
-import { CORE_SLASH_ITEMS, filterSlashItems, SlashMenu, type SlashMenuItem } from "./SlashMenu";
+import { buildCoreSlashItems, filterSlashItems, SlashMenu, type SlashMenuItem } from "./SlashMenu";
 import { TableView } from "./TableView";
 
 // Plugin surface types are defined React-side (renderers are React); re-exported
@@ -77,6 +78,10 @@ export interface DocumentEditorProps<TMeta extends BlockMeta = BlockMeta> {
   /** Show computed hierarchical numbers (1., 1.1…) before headings. */
   showHeadingNumbers?: boolean | undefined;
   placeholder?: string | undefined;
+  /** UI locale for built-in chrome (default `en`). */
+  locale?: Locale | undefined;
+  /** Per-string overrides on top of the resolved `locale`. */
+  messages?: Partial<EditorMessages> | undefined;
   className?: string | undefined;
   /** Plugins (D5/D6): custom block + inline-object renderers, slash/toolbar items. */
   plugins?: EditorPlugin<TMeta>[] | undefined;
@@ -126,12 +131,13 @@ function isTextLike(block: Block): block is Extract<Block, { type: "heading" | "
 }
 
 export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: DocumentEditorProps<TMeta>) {
-  const {
-    readOnly = false,
-    showHeadingNumbers = false,
-    placeholder = "Type / for commands…",
-    renderBlock,
-  } = props;
+  const { readOnly = false, showHeadingNumbers = false, renderBlock } = props;
+
+  const messages = useMemo(
+    () => resolveMessages(props.locale, props.messages),
+    [props.locale, props.messages],
+  );
+  const placeholder = props.placeholder ?? messages.placeholder;
 
   const editor = useDocumentEditor<TMeta>({
     value: props.value,
@@ -223,8 +229,8 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
   const [slash, setSlash] = useState<SlashState | null>(null);
   const [slashIndex, setSlashIndex] = useState(0);
   const allSlashItems = useMemo(
-    () => [...CORE_SLASH_ITEMS, ...(props.slashItems ?? []), ...registry.slashItems],
-    [props.slashItems, registry],
+    () => [...buildCoreSlashItems(messages), ...(props.slashItems ?? []), ...registry.slashItems],
+    [messages, props.slashItems, registry],
   );
   const slashItems = useMemo(
     () => (slash === null ? [] : filterSlashItems(allSlashItems, slash.query)),
@@ -813,6 +819,8 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     } catch {
       return undefined;
     }
+    // textSelection isn't read here, but a selection change must re-measure the live range.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toolbarTarget, textSelection]);
 
   // ---- numbering + visibility ----
@@ -900,11 +908,12 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
 
   // ---- render ----
   return (
+    <MessagesProvider messages={messages}>
     <div
       className={["wte-editor", props.className].filter(Boolean).join(" ")}
       role="textbox"
       aria-multiline
-      aria-label={props.ariaLabel ?? "Document editor"}
+      aria-label={props.ariaLabel ?? messages.documentAriaLabel}
       onKeyDown={handleContainerKeyDown}
       onMouseDown={handleEditorMouseDown}
       onPaste={handlePaste}
@@ -953,7 +962,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
           className="wte-trailing-line"
           role="button"
           tabIndex={-1}
-          aria-label="Add a line below"
+          aria-label={messages.addLineBelow}
           onMouseDown={(event) => {
             event.preventDefault();
             addTrailingParagraph();
@@ -1007,6 +1016,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
         </ChipPopover>
       )}
     </div>
+    </MessagesProvider>
   );
 }
 
@@ -1072,6 +1082,7 @@ function BlockRow({
   renderBlock,
   commandsUpdateBlock,
 }: BlockRowProps) {
+  const messages = useMessages();
   const customRenderer =
     block.type === "custom" ? (blockRenderers.get(block.kind) ?? renderBlock) : undefined;
 
@@ -1115,7 +1126,7 @@ function BlockRow({
           <span
             className="wte-block__handle"
             draggable
-            title="Drag to move; click to select"
+            title={messages.dragHandleTitle}
             onClick={(event) => onHandleClick(block.id, event.shiftKey)}
             onDragStart={(event) => {
               event.dataTransfer.setData("text/wte-block", block.id);
@@ -1130,7 +1141,7 @@ function BlockRow({
             type="button"
             className="wte-block__chevron"
             aria-expanded={!collapsed}
-            aria-label={collapsed ? "Expand section" : "Collapse section"}
+            aria-label={collapsed ? messages.expandSection : messages.collapseSection}
             onClick={() => onToggleCollapsed(block.id)}
           >
             {collapsed ? "▸" : "▾"}
@@ -1149,7 +1160,7 @@ function BlockRow({
               as={`h${block.level}` as "h1"}
               content={block.content}
               readOnly={readOnly}
-              ariaLabel={`Heading ${block.level}`}
+              ariaLabel={messages.headingAriaLabel(block.level)}
               style={block.align !== undefined ? { textAlign: block.align } : undefined}
               onContentChange={(nodes, caret) => onContentChange(block.id, nodes, caret)}
               onSelectionChange={(start, end) => onSelectionChange(block.id, start, end)}
@@ -1177,7 +1188,7 @@ function BlockRow({
               as="p"
               content={block.content}
               readOnly={readOnly}
-              ariaLabel="Text block"
+              ariaLabel={messages.textBlockAriaLabel}
               placeholder={block.variant === "paragraph" ? placeholder : undefined}
               style={block.align !== undefined ? { textAlign: block.align } : undefined}
               onContentChange={(nodes, caret) => onContentChange(block.id, nodes, caret)}

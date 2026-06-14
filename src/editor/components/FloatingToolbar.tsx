@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import type { InlineMark } from "../core/schema";
+import { useMessages, type EditorMessages } from "../i18n";
 
 /**
  * Floating marks toolbar, shown over a non-collapsed text selection inside
@@ -23,22 +24,23 @@ export interface FloatingToolbarProps {
   style?: CSSProperties | undefined;
 }
 
-const BUTTONS: Array<{ mark: InlineMark; label: string; title: string }> = [
-  { mark: { type: "bold" }, label: "B", title: "Bold" },
-  { mark: { type: "italic" }, label: "I", title: "Italic" },
-  { mark: { type: "underline" }, label: "U", title: "Underline" },
-  { mark: { type: "strikethrough" }, label: "S", title: "Strikethrough" },
-  { mark: { type: "code" }, label: "</>", title: "Code" },
+const BUTTONS: Array<{ mark: InlineMark; label: string; title: (m: EditorMessages) => string }> = [
+  { mark: { type: "bold" }, label: "B", title: (m) => m.markBold },
+  { mark: { type: "italic" }, label: "I", title: (m) => m.markItalic },
+  { mark: { type: "underline" }, label: "U", title: (m) => m.markUnderline },
+  { mark: { type: "strikethrough" }, label: "S", title: (m) => m.markStrikethrough },
+  { mark: { type: "code" }, label: "</>", title: (m) => m.markCode },
 ];
 
 export function FloatingToolbar({ activeMarkTypes, onToggleMark, extraItems, style }: FloatingToolbarProps) {
+  const messages = useMessages();
   return (
-    <div className="wte-floating-toolbar" role="toolbar" aria-label="Text formatting" style={style}>
+    <div className="wte-floating-toolbar" role="toolbar" aria-label={messages.toolbarAriaLabel} style={style}>
       {BUTTONS.map(({ mark, label, title }) => (
         <button
           key={mark.type}
           type="button"
-          title={title}
+          title={title(messages)}
           aria-pressed={activeMarkTypes.has(mark.type)}
           className={
             activeMarkTypes.has(mark.type)

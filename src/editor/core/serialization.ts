@@ -18,7 +18,9 @@ export function deserializeDocument(json: string): WealthyDocument {
   try {
     parsed = JSON.parse(json);
   } catch (error) {
-    throw new SyntaxError(`deserializeDocument: input is not valid JSON: ${(error as Error).message}`);
+    throw new SyntaxError(`deserializeDocument: input is not valid JSON: ${(error as Error).message}`, {
+      cause: error,
+    });
   }
   return validateDocument(parsed);
 }

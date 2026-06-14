@@ -1,7 +1,8 @@
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import type { ChangeInfo } from "../core/commands";
 import type { Block, BlockMeta, CustomBlock, TableBlock } from "../core/schema";
 import { useBlockEditor } from "../hooks/useBlockEditor";
+import { resolveMessages, MessagesProvider, type EditorMessages, type Locale } from "../i18n";
 import { InlineEditor } from "./InlineEditor";
 import { TableView } from "./TableView";
 
@@ -18,6 +19,10 @@ export interface BlockEditorProps<TMeta extends BlockMeta = BlockMeta> {
   commitIdleMs?: number | undefined;
   readOnly?: boolean | undefined;
   placeholder?: string | undefined;
+  /** UI locale for built-in chrome (default `en`). */
+  locale?: Locale | undefined;
+  /** Per-string overrides on top of the resolved `locale`. */
+  messages?: Partial<EditorMessages> | undefined;
   className?: string | undefined;
   renderBlock?:
     | ((props: { block: CustomBlock<TMeta>; readOnly: boolean; update(patch: Record<string, unknown>): void }) => ReactNode)
@@ -26,6 +31,10 @@ export interface BlockEditorProps<TMeta extends BlockMeta = BlockMeta> {
 
 export function BlockEditor<TMeta extends BlockMeta = BlockMeta>(props: BlockEditorProps<TMeta>) {
   const { readOnly = false } = props;
+  const messages = useMemo(
+    () => resolveMessages(props.locale, props.messages),
+    [props.locale, props.messages],
+  );
   const editor = useBlockEditor<TMeta>({
     value: props.value,
     onChange: props.onChange,
@@ -35,6 +44,7 @@ export function BlockEditor<TMeta extends BlockMeta = BlockMeta>(props: BlockEdi
   const block = editor.block;
 
   return (
+    <MessagesProvider messages={messages}>
     <div
       className={["wte-block-editor", props.className].filter(Boolean).join(" ")}
       onKeyDown={(event) => {
@@ -57,7 +67,9 @@ export function BlockEditor<TMeta extends BlockMeta = BlockMeta>(props: BlockEdi
           content={block.content}
           readOnly={readOnly}
           placeholder={props.placeholder}
-          ariaLabel={block.type === "heading" ? `Heading ${block.level}` : "Text block"}
+          ariaLabel={
+            block.type === "heading" ? messages.headingAriaLabel(block.level) : messages.textBlockAriaLabel
+          }
           style={block.align !== undefined ? { textAlign: block.align } : undefined}
           onContentChange={(content) => editor.update({ content })}
           onSelectionChange={(start, end) =>
@@ -87,5 +99,6 @@ export function BlockEditor<TMeta extends BlockMeta = BlockMeta>(props: BlockEdi
           </div>
         ))}
     </div>
+    </MessagesProvider>
   );
 }

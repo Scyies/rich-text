@@ -1,5 +1,6 @@
 import { createTextBlock, generateBlockId } from "../core/factories";
 import type { InlineNode, TableBlock, TextBlock } from "../core/schema";
+import { useMessages } from "../i18n";
 import { InlineEditor } from "./InlineEditor";
 
 /**
@@ -17,6 +18,8 @@ export interface TableViewProps {
 }
 
 export function TableView({ block, readOnly = false, onTableChange }: TableViewProps) {
+  const messages = useMessages();
+
   function updateCellBlock(rowIndex: number, columnId: string, blockIndex: number, content: InlineNode[]): void {
     const rows = block.rows.map((row, currentRowIndex) => {
       if (currentRowIndex !== rowIndex) {
@@ -91,7 +94,7 @@ export function TableView({ block, readOnly = false, onTableChange }: TableViewP
         content={cellBlock.content}
         readOnly={readOnly}
         onContentChange={(content) => updateCellBlock(rowIndex, columnId, blockIndex, content)}
-        ariaLabel="Table cell"
+        ariaLabel={messages.tableCellAriaLabel}
       />
     ));
   }
@@ -133,22 +136,27 @@ export function TableView({ block, readOnly = false, onTableChange }: TableViewP
       </table>
       {!readOnly && (
         <div className="wte-table__controls" contentEditable={false}>
-          <button type="button" aria-label="Add row" onClick={addRow}>
-            + Row
-          </button>
-          <button type="button" aria-label="Remove row" onClick={removeRow} disabled={block.rows.length === 0}>
-            − Row
-          </button>
-          <button type="button" aria-label="Add column" onClick={addColumn}>
-            + Col
+          <button type="button" aria-label={messages.tableAddRow} onClick={addRow}>
+            + {messages.tableRowLabel}
           </button>
           <button
             type="button"
-            aria-label="Remove column"
+            aria-label={messages.tableRemoveRow}
+            onClick={removeRow}
+            disabled={block.rows.length === 0}
+          >
+            − {messages.tableRowLabel}
+          </button>
+          <button type="button" aria-label={messages.tableAddColumn} onClick={addColumn}>
+            + {messages.tableColumnLabel}
+          </button>
+          <button
+            type="button"
+            aria-label={messages.tableRemoveColumn}
             onClick={removeColumn}
             disabled={block.columns.length <= 1}
           >
-            − Col
+            − {messages.tableColumnLabel}
           </button>
         </div>
       )}

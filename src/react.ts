@@ -25,7 +25,7 @@ export { InlineEditor } from "./editor/components/InlineEditor";
 export type { InlineEditorHandle, InlineEditorProps } from "./editor/components/InlineEditor";
 export { TableView } from "./editor/components/TableView";
 export type { TableViewProps } from "./editor/components/TableView";
-export { SlashMenu, CORE_SLASH_ITEMS, filterSlashItems } from "./editor/components/SlashMenu";
+export { SlashMenu, CORE_SLASH_ITEMS, buildCoreSlashItems, filterSlashItems } from "./editor/components/SlashMenu";
 export type { SlashMenuItem, SlashMenuProps } from "./editor/components/SlashMenu";
 export { FloatingToolbar } from "./editor/components/FloatingToolbar";
 export type { FloatingToolbarProps } from "./editor/components/FloatingToolbar";
@@ -51,6 +51,10 @@ export {
   parsePlainTextToBlocks,
 } from "./editor/components/paste";
 export type { ClipboardPayload } from "./editor/components/paste";
+
+// i18n (v0.5) — locale dictionaries + React binding for the built-in chrome
+export { resolveMessages, en, ptBR, DEFAULT_LOCALE, MessagesProvider, useMessages } from "./editor/i18n";
+export type { EditorMessages, Locale } from "./editor/i18n";
 
 // Plugins (D5/D6) — block + inline-object renderers, slash/toolbar items
 export { buildPluginRegistry } from "./editor/plugins/registry";

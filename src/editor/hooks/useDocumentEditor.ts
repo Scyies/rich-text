@@ -181,6 +181,8 @@ export function useDocumentEditor<TMeta extends BlockMeta = BlockMeta>(
 
   const document = engine.getDocument();
 
+  // `document` is the per-transaction cache key — re-derive the tree when it changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const sectionTree = useMemo(() => engine.getSectionTree(), [engine, document]);
 
   const getSection = useCallback((headingId: string) => engine.getSection(headingId), [engine]);
