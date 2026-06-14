@@ -7,6 +7,7 @@ import {
   useState,
   type ClipboardEvent as ReactClipboardEvent,
   type CSSProperties,
+  type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type Ref,
@@ -922,6 +923,17 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     [slash, slashItems, slashIndex, applySlashItem, closeSlash],
   );
 
+  const handleContainerBlur = useCallback(
+    (event: ReactFocusEvent<HTMLDivElement>) => {
+      const nextTarget = event.relatedTarget;
+      if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+        return;
+      }
+      editor.commit();
+    },
+    [editor],
+  );
+
   // A non-editable block at the end of the document has no caret position after
   // it — offer a click target to add (and focus) a trailing line.
   const lastBlock = document.blocks[document.blocks.length - 1];
@@ -938,6 +950,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
       aria-label={props.ariaLabel ?? messages.documentAriaLabel}
       onKeyDown={handleContainerKeyDown}
       onMouseDown={handleEditorMouseDown}
+      onBlur={handleContainerBlur}
       onPaste={handlePaste}
     >
       {visibleBlocks.map((block) => (

@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+import { useCallback, useMemo, type FocusEvent as ReactFocusEvent, type ReactNode } from "react";
 import type { ChangeInfo } from "../core/commands";
 import type { Block, BlockMeta, CustomBlock, TableBlock } from "../core/schema";
 import { useBlockEditor } from "../hooks/useBlockEditor";
@@ -42,6 +42,16 @@ export function BlockEditor<TMeta extends BlockMeta = BlockMeta>(props: BlockEdi
     commitIdleMs: props.commitIdleMs,
   });
   const block = editor.block;
+  const handleBlur = useCallback(
+    (event: ReactFocusEvent<HTMLDivElement>) => {
+      const nextTarget = event.relatedTarget;
+      if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+        return;
+      }
+      editor.commit();
+    },
+    [editor],
+  );
 
   return (
     <MessagesProvider messages={messages}>
@@ -50,6 +60,7 @@ export function BlockEditor<TMeta extends BlockMeta = BlockMeta>(props: BlockEdi
       role="textbox"
       aria-multiline
       aria-label={props.ariaLabel ?? messages.documentAriaLabel}
+      onBlur={handleBlur}
       onKeyDown={(event) => {
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
           event.preventDefault();

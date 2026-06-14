@@ -23,6 +23,22 @@ describe("BlockEditor", () => {
     expect((onChange.mock.lastCall![0] as TextBlock).content).toEqual([{ type: "text", text: "hello!" }]);
   });
 
+  it("commits when focus leaves the editor", () => {
+    const block = createTextBlock({ content: "hello" });
+    const onCommit = vi.fn();
+    const { container } = render(<BlockEditor value={block} onCommit={onCommit} />);
+
+    const element = container.querySelector(".wte-inline-editor") as HTMLElement;
+    element.focus();
+    element.textContent = "hello!";
+    setCaretOffset(element, 6);
+    fireEvent.input(element);
+    fireEvent.blur(element, { relatedTarget: document.body });
+
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect((onCommit.mock.lastCall![0] as TextBlock).content).toEqual([{ type: "text", text: "hello!" }]);
+  });
+
   it("edits table cells", () => {
     const table = createTableBlock({ columnCount: 2, rowCount: 1, showHeader: false });
     const onChange = vi.fn();

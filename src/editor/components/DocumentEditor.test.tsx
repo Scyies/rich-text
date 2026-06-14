@@ -56,6 +56,35 @@ describe("DocumentEditor", () => {
     expect((latest.blocks[0] as TextBlock).content).toEqual([{ type: "text", text: "hello world" }]);
   });
 
+  it("commits when focus leaves the editor", () => {
+    const block = createTextBlock({ content: "hello" });
+    const onCommit = vi.fn();
+    render(<DocumentEditor value={docWith([block])} onCommit={onCommit} />);
+
+    const element = getBlockElement(block.id);
+    typeInto(element, "hello world");
+    fireEvent.blur(element, { relatedTarget: document.body });
+
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect((onCommit.mock.lastCall![0] as WealthyDocument).blocks[0]).toMatchObject({
+      content: [{ type: "text", text: "hello world" }],
+    });
+  });
+
+  it("does not commit when focus moves inside the editor", () => {
+    const first = createTextBlock({ content: "first" });
+    const second = createTextBlock({ content: "second" });
+    const onCommit = vi.fn();
+    render(<DocumentEditor value={docWith([first, second])} onCommit={onCommit} />);
+
+    const firstElement = getBlockElement(first.id);
+    const secondElement = getBlockElement(second.id);
+    typeInto(firstElement, "changed");
+    fireEvent.blur(firstElement, { relatedTarget: secondElement });
+
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
   it("Enter splits the block and Backspace at start merges back", () => {
     const block = createTextBlock({ content: "hello world" });
     const onChange = vi.fn();
