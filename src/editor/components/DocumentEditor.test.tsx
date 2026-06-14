@@ -81,6 +81,57 @@ describe("DocumentEditor", () => {
     expect((latest.blocks[0] as TextBlock).content).toEqual([{ type: "text", text: "hello world" }]);
   });
 
+  it("Enter on an empty list item exits the list instead of adding another (D2)", () => {
+    const bullet = createTextBlock({ variant: "bullet", content: "" });
+    const nested = createTextBlock({ variant: "bullet", content: "", indent: 1 });
+    const numbered = createTextBlock({ variant: "numbered", content: "" });
+    const onChange = vi.fn();
+    render(<DocumentEditor value={docWith([bullet, nested, numbered])} onChange={onChange} />);
+
+    // Empty top-level bullet → paragraph, no new block.
+    const first = getBlockElement(bullet.id);
+    first.focus();
+    setCaretOffset(first, 0);
+    fireEvent.keyDown(first, { key: "Enter" });
+    let latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect(latest.blocks).toHaveLength(3);
+    expect(latest.blocks[0]).toMatchObject({ type: "text", variant: "paragraph" });
+
+    // Empty nested bullet → outdent one level, still a bullet.
+    const second = getBlockElement(nested.id);
+    second.focus();
+    setCaretOffset(second, 0);
+    fireEvent.keyDown(second, { key: "Enter" });
+    latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect(latest.blocks).toHaveLength(3);
+    expect(latest.blocks[1]).toMatchObject({ type: "text", variant: "bullet" });
+    expect((latest.blocks[1] as TextBlock).indent ?? 0).toBe(0);
+
+    // Empty numbered item → paragraph.
+    const third = getBlockElement(numbered.id);
+    third.focus();
+    setCaretOffset(third, 0);
+    fireEvent.keyDown(third, { key: "Enter" });
+    latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect(latest.blocks).toHaveLength(3);
+    expect(latest.blocks[2]).toMatchObject({ type: "text", variant: "paragraph" });
+  });
+
+  it("Enter on a non-empty list item still splits into a new item", () => {
+    const item = createTextBlock({ variant: "bullet", content: "item" });
+    const onChange = vi.fn();
+    render(<DocumentEditor value={docWith([item])} onChange={onChange} />);
+
+    const element = getBlockElement(item.id);
+    element.focus();
+    setCaretOffset(element, 4);
+    fireEvent.keyDown(element, { key: "Enter" });
+
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect(latest.blocks).toHaveLength(2);
+    expect(latest.blocks[1]).toMatchObject({ type: "text", variant: "bullet" });
+  });
+
   it("Backspace at start reverts bullet → paragraph before merging (D11)", () => {
     const bullet = createTextBlock({ variant: "bullet", content: "item" });
     const onChange = vi.fn();

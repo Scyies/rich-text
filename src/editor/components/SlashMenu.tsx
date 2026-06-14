@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { en, useMessages, type EditorMessages } from "../i18n";
 
 /**
@@ -57,18 +57,61 @@ export function filterSlashItems(items: SlashMenuItem[], query: string): SlashMe
   );
 }
 
+/** Caret-line anchor (viewport coords) the menu positions itself against. */
+export interface SlashMenuAnchor {
+  x: number;
+  /** Top of the caret's line box. */
+  top: number;
+  /** Bottom of the caret's line box. */
+  bottom: number;
+}
+
 export interface SlashMenuProps {
   items: SlashMenuItem[];
   highlightedIndex: number;
   onSelect(item: SlashMenuItem): void;
   onHighlight(index: number): void;
-  style?: CSSProperties | undefined;
+  anchor: SlashMenuAnchor;
 }
 
-export function SlashMenu({ items, highlightedIndex, onSelect, onHighlight, style }: SlashMenuProps) {
+/** Gap between the caret line and the menu; safe margin from the viewport edge. */
+const MENU_GAP = 6;
+const VIEWPORT_MARGIN = 8;
+
+export function SlashMenu({ items, highlightedIndex, onSelect, onHighlight, anchor }: SlashMenuProps) {
   const messages = useMessages();
+  const menuRef = useRef<HTMLDivElement>(null);
+  // Render hidden at a first guess, then measure and place it — flipping above
+  // the caret line when there isn't room below (e.g. near the end of the page).
+  const [style, setStyle] = useState<CSSProperties>({
+    position: "fixed",
+    top: anchor.bottom + MENU_GAP,
+    left: anchor.x,
+    visibility: "hidden",
+  });
+
+  useLayoutEffect(() => {
+    const element = menuRef.current;
+    if (element === null || typeof window === "undefined") {
+      return;
+    }
+    const { offsetWidth: width, offsetHeight: height } = element;
+    const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
+    const spaceBelow = viewportHeight - anchor.bottom;
+    const spaceAbove = anchor.top;
+    const placeAbove = spaceBelow < height + MENU_GAP && spaceAbove > spaceBelow;
+    const rawTop = placeAbove ? anchor.top - MENU_GAP - height : anchor.bottom + MENU_GAP;
+    const top = Math.max(VIEWPORT_MARGIN, Math.min(rawTop, viewportHeight - height - VIEWPORT_MARGIN));
+    const left = Math.max(VIEWPORT_MARGIN, Math.min(anchor.x, viewportWidth - width - VIEWPORT_MARGIN));
+    setStyle({ position: "fixed", top, left, visibility: "visible" });
+    // `items` (not just its length): filtering can swap the longest label —
+    // changing width/height — without changing the count, which matters for the
+    // edge clamps near the right/bottom of the viewport.
+  }, [anchor, items]);
+
   return (
-    <div className="wte-slash-menu" role="listbox" aria-label={messages.slashMenuAriaLabel} style={style}>
+    <div ref={menuRef} className="wte-slash-menu" role="listbox" aria-label={messages.slashMenuAriaLabel} style={style}>
       {items.length === 0 ? (
         <div className="wte-slash-menu__empty">{messages.slashNoResults}</div>
       ) : (

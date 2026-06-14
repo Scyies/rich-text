@@ -426,6 +426,19 @@ export function getCaretViewportX(root: HTMLElement): number | null {
 }
 
 /**
+ * Viewport rect of the caret's visual line — `x` plus the line's `top`/`bottom`
+ * — for anchoring popovers (e.g. the slash menu) to the exact wrapped line the
+ * caret is on. Uses `getClientRects()` first (the line box), so it is correct in
+ * multi-line blocks where a bounding rect would span the whole block. Returns
+ * null when measurement is unavailable (jsdom, empty block); callers fall back
+ * to the block element rect.
+ */
+export function getCaretLineRect(root: HTMLElement): { x: number; top: number; bottom: number } | null {
+  const rect = getCaretRect(root);
+  return rect === null ? null : { x: rect.left, top: rect.top, bottom: rect.bottom };
+}
+
+/**
  * Inline offset on the block's first/last visual line nearest to viewport
  * x — how ArrowUp/Down keep the column when crossing blocks. Returns null
  * when hit-testing is unavailable (jsdom; callers fall back to start/end).

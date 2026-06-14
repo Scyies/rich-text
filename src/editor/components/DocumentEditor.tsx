@@ -31,7 +31,13 @@ import { useDocumentEditor, type DocumentEditorApi } from "../hooks/useDocumentE
 import { getInlineNodeLength } from "../core/transforms";
 import { buildPluginRegistry } from "../plugins/registry";
 import type { CustomSlashItem, EditorPlugin, RenderBlockProps } from "../plugins/types";
-import { getCaretViewportX, getOffsetNearViewportX, offsetOfInlineObject, type InlineRenderConfig } from "./dom";
+import {
+  getCaretLineRect,
+  getCaretViewportX,
+  getOffsetNearViewportX,
+  offsetOfInlineObject,
+  type InlineRenderConfig,
+} from "./dom";
 import { matchInputRule } from "./inputRules";
 import { parseClipboardToBlocks } from "./paste";
 import { resolveMessages, MessagesProvider, useMessages, type EditorMessages, type Locale } from "../i18n";
@@ -118,8 +124,8 @@ interface SlashState {
   /** Inline offset of the "/" character. */
   slashOffset: number;
   query: string;
-  /** Viewport anchor captured when the menu opened (caret position). */
-  anchor: { x: number; y: number };
+  /** Caret-line anchor (viewport coords) captured when the menu opened. */
+  anchor: { x: number; top: number; bottom: number };
 }
 
 interface DropIndicator {
@@ -209,22 +215,19 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
   }, []);
 
   // ---- slash menu ----
-  const getSlashAnchor = useCallback((blockId: string): { x: number; y: number } => {
-    if (typeof window !== "undefined") {
-      try {
-        const selection = window.getSelection();
-        if (selection !== null && selection.rangeCount > 0) {
-          const rect = selection.getRangeAt(0).getBoundingClientRect();
-          if (rect.left !== 0 || rect.bottom !== 0) {
-            return { x: rect.left, y: rect.bottom };
-          }
-        }
-      } catch {
-        // fall through to the block element
-      }
+  const getSlashAnchor = useCallback((blockId: string): { x: number; top: number; bottom: number } => {
+    const root = editorsRef.current.get(blockId)?.getElement();
+    if (root == null) {
+      return { x: 0, top: 0, bottom: 0 };
     }
-    const rect = editorsRef.current.get(blockId)?.getElement()?.getBoundingClientRect();
-    return rect !== undefined ? { x: rect.left, y: rect.bottom } : { x: 0, y: 0 };
+    // Prefer the caret's visual line (correct in wrapped/multi-line blocks);
+    // fall back to the block box only when the caret can't be measured.
+    const caretLine = getCaretLineRect(root);
+    if (caretLine !== null) {
+      return caretLine;
+    }
+    const rect = root.getBoundingClientRect();
+    return { x: rect.left, top: rect.top, bottom: rect.bottom };
   }, []);
 
   const [slash, setSlash] = useState<SlashState | null>(null);
@@ -560,10 +563,28 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
   // ---- keyboard structure ----
   const handleEnter = useCallback(
     (blockId: string, offset: number) => {
+      const block = engine.getDocument().blocks.find((candidate) => candidate.id === blockId);
+      // Enter on an empty list item exits the list instead of adding another
+      // bullet: outdent one level if nested, else turn back into a paragraph
+      // (mirrors Backspace-at-start). Applies to bullet and numbered variants.
+      if (
+        block !== undefined &&
+        block.type === "text" &&
+        block.variant !== "paragraph" &&
+        getInlineLength(block.content) === 0
+      ) {
+        if ((block.indent ?? 0) > 0) {
+          commands.outdent(blockId);
+        } else {
+          commands.turnInto(blockId, { type: "text", variant: "paragraph" });
+        }
+        requestFocus(blockId, 0);
+        return;
+      }
       const newBlockId = commands.splitBlock(blockId, offset);
       requestFocus(newBlockId, 0);
     },
-    [commands, requestFocus],
+    [engine, commands, requestFocus],
   );
 
   const handleBackspaceAtStart = useCallback(
@@ -977,13 +998,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
           highlightedIndex={slashIndex}
           onSelect={applySlashItem}
           onHighlight={setSlashIndex}
-          style={{
-            top: slash.anchor.y + 6,
-            left: Math.max(
-              8,
-              Math.min(slash.anchor.x, (typeof window !== "undefined" ? window.innerWidth : 1280) - 248),
-            ),
-          }}
+          anchor={slash.anchor}
         />
       )}
 

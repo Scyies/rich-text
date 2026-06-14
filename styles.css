@@ -252,6 +252,10 @@ h6.wte-inline-editor { font-size: 1.05em; }
   position: fixed;
   z-index: 50;
   min-width: 220px;
+  /* Never exceed the viewport width, so the horizontal clamp can always fit it. */
+  max-width: calc(100vw - 16px);
+  max-height: 320px;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   background: var(--wte-surface, #fff);
