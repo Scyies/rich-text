@@ -83,6 +83,27 @@ describe("parseHtmlToBlocks", () => {
     expect(reparsed.map((b) => b.type)).toEqual(["heading", "text", "text"]);
     expect(exportHtml({ schemaVersion: SCHEMA_VERSION, blocks: reparsed } as WealthyDocument)).toBe(html);
   });
+
+  it("preserves exported color and highlight marks", () => {
+    const document: WealthyDocument = {
+      schemaVersion: SCHEMA_VERSION,
+      blocks: [
+        {
+          id: crypto.randomUUID(),
+          type: "text",
+          variant: "paragraph",
+          content: [
+            { type: "text", text: "red", marks: [{ type: "color", token: "danger" }] },
+            { type: "text", text: " hot", marks: [{ type: "highlight", token: "warning" }] },
+          ],
+        },
+      ],
+    };
+
+    const [block] = parseHtmlToBlocks(exportHtml(document)) as TextBlock[];
+
+    expect(block!.content).toEqual((document.blocks[0] as TextBlock).content);
+  });
 });
 
 describe("parsePlainTextToBlocks", () => {

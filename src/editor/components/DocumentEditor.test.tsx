@@ -780,6 +780,33 @@ describe("DocumentEditor — trailing non-editable block", () => {
     const { container } = render(<DocumentEditor value={docWith([createTextBlock({ content: "only" })])} />);
     expect(within(container).queryByRole("button", { name: "Add a line below" })).toBeNull();
   });
+
+  it("does not show the trailing affordance for a hidden collapsed-section tail", () => {
+    const heading = createHeadingBlock({ level: 1, content: "A" });
+    const separatorBlock = createSeparatorBlock();
+    const { container } = render(<DocumentEditor value={docWith([heading, separatorBlock])} />);
+
+    expect(within(container).getByRole("button", { name: "Add a line below" })).toBeTruthy();
+
+    fireEvent.click(container.querySelector(".wte-block__chevron")!);
+
+    expect(within(container).queryByRole("button", { name: "Add a line below" })).toBeNull();
+  });
+
+  it("ArrowDown from a collapsed final heading does not add a hidden line", () => {
+    const heading = createHeadingBlock({ level: 1, content: "A" });
+    const separatorBlock = createSeparatorBlock();
+    const onChange = vi.fn();
+    const { container } = render(<DocumentEditor value={docWith([heading, separatorBlock])} onChange={onChange} />);
+
+    fireEvent.click(container.querySelector(".wte-block__chevron")!);
+    const element = getBlockElement(heading.id);
+    element.focus();
+    setCaretOffset(element, 1);
+    fireEvent.keyDown(element, { key: "ArrowDown" });
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });
 
 describe("test isolation", () => {

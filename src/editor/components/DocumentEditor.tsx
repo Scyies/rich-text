@@ -645,14 +645,14 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
       // the end of the document, add a fresh trailing line and land in it.
       if (direction === 1) {
         const last = blocks[blocks.length - 1];
-        if (last !== undefined && !isTextLike(last)) {
+        if (last !== undefined && !editor.hiddenBlockIds.has(last.id) && !isTextLike(last)) {
           addTrailingParagraph();
           return true;
         }
       }
       return false;
     },
-    [engine, requestFocus, addTrailingParagraph],
+    [engine, editor.hiddenBlockIds, requestFocus, addTrailingParagraph],
   );
 
   // ---- selection: inline tracking + block multi-select ----
@@ -895,7 +895,8 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
   // A non-editable block at the end of the document has no caret position after
   // it — offer a click target to add (and focus) a trailing line.
   const lastBlock = document.blocks[document.blocks.length - 1];
-  const showTrailingAdd = !readOnly && lastBlock !== undefined && !isTextLike(lastBlock);
+  const showTrailingAdd =
+    !readOnly && lastBlock !== undefined && !editor.hiddenBlockIds.has(lastBlock.id) && !isTextLike(lastBlock);
 
   // ---- render ----
   return (

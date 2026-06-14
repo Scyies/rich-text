@@ -100,6 +100,15 @@ export function inlineNodesToHtml(
 }
 
 function markForElement(element: Element): InlineMark | null {
+  const classTokenValue = (prefix: string): string | null => {
+    for (const className of Array.from(element.classList)) {
+      if (className.startsWith(prefix) && className.length > prefix.length) {
+        return className.slice(prefix.length);
+      }
+    }
+    return null;
+  };
+
   switch (element.tagName) {
     case "STRONG":
     case "B":
@@ -124,9 +133,17 @@ function markForElement(element: Element): InlineMark | null {
       if (color !== null && color.length > 0) {
         return { type: "color", token: color };
       }
+      const exportedColor = classTokenValue("wte-color-");
+      if (exportedColor !== null) {
+        return { type: "color", token: exportedColor };
+      }
       const highlight = element.getAttribute("data-wte-highlight");
       if (highlight !== null && highlight.length > 0) {
         return { type: "highlight", token: highlight };
+      }
+      const exportedHighlight = classTokenValue("wte-highlight-");
+      if (exportedHighlight !== null) {
+        return { type: "highlight", token: exportedHighlight };
       }
       return null;
     }
