@@ -138,6 +138,21 @@ function App() {
   const [locale, setLocale] = useState<Locale>("en");
   const editorRef = useRef<DocumentEditorApi | null>(null);
 
+  // Image dogfooding. The `/image` slash returns a durable http(s) URL (the
+  // only kind the schema stores). Pasted/dropped files are host-owned: we keep
+  // the bytes as object URLs behind opaque asset ids and resolve them at render.
+  const assetUrls = useRef(new Map<string, string>());
+
+  function requestImage() {
+    return { source: { type: "url" as const, url: new URL("/coal-badge.png", location.origin).href }, altText: "Coal badge" };
+  }
+
+  function uploadImage(file: File) {
+    const id = `asset-${crypto.randomUUID()}`;
+    assetUrls.current.set(id, URL.createObjectURL(file));
+    return { source: { type: "asset" as const, id }, altText: file.name };
+  }
+
   function insertPlaceholderAtCaret() {
     const api = editorRef.current;
     const selection = api?.selection;
@@ -187,6 +202,11 @@ function App() {
             commitIdleMs={1500}
             showHeadingNumbers
             locale={locale}
+            onRequestImage={requestImage}
+            onUploadImage={uploadImage}
+            resolveImageSource={(block) =>
+              block.source.type === "asset" ? assetUrls.current.get(block.source.id) : undefined
+            }
           />
         </div>
         {showJson && (
