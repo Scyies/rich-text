@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createImageBlock, createTableBlock, createTextBlock } from "../core/factories";
+import { createImageBlock, createImageGroupBlock, createTableBlock, createTextBlock } from "../core/factories";
 import type { Block, ImageBlock, TableBlock, TextBlock } from "../core/schema";
 import { setCaretOffset } from "./dom";
 import { BlockEditor } from "./BlockEditor";
@@ -62,5 +62,21 @@ describe("BlockEditor", () => {
     fireEvent.input(caption);
 
     expect((onChange.mock.lastCall![0] as ImageBlock).caption).toEqual([{ type: "text", text: "caption" }]);
+  });
+
+  it("resolves asset-backed image group entries through the image content resolver", () => {
+    const group = createImageGroupBlock({
+      images: [{ source: { type: "asset", id: "asset-1" }, altText: "Asset" }],
+    });
+    const { container } = render(
+      <BlockEditor
+        value={group as Block}
+        resolveImageContentSource={(entry) =>
+          entry.source.type === "asset" ? `https://cdn.example/${entry.source.id}.png` : undefined
+        }
+      />,
+    );
+
+    expect((container.querySelector(".wte-image__media") as HTMLImageElement).src).toBe("https://cdn.example/asset-1.png");
   });
 });

@@ -32,7 +32,8 @@ sections, numbering, serialization. Safe on the server.
 | `isBlockOfType` | `<T>(block: Block, type: T) => block is Extract<Block, { type: T }>` | Type-guard helper. |
 
 **Types:** `WealthyDocument`, `Block`, `BaseBlock`, `HeadingBlock`, `TextBlock`, `TableBlock`,
-`ImageBlock`, `ImageSource`, `ImageSize`, `ImageAlign`, `CustomBlock`, `TableColumn`, `TableRow`, `TableCell`, `InlineNode`, `TextNode`,
+`ImageBlock`, `ImageContent`, `ImageGroupBlock`, `ImageGroupEntry`, `ImageGroupColumnWidth`,
+`ImageSource`, `ImageSize`, `ImageAlign`, `CustomBlock`, `TableColumn`, `TableRow`, `TableCell`, `InlineNode`, `TextNode`,
 `InlineObjectNode`, `InlineMark`, `Align`, `HeadingLevel`, `TextVariant`, `BlockMeta`.
 
 ### Factories
@@ -45,12 +46,20 @@ sections, numbering, serialization. Safe on the server.
 | `createTextBlock` | `(input?: CreateTextBlockInput) => TextBlock` |
 | `createTableBlock` | `(input: CreateTableBlockInput) => TableBlock` |
 | `createImageBlock` | `(input: CreateImageBlockInput) => ImageBlock` |
+| `createImageGroupBlock` | `(input: CreateImageGroupBlockInput) => ImageGroupBlock` |
 | `createCustomBlock` | `(input: CreateCustomBlockInput) => CustomBlock` |
 | `generateBlockId` | `() => string` — a fresh UUID |
 
 `content` inputs accept either an `InlineNode[]` or a plain `string`. **Types:**
 `CreateBlockInput`, `CreateHeadingBlockInput`, `CreateTextBlockInput`, `CreateTableBlockInput`,
-`CreateImageBlockInput`, `CreateCustomBlockInput`.
+`CreateImageBlockInput`, `CreateImageGroupBlockInput`, `CreateImageGroupEntryInput`,
+`CreateCustomBlockInput`.
+
+### Image layout
+
+| Export | Signature |
+| --- | --- |
+| `resolveImageGroupColumnWidths` | `(entries) => number[]` — render/export widths normalized to 100% |
 
 ### Built-in separator block
 
@@ -246,6 +255,7 @@ The primary multi-block editor. Props (`DocumentEditorProps<TMeta>`):
 | `plugins?` | `EditorPlugin<TMeta>[]` |
 | `renderBlock?` | `(props: RenderBlockProps<TMeta>) => ReactNode` |
 | `resolveImageSource?` | `(block: ImageBlock<TMeta>) => string \| undefined` |
+| `resolveImageContentSource?` | `(entry: ImageGroupEntry<TMeta>) => string \| undefined` |
 | `onRequestImage?` | `(context: ImageRequestContext) => ImageInsertionResult<TMeta> \| Promise<ImageInsertionResult<TMeta>>` |
 | `onUploadImage?` | `(file: File) => ImageInsertionResult<TMeta> \| Promise<ImageInsertionResult<TMeta>>` |
 | `slashItems?` | `CustomSlashItem<TMeta>[]` |
@@ -264,7 +274,7 @@ payload, or `null` / `undefined` to cancel.
 
 Single-block editor. Props (`BlockEditorProps<TMeta>`): `{ value: Block, onChange?, onCommit?,
 commitIdleMs?, readOnly?, placeholder?, locale?, messages?, className?, ariaLabel?,
-resolveImageSource?, renderBlock? }`.
+resolveImageSource?, resolveImageContentSource?, renderBlock? }`.
 It has the same commit timing as `DocumentEditor`.
 
 #### `defaultInlineTagToNode`
@@ -314,9 +324,9 @@ import { exportHtml } from "wealthy-text-editor/export-html";
 ```
 
 `exportHtml(document, options?: HtmlExportOptions): string`. `HtmlExportOptions`:
-`{ renderCustomBlock?, renderInlineObject?, resolveImageSource?, headingNumbers? }`. Emits semantic HTML; nested
-lists are grouped by `indent`; tables emit a `<colgroup>` honoring `column.width`; URL images
-emit `<figure><img>`. See
+`{ renderCustomBlock?, renderInlineObject?, resolveImageSource?, resolveImageContentSource?, headingNumbers? }`.
+Emits semantic HTML; nested lists are grouped by `indent`; tables emit a `<colgroup>` honoring
+`column.width`; URL images emit `<figure><img>`; image groups emit a `.wte-image-group` row. See
 [Exporters](./exporters.md).
 
 ## export-markdown
@@ -327,7 +337,9 @@ import { exportMarkdown } from "wealthy-text-editor/export-markdown";
 
 `exportMarkdown(document, options?: MarkdownExportOptions): string`. Marks without a Markdown
 equivalent fall back to inline HTML; `color` is dropped. GFM tables always have a header row, so
-`showHeader: false` is not faithfully represented.
+`showHeader: false` is not faithfully represented. Options include
+`{ renderCustomBlock?, renderInlineObject?, resolveImageSource?, resolveImageContentSource?, headingNumbers? }`;
+image groups are emitted as stacked portable Markdown images.
 
 ## export-docx
 
@@ -339,10 +351,10 @@ const blob = await Packer.toBlob(exportDocx(document));
 ```
 
 `exportDocx(document, options?: DocxExportOptions): docx.Document`. `DocxExportOptions`:
-`{ renderCustomBlock?, renderImageBlock?, renderInlineObject? }`. Returns a `docx` `Document` you pack with
+`{ renderCustomBlock?, renderImageBlock?, renderImageContent?, renderInlineObject? }`. Returns a `docx` `Document` you pack with
 `Packer`. `docx` is an **optional peer dependency**. Marks are best-effort (`code` →
 monospace, `color` only when a 6-digit hex, `highlight` dropped); `TableColumn.width` is ignored
-in v1.0. See [Exporters](./exporters.md).
+in v1.0. Image groups export as borderless one-row tables. See [Exporters](./exporters.md).
 
 ## styles
 

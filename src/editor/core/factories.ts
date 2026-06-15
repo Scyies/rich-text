@@ -8,6 +8,9 @@ import {
   type HeadingLevel,
   type ImageAlign,
   type ImageBlock,
+  type ImageGroupBlock,
+  type ImageGroupColumnWidth,
+  type ImageGroupEntry,
   type ImageSize,
   type ImageSource,
   type InlineNode,
@@ -137,6 +140,54 @@ export function createImageBlock<TMeta extends BlockMeta = BlockMeta>(
   };
 }
 
+export interface CreateImageGroupEntryInput<TMeta extends BlockMeta = BlockMeta> {
+  id?: string;
+  source: ImageSource;
+  altText?: string;
+  caption?: InlineNode[] | string;
+  size?: ImageSize;
+  columnWidth?: ImageGroupColumnWidth;
+  meta?: TMeta;
+}
+
+export interface CreateImageGroupBlockInput<TMeta extends BlockMeta = BlockMeta> {
+  images: CreateImageGroupEntryInput<TMeta>[];
+  align?: ImageAlign;
+  gap?: number;
+  meta?: TMeta;
+}
+
+function createImageGroupEntry<TMeta extends BlockMeta>(
+  input: CreateImageGroupEntryInput<TMeta>,
+): ImageGroupEntry<TMeta> {
+  return {
+    id: input.id ?? generateBlockId(),
+    source: input.source,
+    ...(input.altText !== undefined ? { altText: input.altText } : {}),
+    ...(input.caption !== undefined ? { caption: toContent(input.caption) } : {}),
+    ...(input.size !== undefined ? { size: input.size } : {}),
+    ...(input.columnWidth !== undefined ? { columnWidth: input.columnWidth } : {}),
+    ...(input.meta !== undefined ? { meta: input.meta } : {}),
+  };
+}
+
+export function createImageGroupBlock<TMeta extends BlockMeta = BlockMeta>(
+  input: CreateImageGroupBlockInput<TMeta>,
+): ImageGroupBlock<TMeta> {
+  if (input.images.length === 0) {
+    throw new RangeError("createImageGroupBlock: images must contain at least one entry");
+  }
+
+  return {
+    id: generateBlockId(),
+    type: "imageGroup",
+    images: input.images.map((image) => createImageGroupEntry(image)),
+    ...(input.align !== undefined ? { align: input.align } : {}),
+    ...(input.gap !== undefined ? { gap: input.gap } : {}),
+    ...(input.meta !== undefined ? { meta: input.meta } : {}),
+  };
+}
+
 export interface CreateCustomBlockInput<TMeta extends BlockMeta = BlockMeta> {
   kind: string;
   data?: Record<string, unknown>;
@@ -160,6 +211,7 @@ export type CreateBlockInput<TMeta extends BlockMeta = BlockMeta> =
   | ({ type: "text" } & CreateTextBlockInput<TMeta>)
   | ({ type: "table" } & CreateTableBlockInput<TMeta>)
   | ({ type: "image" } & CreateImageBlockInput<TMeta>)
+  | ({ type: "imageGroup" } & CreateImageGroupBlockInput<TMeta>)
   | ({ type: "custom" } & CreateCustomBlockInput<TMeta>);
 
 export function createBlock<TMeta extends BlockMeta = BlockMeta>(input: CreateBlockInput<TMeta>): Block<TMeta> {
@@ -172,6 +224,8 @@ export function createBlock<TMeta extends BlockMeta = BlockMeta>(input: CreateBl
       return createTableBlock(input);
     case "image":
       return createImageBlock(input);
+    case "imageGroup":
+      return createImageGroupBlock(input);
     case "custom":
       return createCustomBlock(input);
   }

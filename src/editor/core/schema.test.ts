@@ -5,16 +5,19 @@ import {
   createEmptyDocument,
   createHeadingBlock,
   createImageBlock,
+  createImageGroupBlock,
   createTableBlock,
   createTextBlock,
   generateBlockId,
 } from "./factories";
+import { resolveImageGroupColumnWidths } from "./image-layout";
 import {
   SCHEMA_VERSION,
   blockSchema,
   documentSchema,
   inlineNodeSchema,
   imageBlockSchema,
+  imageGroupBlockSchema,
   safeValidateDocument,
   tableBlockSchema,
   validateDocument,
@@ -105,6 +108,55 @@ describe("block schemas", () => {
     ]) {
       expect(imageBlockSchema.safeParse({ ...image, source: { type: "url", url } }).success).toBe(false);
     }
+  });
+
+  it("accepts image group blocks and normalizes layout widths without mutating", () => {
+    const group = createImageGroupBlock({
+      images: [
+        {
+          source: { type: "url", url: "https://example.com/a.png" },
+          caption: "A",
+          columnWidth: { value: 30, unit: "percent" },
+        },
+        {
+          source: { type: "asset", id: "asset-1" },
+          altText: "B",
+        },
+      ],
+      align: "center",
+      gap: 12,
+    });
+    expect(imageGroupBlockSchema.parse(group)).toEqual(group);
+    expect(resolveImageGroupColumnWidths(group.images)).toEqual([30, 70]);
+  });
+
+  it("rejects image groups with duplicate entry ids or widths over 100", () => {
+    const group = createImageGroupBlock({
+      images: [
+        { source: { type: "url", url: "https://example.com/a.png" }, columnWidth: { value: 60, unit: "percent" } },
+        { source: { type: "url", url: "https://example.com/b.png" }, columnWidth: { value: 50, unit: "percent" } },
+      ],
+    });
+    expect(imageGroupBlockSchema.safeParse(group).success).toBe(false);
+
+    const duplicateId = generateBlockId();
+    const duplicate = createImageGroupBlock({
+      images: [
+        { id: duplicateId, source: { type: "url", url: "https://example.com/a.png" } },
+        { id: duplicateId, source: { type: "url", url: "https://example.com/b.png" } },
+      ],
+    });
+    expect(imageGroupBlockSchema.safeParse(duplicate).success).toBe(false);
+  });
+
+  it("scales fully explicit image group widths below 100 to fill the row", () => {
+    const group = createImageGroupBlock({
+      images: [
+        { source: { type: "url", url: "https://example.com/a.png" }, columnWidth: { value: 20, unit: "percent" } },
+        { source: { type: "url", url: "https://example.com/b.png" }, columnWidth: { value: 30, unit: "percent" } },
+      ],
+    });
+    expect(resolveImageGroupColumnWidths(group.images)).toEqual([40, 60]);
   });
 });
 
@@ -204,6 +256,12 @@ describe("document schema", () => {
       createTextBlock({ variant: "bullet", content: "A bullet", indent: 0 }),
       createTableBlock({ columnCount: 2, rowCount: 1 }),
       createImageBlock({ source: { type: "url", url: "https://example.com/image.png" } }),
+      createImageGroupBlock({
+        images: [
+          { source: { type: "url", url: "https://example.com/a.png" } },
+          { source: { type: "url", url: "https://example.com/b.png" } },
+        ],
+      }),
       createCustomBlock({ kind: "signature", data: { lawyerId: generateBlockId() } }),
     ]);
     expect(validateDocument(doc)).toEqual(doc);
@@ -285,6 +343,12 @@ describe("factories", () => {
     expect(createBlock({ type: "text", variant: "bullet" })).toMatchObject({ type: "text", variant: "bullet" });
     expect(createBlock({ type: "table", columnCount: 1, rowCount: 1 }).type).toBe("table");
     expect(createBlock({ type: "image", source: { type: "asset", id: "asset-1" } }).type).toBe("image");
+    expect(
+      createBlock({
+        type: "imageGroup",
+        images: [{ source: { type: "url", url: "https://example.com/a.png" } }],
+      }).type,
+    ).toBe("imageGroup");
     expect(createBlock({ type: "custom", kind: "x" })).toMatchObject({ type: "custom", kind: "x", data: {} });
   });
 

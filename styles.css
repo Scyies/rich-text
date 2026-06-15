@@ -307,6 +307,31 @@ h6.wte-inline-editor { font-size: 1.05em; }
   line-height: 1.4;
 }
 
+.wte-image-group {
+  margin: 0.35em 0;
+}
+
+.wte-image-group__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.wte-image-group__item {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.wte-image-group__item .wte-image__frame {
+  width: 100%;
+}
+
+.wte-image-group__item .wte-image__media {
+  width: 100%;
+}
+
 /* ---- slash menu ---- */
 
 .wte-slash-menu {

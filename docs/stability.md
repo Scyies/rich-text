@@ -57,6 +57,8 @@ Deliberate design choices you can depend on:
   inline HTML; `color` is dropped.
 - **Images:** the document stores image URLs or host asset ids, never binary data. Hosts resolve
   asset ids for rendering/export and own upload/storage, including pasted/dropped image files.
+- **Image groups:** side-by-side images are semantic `imageGroup` blocks in the model. DOCX
+  represents them with borderless tables as an exporter detail, not as nested editor tables.
 - **Two generics on `WealthyDocument`** (`<TBlockMeta, TDocMeta>`), both defaulted, so existing
   single-argument and zero-argument uses keep working.
 

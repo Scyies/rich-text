@@ -31,6 +31,8 @@ bags are passed through to your serializers untouched.
 Image blocks with `{ type: "url" }` export directly to HTML/Markdown. Image blocks with
 `{ type: "asset" }` are host-owned; pass `resolveImageSource` to HTML/Markdown exporters, or
 `renderImageBlock` to the docx exporter after resolving the asset bytes yourself.
+For asset-backed `imageGroup` entries, HTML/Markdown use `resolveImageContentSource`, and docx
+can use `renderImageContent` to return paragraph-safe content for each table cell.
 
 ## HTML
 
@@ -41,6 +43,7 @@ interface HtmlExportOptions {
   renderCustomBlock?: (block: CustomBlock) => string;
   renderInlineObject?: (node: InlineObjectNode) => string;
   resolveImageSource?: (block: ImageBlock) => string | undefined;
+  resolveImageContentSource?: (image: ImageGroupEntry) => string | undefined;
   headingNumbers?: boolean; // prefix headings with 1., 1.1, …
 }
 ```
@@ -49,7 +52,8 @@ Produces clean, semantic HTML: headings, paragraphs, nested lists grouped from t
 list by `indent`, and tables. Tables emit a `<colgroup>` that honors `column.width`
 (`percent`/`px`). Marks map to semantic tags; `color`/`highlight` emit
 `wte-color-*` / `wte-highlight-*` classes. Images emit `<figure class="wte-image"><img …>` and
-an optional `<figcaption>`.
+an optional `<figcaption>`. Image groups emit `<figure class="wte-image-group">` containing one
+row of child `.wte-image` figures with resolved column widths.
 
 ## Markdown
 
@@ -60,6 +64,7 @@ interface MarkdownExportOptions {
   renderCustomBlock?: (block: CustomBlock) => string;
   renderInlineObject?: (node: InlineObjectNode) => string;
   resolveImageSource?: (block: ImageBlock) => string | undefined;
+  resolveImageContentSource?: (image: ImageGroupEntry) => string | undefined;
   headingNumbers?: boolean;
 }
 ```
@@ -71,6 +76,8 @@ Standard CommonMark/GFM. Limitations to be aware of:
 - GFM tables **always** render a header row, so `showHeader: false` is not represented
   faithfully — the exporter uses the first row as the header.
 - Markdown has no standard caption syntax; image captions are emitted as a following paragraph.
+- Image groups are emitted as stacked portable Markdown images; side-by-side GFM tables are not
+  used because they lose captions and sizing.
 
 ## docx
 
@@ -93,6 +100,7 @@ const blob = await Packer.toBlob(docxDocument);     // browser
 interface DocxExportOptions {
   renderCustomBlock?: (block: CustomBlock) => FileChild | FileChild[];
   renderImageBlock?: (block: ImageBlock) => FileChild | FileChild[] | undefined;
+  renderImageContent?: (image: ImageContent) => Paragraph[] | undefined;
   renderInlineObject?: (node: InlineObjectNode) => string;
 }
 ```
@@ -108,6 +116,9 @@ Notes:
 - Image embedding is host-owned. Without `renderImageBlock`, the exporter emits a readable
   fallback paragraph; use `renderImageBlock` to return a `Paragraph` containing docx's
   `ImageRun` after resolving your asset bytes.
+- Image groups export as a one-row borderless `docx.Table`. Use `renderImageContent` for content
+  that can safely live inside each table cell. For single image blocks, `renderImageBlock` still
+  takes precedence over `renderImageContent`.
 
 ### Template-grade Word output
 

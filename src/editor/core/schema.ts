@@ -248,23 +248,88 @@ export type ImageSize = z.infer<typeof imageSizeSchema>;
 export const imageAlignSchema = z.enum(["left", "center", "right"]);
 export type ImageAlign = z.infer<typeof imageAlignSchema>;
 
-export const imageBlockSchema = z.object({
-  ...baseBlockShape,
-  type: z.literal("image"),
+export const imageContentSchema = z.object({
   source: imageSourceSchema,
   altText: z.string().optional(),
   caption: z.array(inlineNodeSchema).optional(),
   size: imageSizeSchema.optional(),
-  align: imageAlignSchema.optional(),
 });
 
-export interface ImageBlock<TMeta extends BlockMeta = BlockMeta> extends BaseBlock<TMeta> {
-  type: "image";
+export interface ImageContent {
   source: ImageSource;
   altText?: string | undefined;
   caption?: InlineNode[] | undefined;
   size?: ImageSize | undefined;
+}
+
+export const imageBlockSchema = imageContentSchema.extend({
+  ...baseBlockShape,
+  type: z.literal("image"),
+  align: imageAlignSchema.optional(),
+});
+
+export interface ImageBlock<TMeta extends BlockMeta = BlockMeta> extends BaseBlock<TMeta>, ImageContent {
+  type: "image";
   align?: ImageAlign | undefined;
+}
+
+export const imageGroupColumnWidthSchema = z.object({
+  value: z.number().positive(),
+  unit: z.literal("percent"),
+});
+export type ImageGroupColumnWidth = z.infer<typeof imageGroupColumnWidthSchema>;
+
+export const imageGroupEntrySchema = imageContentSchema.extend({
+  id: blockIdSchema,
+  columnWidth: imageGroupColumnWidthSchema.optional(),
+  meta: metaSchema.optional(),
+});
+
+export interface ImageGroupEntry<TMeta extends BlockMeta = BlockMeta> extends ImageContent {
+  id: string;
+  columnWidth?: ImageGroupColumnWidth | undefined;
+  meta?: TMeta | undefined;
+}
+
+export const imageGroupBlockSchema = z
+  .object({
+    ...baseBlockShape,
+    type: z.literal("imageGroup"),
+    images: z.array(imageGroupEntrySchema).min(1),
+    align: imageAlignSchema.optional(),
+    gap: z.number().nonnegative().optional(),
+  })
+  .check((ctx) => {
+    const group = ctx.value;
+    const entryIds = new Set<string>();
+    let explicitWidthSum = 0;
+    group.images.forEach((entry, index) => {
+      if (entryIds.has(entry.id)) {
+        ctx.issues.push({
+          code: "custom",
+          message: `Duplicate image group entry id: ${entry.id}`,
+          input: group,
+          path: ["images", index, "id"],
+        });
+      }
+      entryIds.add(entry.id);
+      explicitWidthSum += entry.columnWidth?.value ?? 0;
+    });
+    if (explicitWidthSum > 100) {
+      ctx.issues.push({
+        code: "custom",
+        message: "Image group columnWidth values must sum to 100 or less",
+        input: group,
+        path: ["images"],
+      });
+    }
+  });
+
+export interface ImageGroupBlock<TMeta extends BlockMeta = BlockMeta> extends BaseBlock<TMeta> {
+  type: "imageGroup";
+  images: ImageGroupEntry<TMeta>[];
+  align?: ImageAlign | undefined;
+  gap?: number | undefined;
 }
 
 /** Host/plugin-defined block (D5), e.g. Minuta's request_list or signature. */
@@ -286,6 +351,7 @@ export const blockSchema = z.discriminatedUnion("type", [
   textBlockSchema,
   tableBlockSchema,
   imageBlockSchema,
+  imageGroupBlockSchema,
   customBlockSchema,
 ]);
 
@@ -294,6 +360,7 @@ export type Block<TMeta extends BlockMeta = BlockMeta> =
   | TextBlock<TMeta>
   | TableBlock<TMeta>
   | ImageBlock<TMeta>
+  | ImageGroupBlock<TMeta>
   | CustomBlock<TMeta>;
 
 // ---------------------------------------------------------------------------

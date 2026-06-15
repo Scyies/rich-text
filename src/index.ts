@@ -16,6 +16,10 @@ export type {
   HeadingLevel,
   ImageAlign,
   ImageBlock,
+  ImageContent,
+  ImageGroupBlock,
+  ImageGroupColumnWidth,
+  ImageGroupEntry,
   ImageSize,
   ImageSource,
   InlineMark,
@@ -38,6 +42,7 @@ export {
   createEmptyDocument,
   createHeadingBlock,
   createImageBlock,
+  createImageGroupBlock,
   createTableBlock,
   createTextBlock,
   generateBlockId,
@@ -48,9 +53,14 @@ export type {
   CreateCustomBlockInput,
   CreateHeadingBlockInput,
   CreateImageBlockInput,
+  CreateImageGroupBlockInput,
+  CreateImageGroupEntryInput,
   CreateTableBlockInput,
   CreateTextBlockInput,
 } from "./editor/core/factories";
+
+// Image layout helpers
+export { resolveImageGroupColumnWidths } from "./editor/core/image-layout";
 
 // Built-in custom block helpers
 export { createSeparatorBlock, SEPARATOR_BLOCK_KIND } from "./editor/plugins/separator-core";

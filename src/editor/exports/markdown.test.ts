@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createCustomBlock, createHeadingBlock, createImageBlock, createTableBlock, createTextBlock } from "../core/factories";
+import { createCustomBlock, createHeadingBlock, createImageBlock, createImageGroupBlock, createTableBlock, createTextBlock } from "../core/factories";
 import { createSeparatorBlock } from "../plugins/separator-core";
 import { SCHEMA_VERSION, type Block, type WealthyDocument } from "../core/schema";
 import { exportMarkdown } from "./markdown";
@@ -72,6 +72,21 @@ describe("exportMarkdown", () => {
     expect(exportMarkdown(docWith([image]), { resolveImageSource: () => "https://cdn.example/asset-1.png" })).toBe(
       "![](https://cdn.example/asset-1.png)",
     );
+  });
+
+  it("renders image groups as portable stacked images", () => {
+    const group = createImageGroupBlock({
+      images: [
+        { source: { type: "url", url: "https://example.com/a photo.png" }, altText: "A", caption: "Cap A" },
+        { source: { type: "asset", id: "asset-1" }, altText: "B" },
+      ],
+    });
+    expect(
+      exportMarkdown(docWith([group]), {
+        resolveImageContentSource: (image) =>
+          image.source.type === "asset" ? "https://cdn.example/asset-1.png" : undefined,
+      }),
+    ).toBe("![A](https://example.com/a%20photo.png)\n\nCap A\n\n![B](https://cdn.example/asset-1.png)");
   });
 
   it("uses per-kind serializers and falls back otherwise", () => {

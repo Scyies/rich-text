@@ -1,7 +1,7 @@
 import { Packer, Paragraph, TextRun } from "docx";
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
-import { createCustomBlock, createHeadingBlock, createImageBlock, createTableBlock, createTextBlock } from "../core/factories";
+import { createCustomBlock, createHeadingBlock, createImageBlock, createImageGroupBlock, createTableBlock, createTextBlock } from "../core/factories";
 import { createSeparatorBlock } from "../plugins/separator-core";
 import { SCHEMA_VERSION, type Block, type WealthyDocument } from "../core/schema";
 import { exportDocx, type DocxExportOptions } from "./docx";
@@ -87,6 +87,44 @@ describe("exportDocx", () => {
     });
     expect(xml).toContain("IMAGE:asset-1");
     expect(xml).not.toContain("[image:");
+  });
+
+  it("uses paragraph-safe image content rendering for single images and image groups", async () => {
+    const image = createImageBlock({ source: { type: "asset", id: "single" }, altText: "Single" });
+    const group = createImageGroupBlock({
+      images: [
+        { source: { type: "asset", id: "left" }, columnWidth: { value: 25, unit: "percent" } },
+        { source: { type: "asset", id: "right" } },
+      ],
+    });
+    const { xml } = await documentXml(docWith([image, group]), {
+      renderImageContent: (content) => [
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `CONTENT:${content.source.type === "asset" ? content.source.id : content.source.url}`,
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(xml).toContain("CONTENT:single");
+    expect(xml).toContain("CONTENT:left");
+    expect(xml).toContain("CONTENT:right");
+    expect(xml).toContain("<w:tbl>");
+    expect(xml).toContain('w:type="pct"');
+    expect(xml).toContain('w:val="none"');
+    expect(xml).not.toContain("[image:");
+  });
+
+  it("keeps renderImageBlock precedence for single image blocks", async () => {
+    const doc = docWith([createImageBlock({ source: { type: "asset", id: "asset-1" } })]);
+    const { xml } = await documentXml(doc, {
+      renderImageBlock: () => new Paragraph({ children: [new TextRun({ text: "BLOCK_RENDERER" })] }),
+      renderImageContent: () => [new Paragraph({ children: [new TextRun({ text: "CONTENT_RENDERER" })] })],
+    });
+    expect(xml).toContain("BLOCK_RENDERER");
+    expect(xml).not.toContain("CONTENT_RENDERER");
   });
 
   it("falls back for unknown custom blocks and inline objects", async () => {

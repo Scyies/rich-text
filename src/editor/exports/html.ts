@@ -1,10 +1,14 @@
 import { getHeadingNumbers, formatHeadingNumber } from "../core/numbering";
+import { resolveImageGroupColumnWidths } from "../core/image-layout";
 import { SEPARATOR_BLOCK_KIND } from "../plugins/separator-core";
 import type {
   Block,
   BlockMeta,
   CustomBlock,
   ImageBlock,
+  ImageContent,
+  ImageGroupBlock,
+  ImageGroupEntry,
   InlineMark,
   InlineNode,
   InlineObjectNode,
@@ -30,6 +34,8 @@ export interface HtmlExportOptions {
   renderInlineObject?: ((node: InlineObjectNode) => string) | undefined;
   /** Resolve host-owned image assets to URLs. URL images do not call this. */
   resolveImageSource?: ((block: ImageBlock) => string | undefined) | undefined;
+  /** Resolve host-owned image group entries to URLs. URL entries do not call this. */
+  resolveImageContentSource?: ((image: ImageGroupEntry) => string | undefined) | undefined;
   /** Prefix headings with computed hierarchical numbers (1., 1.1…). */
   headingNumbers?: boolean | undefined;
 }
@@ -103,22 +109,34 @@ function renderInline(content: InlineNode[], options: HtmlExportOptions): string
   return html;
 }
 
-function alignStyle(align: string | undefined): string {
-  return align !== undefined ? ` style="text-align:${align}"` : "";
+function styleAttribute(declarations: Array<string | null | undefined>): string {
+  const style = declarations.filter((declaration): declaration is string => declaration !== null && declaration !== undefined);
+  return style.length > 0 ? ` style="${style.join(";")}"` : "";
 }
 
-function imageUrl(block: ImageBlock, options: HtmlExportOptions): string | undefined {
+function alignStyle(align: string | undefined): string {
+  return styleAttribute([align !== undefined ? `text-align:${align}` : null]);
+}
+
+function imageBlockUrl(block: ImageBlock, options: HtmlExportOptions): string | undefined {
   return block.source.type === "url" ? block.source.url : options.resolveImageSource?.(block);
 }
 
-function imageSizeStyle(block: ImageBlock): string {
-  if (block.size === undefined) {
+function imageGroupEntryUrl(entry: ImageGroupEntry, options: HtmlExportOptions): string | undefined {
+  return entry.source.type === "url" ? entry.source.url : options.resolveImageContentSource?.(entry);
+}
+
+function imageSizeStyle(image: ImageContent, honorPercentSize = true): string {
+  if (image.size === undefined) {
     return "";
   }
-  const unit = block.size.unit === "percent" ? "%" : "px";
+  if (image.size.unit === "percent" && !honorPercentSize) {
+    return "";
+  }
+  const unit = image.size.unit === "percent" ? "%" : "px";
   const declarations = [
-    block.size.width !== undefined ? `width:${block.size.width}${unit}` : null,
-    block.size.height !== undefined ? `height:${block.size.height}${unit}` : null,
+    image.size.width !== undefined ? `width:${image.size.width}${unit}` : null,
+    image.size.height !== undefined ? `height:${image.size.height}${unit}` : null,
   ].filter(Boolean);
   return declarations.length > 0 ? ` style="${declarations.join(";")}"` : "";
 }
@@ -203,16 +221,36 @@ function renderTable(block: TableBlock, options: HtmlExportOptions): string {
   return html;
 }
 
-function renderImage(block: ImageBlock, options: HtmlExportOptions): string {
-  const url = imageUrl(block, options);
+function renderImageContent(
+  image: ImageContent,
+  url: string | undefined,
+  options: HtmlExportOptions,
+  honorPercentSize = true,
+): string {
   if (url === undefined || url.length === 0) {
     return "<!-- image block: unresolved source -->";
   }
   const caption =
-    block.caption !== undefined
-      ? `<figcaption>${renderInline(block.caption, options)}</figcaption>`
+    image.caption !== undefined
+      ? `<figcaption>${renderInline(image.caption, options)}</figcaption>`
       : "";
-  return `<figure class="wte-image"${alignStyle(block.align)}><img src="${escapeAttribute(url)}" alt="${escapeAttribute(block.altText ?? "")}"${imageSizeStyle(block)}>${caption}</figure>`;
+  return `<img src="${escapeAttribute(url)}" alt="${escapeAttribute(image.altText ?? "")}"${imageSizeStyle(image, honorPercentSize)}>${caption}`;
+}
+
+function renderImage(block: ImageBlock, options: HtmlExportOptions): string {
+  return `<figure class="wte-image"${alignStyle(block.align)}>${renderImageContent(block, imageBlockUrl(block, options), options)}</figure>`;
+}
+
+function renderImageGroup(block: ImageGroupBlock, options: HtmlExportOptions): string {
+  const widths = resolveImageGroupColumnWidths(block.images);
+  const rowStyle = styleAttribute([block.gap !== undefined ? `gap:${block.gap}px` : null]);
+  const items = block.images
+    .map((entry, index) => {
+      const width = widths[index] ?? 100 / block.images.length;
+      return `<figure class="wte-image" style="width:${width}%">${renderImageContent(entry, imageGroupEntryUrl(entry, options), options, false)}</figure>`;
+    })
+    .join("");
+  return `<figure class="wte-image-group"${alignStyle(block.align)}><div class="wte-image-group__row"${rowStyle}>${items}</div></figure>`;
 }
 
 export function exportHtml(document: WealthyDocument<BlockMeta>, options: HtmlExportOptions = {}): string {
@@ -249,6 +287,9 @@ export function exportHtml(document: WealthyDocument<BlockMeta>, options: HtmlEx
         break;
       case "image":
         parts.push(renderImage(block, options));
+        break;
+      case "imageGroup":
+        parts.push(renderImageGroup(block, options));
         break;
       case "custom":
         parts.push(

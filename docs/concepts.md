@@ -35,6 +35,7 @@ the data: no `children`, no `parentId`. Containment (a heading and the blocks un
 | `text` | `{ id, type, variant, indent?, align?, content, meta? }` | `variant`: `paragraph` \| `bullet` \| `numbered`. |
 | `table` | `{ id, type, columns, rows, showHeader, meta? }` | Cells hold text blocks only (below). |
 | `image` | `{ id, type, source, altText?, caption?, size?, align?, meta? }` | Binary/upload storage is host-owned. |
+| `imageGroup` | `{ id, type, images, align?, gap?, meta? }` | Side-by-side image row; docx exports as a borderless table. |
 | `custom` | `{ id, type, kind, data, meta? }` | Host/plugin-defined; `data` is opaque. |
 
 - `id` is a UUID, stable for the block's lifetime and never reused.
@@ -68,12 +69,36 @@ interface ImageBlock {
   size?: { width?: number; height?: number; unit: "px" | "percent" };
   align?: "left" | "center" | "right";
 }
+
+interface ImageGroupBlock {
+  type: "imageGroup";
+  images: ImageGroupEntry[];
+  align?: "left" | "center" | "right";
+  gap?: number;
+}
+
+interface ImageGroupEntry {
+  id: string;
+  source: ImageSource;
+  altText?: string;
+  caption?: InlineNode[];
+  size?: { width?: number; height?: number; unit: "px" | "percent" };
+  columnWidth?: { value: number; unit: "percent" };
+  meta?: BlockMeta;
+}
 ```
 
 The core stores only a URL or a host asset id. It does **not** store `File`, `Blob`,
 object URLs, or base64 image data. Hosts that use `{ type: "asset" }` provide a resolver to
 the React components and exporters. Clipboard/drop image files go through host upload callbacks;
 URL-backed pasted/dropped images become ordinary image blocks.
+
+`imageGroup` uses the same image content shape for each entry, but `columnWidth` controls row
+layout. Percent `size` values are ignored inside a group; pixel `size` values are still honored.
+Missing `columnWidth` values split the remaining width, and fully explicit rows below 100% are
+normalized to fill the row at render/export time without mutating the model.
+The optional default stylesheet applies an 8px visual gap when `gap` is unset; set `gap: 0` to
+explicitly remove that spacing in the built-in UI/HTML output.
 
 ## Inline content
 

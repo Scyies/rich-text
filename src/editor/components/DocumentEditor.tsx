@@ -25,6 +25,8 @@ import type {
   BlockMeta,
   CustomBlock,
   ImageBlock,
+  ImageGroupBlock,
+  ImageGroupEntry,
   InlineMark,
   InlineNode,
   TableBlock,
@@ -46,7 +48,7 @@ import { parseClipboardToBlocks, parseHtmlToBlocks } from "./paste";
 import { resolveMessages, MessagesProvider, useMessages, type EditorMessages, type Locale } from "../i18n";
 import { ChipPopover } from "./ChipPopover";
 import { FloatingToolbar, type FloatingToolbarExtraItem } from "./FloatingToolbar";
-import { ImageView } from "./ImageView";
+import { ImageGroupView, ImageView } from "./ImageView";
 import { InlineEditor, type InlineEditorHandle } from "./InlineEditor";
 import { buildCoreSlashItems, filterSlashItems, SlashMenu, type SlashMenuItem } from "./SlashMenu";
 import { TableView } from "./TableView";
@@ -116,6 +118,8 @@ export interface DocumentEditorProps<TMeta extends BlockMeta = BlockMeta> {
   renderBlock?: ((props: RenderBlockProps<TMeta>) => ReactNode) | undefined;
   /** Resolve host-owned image assets to renderable URLs. URL images do not call this. */
   resolveImageSource?: ((block: ImageBlock<TMeta>) => string | undefined) | undefined;
+  /** Resolve host-owned image group entries to renderable URLs. URL entries do not call this. */
+  resolveImageContentSource?: ((entry: ImageGroupEntry<TMeta>) => string | undefined) | undefined;
   /**
    * Called by the built-in `/image` slash item. The host should return a URL
    * or asset-backed image payload, or null to cancel.
@@ -230,6 +234,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     showHeadingNumbers = false,
     renderBlock,
     resolveImageSource,
+    resolveImageContentSource,
     onRequestImage,
     onUploadImage,
   } = props;
@@ -1226,6 +1231,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
           }
           renderBlock={renderBlock as DocumentEditorProps["renderBlock"]}
           resolveImageSource={resolveImageSource as DocumentEditorProps["resolveImageSource"]}
+          resolveImageContentSource={resolveImageContentSource as DocumentEditorProps["resolveImageContentSource"]}
           commandsUpdateBlock={commands.updateBlock}
         />
       ))}
@@ -1320,6 +1326,7 @@ interface BlockRowProps {
   blockRenderers: ReadonlyMap<string, (props: RenderBlockProps) => ReactNode>;
   renderBlock: DocumentEditorProps["renderBlock"];
   resolveImageSource: DocumentEditorProps["resolveImageSource"];
+  resolveImageContentSource: DocumentEditorProps["resolveImageContentSource"];
   commandsUpdateBlock(blockId: string, patch: Record<string, unknown>): void;
 }
 
@@ -1351,6 +1358,7 @@ function BlockRow({
   blockRenderers,
   renderBlock,
   resolveImageSource,
+  resolveImageContentSource,
   commandsUpdateBlock,
 }: BlockRowProps) {
   const messages = useMessages();
@@ -1508,6 +1516,15 @@ function BlockRow({
             onCaptionBackspaceAtStart={() => onBackspaceAtStart(block.id)}
             onCaptionArrowUp={() => onMoveFocus(block.id, -1)}
             onCaptionArrowDown={() => onMoveFocus(block.id, 1)}
+          />
+        )}
+
+        {block.type === "imageGroup" && (
+          <ImageGroupView
+            block={block as ImageGroupBlock}
+            readOnly={readOnly}
+            resolveImageContentSource={resolveImageContentSource as ((entry: ImageGroupEntry) => string | undefined) | undefined}
+            onImageGroupChange={(patch) => commandsUpdateBlock(block.id, patch)}
           />
         )}
 

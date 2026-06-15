@@ -14,6 +14,7 @@ import {
   type FileChild,
   type IRunOptions,
 } from "docx";
+import { resolveImageGroupColumnWidths } from "../core/image-layout";
 import { SEPARATOR_BLOCK_KIND } from "../plugins/separator-core";
 import type {
   Align,
@@ -21,6 +22,8 @@ import type {
   BlockMeta,
   CustomBlock,
   ImageBlock,
+  ImageContent,
+  ImageGroupBlock,
   HeadingLevel as WteHeadingLevel,
   InlineMark,
   InlineNode,
@@ -53,6 +56,8 @@ export interface DocxExportOptions {
    * containing docx's ImageRun after resolving their own asset bytes.
    */
   renderImageBlock?: ((block: ImageBlock) => FileChild | FileChild[] | undefined) | undefined;
+  /** Serialize image content into paragraph children safe for table cells, e.g. imageGroup entries. */
+  renderImageContent?: ((image: ImageContent) => Paragraph[] | undefined) | undefined;
   /** Serialize an inline object to its run text. Default: the label/kind. */
   renderInlineObject?: ((node: InlineObjectNode) => string) | undefined;
 }
@@ -154,6 +159,15 @@ function tableToDocx(block: TableBlock, options: DocxExportOptions): Table {
   return new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE } });
 }
 
+const NO_BORDERS = {
+  top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+  right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+  bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+  left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+  insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+  insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+};
+
 function separatorToDocx(): Paragraph {
   return new Paragraph({
     border: {
@@ -168,8 +182,37 @@ function separatorToDocx(): Paragraph {
   });
 }
 
-function imageSourceLabel(block: ImageBlock): string {
-  return block.source.type === "url" ? block.source.url : block.source.id;
+function imageSourceLabel(image: ImageContent): string {
+  return image.source.type === "url" ? image.source.url : image.source.id;
+}
+
+function imageContentToParagraphs(
+  image: ImageContent,
+  options: DocxExportOptions,
+  align?: Align | undefined,
+): Paragraph[] {
+  const rendered = options.renderImageContent?.(image);
+  if (rendered !== undefined) {
+    return rendered;
+  }
+
+  const docxAlign = alignment(align);
+  const label = image.altText !== undefined && image.altText.length > 0 ? image.altText : imageSourceLabel(image);
+  const children: Paragraph[] = [
+    new Paragraph({
+      children: [new TextRun({ text: `[image: ${label}]`, italics: true })],
+      ...(docxAlign !== undefined ? { alignment: docxAlign } : {}),
+    }),
+  ];
+  if (image.caption !== undefined && image.caption.length > 0) {
+    children.push(
+      new Paragraph({
+        children: inlineToRuns(image.caption, options),
+        ...(docxAlign !== undefined ? { alignment: docxAlign } : {}),
+      }),
+    );
+  }
+  return children;
 }
 
 function imageToDocx(block: ImageBlock, options: DocxExportOptions): FileChild | FileChild[] {
@@ -178,23 +221,27 @@ function imageToDocx(block: ImageBlock, options: DocxExportOptions): FileChild |
     return rendered;
   }
 
-  const align = alignment(block.align);
-  const label = block.altText !== undefined && block.altText.length > 0 ? block.altText : imageSourceLabel(block);
-  const children: FileChild[] = [
-    new Paragraph({
-      children: [new TextRun({ text: `[image: ${label}]`, italics: true })],
-      ...(align !== undefined ? { alignment: align } : {}),
-    }),
-  ];
-  if (block.caption !== undefined && block.caption.length > 0) {
-    children.push(
-      new Paragraph({
-        children: inlineToRuns(block.caption, options),
-        ...(align !== undefined ? { alignment: align } : {}),
+  return imageContentToParagraphs(block, options, block.align);
+}
+
+function imageGroupToDocx(block: ImageGroupBlock, options: DocxExportOptions): Table {
+  const widths = resolveImageGroupColumnWidths(block.images);
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: NO_BORDERS,
+    rows: [
+      new TableRow({
+        children: block.images.map((image, index) => {
+          const width = widths[index] ?? 100 / block.images.length;
+          return new TableCell({
+            width: { size: width, type: WidthType.PERCENTAGE },
+            borders: NO_BORDERS,
+            children: imageContentToParagraphs(image, options, block.align),
+          });
+        }),
       }),
-    );
-  }
-  return children;
+    ],
+  });
 }
 
 function blockToDocx(block: Block, options: DocxExportOptions): FileChild | FileChild[] {
@@ -213,6 +260,8 @@ function blockToDocx(block: Block, options: DocxExportOptions): FileChild | File
       return tableToDocx(block, options);
     case "image":
       return imageToDocx(block, options);
+    case "imageGroup":
+      return imageGroupToDocx(block, options);
     case "custom":
       if (options.renderCustomBlock === undefined && block.kind === SEPARATOR_BLOCK_KIND) {
         return separatorToDocx();

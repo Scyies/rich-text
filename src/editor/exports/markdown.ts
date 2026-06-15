@@ -5,6 +5,9 @@ import type {
   BlockMeta,
   CustomBlock,
   ImageBlock,
+  ImageContent,
+  ImageGroupBlock,
+  ImageGroupEntry,
   InlineMark,
   InlineNode,
   InlineObjectNode,
@@ -33,6 +36,8 @@ export interface MarkdownExportOptions {
   renderInlineObject?: ((node: InlineObjectNode) => string) | undefined;
   /** Resolve host-owned image assets to URLs. URL images do not call this. */
   resolveImageSource?: ((block: ImageBlock) => string | undefined) | undefined;
+  /** Resolve host-owned image group entries to URLs. URL entries do not call this. */
+  resolveImageContentSource?: ((image: ImageGroupEntry) => string | undefined) | undefined;
   /** Prefix headings with computed hierarchical numbers (1., 1.1…). */
   headingNumbers?: boolean | undefined;
 }
@@ -99,8 +104,12 @@ function renderInline(content: InlineNode[], options: MarkdownExportOptions): st
   return markdown;
 }
 
-function imageUrl(block: ImageBlock, options: MarkdownExportOptions): string | undefined {
+function imageBlockUrl(block: ImageBlock, options: MarkdownExportOptions): string | undefined {
   return block.source.type === "url" ? block.source.url : options.resolveImageSource?.(block);
+}
+
+function imageGroupEntryUrl(entry: ImageGroupEntry, options: MarkdownExportOptions): string | undefined {
+  return entry.source.type === "url" ? entry.source.url : options.resolveImageContentSource?.(entry);
 }
 
 function escapeMarkdownUrl(url: string): string {
@@ -159,15 +168,28 @@ function renderTable(block: TableBlock, options: MarkdownExportOptions): string 
   return lines.join("\n");
 }
 
-function renderImage(block: ImageBlock, options: MarkdownExportOptions): string {
-  const url = imageUrl(block, options);
+function renderImageContent(
+  image: ImageContent,
+  url: string | undefined,
+  options: MarkdownExportOptions,
+): string {
   if (url === undefined || url.length === 0) {
     return "<!-- image block: unresolved source -->";
   }
-  const image = `![${escapeMarkdown(block.altText ?? "")}](${escapeMarkdownUrl(url)})`;
-  return block.caption !== undefined
-    ? `${image}\n\n${renderInline(block.caption, options)}`
-    : image;
+  const markdown = `![${escapeMarkdown(image.altText ?? "")}](${escapeMarkdownUrl(url)})`;
+  return image.caption !== undefined
+    ? `${markdown}\n\n${renderInline(image.caption, options)}`
+    : markdown;
+}
+
+function renderImage(block: ImageBlock, options: MarkdownExportOptions): string {
+  return renderImageContent(block, imageBlockUrl(block, options), options);
+}
+
+function renderImageGroup(block: ImageGroupBlock, options: MarkdownExportOptions): string {
+  return block.images
+    .map((entry) => renderImageContent(entry, imageGroupEntryUrl(entry, options), options))
+    .join("\n\n");
 }
 
 export function exportMarkdown(
@@ -208,6 +230,9 @@ export function exportMarkdown(
         break;
       case "image":
         parts.push(renderImage(block, options));
+        break;
+      case "imageGroup":
+        parts.push(renderImageGroup(block, options));
         break;
       case "custom":
         parts.push(

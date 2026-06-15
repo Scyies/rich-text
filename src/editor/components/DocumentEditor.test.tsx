@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createHeadingBlock, createImageBlock, createTableBlock, createTextBlock } from "../core/factories";
+import { createHeadingBlock, createImageBlock, createImageGroupBlock, createTableBlock, createTextBlock } from "../core/factories";
 import { createSeparatorBlock } from "../plugins/separator-core";
 import { separatorPlugin } from "../plugins/separator";
 import { SCHEMA_VERSION, type Block, type ImageBlock, type TextBlock, type WealthyDocument } from "../core/schema";
@@ -401,6 +401,25 @@ describe("DocumentEditor", () => {
       />,
     );
     expect((container.querySelector(".wte-image__media") as HTMLImageElement).src).toBe("https://cdn.example/asset-1.png");
+  });
+
+  it("resolves asset-backed image group entries through the image content resolver", () => {
+    const group = createImageGroupBlock({
+      images: [{ source: { type: "asset", id: "asset-1" }, altText: "Asset" }],
+    });
+    const resolveImageSource = vi.fn();
+    const { container } = render(
+      <DocumentEditor
+        value={docWith([group])}
+        resolveImageSource={resolveImageSource}
+        resolveImageContentSource={(entry) =>
+          entry.source.type === "asset" ? `https://cdn.example/${entry.source.id}.png` : undefined
+        }
+      />,
+    );
+
+    expect((container.querySelector(".wte-image__media") as HTMLImageElement).src).toBe("https://cdn.example/asset-1.png");
+    expect(resolveImageSource).not.toHaveBeenCalled();
   });
 
   it("Backspace at the start of an empty caption deletes the image", () => {

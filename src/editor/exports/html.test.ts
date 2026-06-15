@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createCustomBlock, createHeadingBlock, createImageBlock, createTableBlock, createTextBlock } from "../core/factories";
+import { createCustomBlock, createHeadingBlock, createImageBlock, createImageGroupBlock, createTableBlock, createTextBlock } from "../core/factories";
 import { createSeparatorBlock } from "../plugins/separator-core";
 import { SCHEMA_VERSION, type Block, type WealthyDocument } from "../core/schema";
 import { exportHtml } from "./html";
@@ -104,6 +104,35 @@ describe("exportHtml", () => {
     const image = createImageBlock({ source: { type: "asset", id: "asset-1" } });
     expect(exportHtml(docWith([image]), { resolveImageSource: () => "https://cdn.example/asset-1.png" })).toBe(
       '<figure class="wte-image"><img src="https://cdn.example/asset-1.png" alt=""></figure>',
+    );
+  });
+
+  it("renders image groups with resolved column widths and stacked figures", () => {
+    const group = createImageGroupBlock({
+      align: "center",
+      gap: 10,
+      images: [
+        {
+          source: { type: "url", url: "https://example.com/a.png" },
+          altText: "A",
+          caption: "Cap A",
+          columnWidth: { value: 30, unit: "percent" },
+          size: { width: 50, unit: "percent" },
+        },
+        {
+          source: { type: "asset", id: "asset-1" },
+          altText: "B",
+          size: { width: 120, unit: "px" },
+        },
+      ],
+    });
+    expect(
+      exportHtml(docWith([group]), {
+        resolveImageContentSource: (image) =>
+          image.source.type === "asset" ? "https://cdn.example/asset-1.png" : undefined,
+      }),
+    ).toBe(
+      '<figure class="wte-image-group" style="text-align:center"><div class="wte-image-group__row" style="gap:10px"><figure class="wte-image" style="width:30%"><img src="https://example.com/a.png" alt="A"><figcaption>Cap A</figcaption></figure><figure class="wte-image" style="width:70%"><img src="https://cdn.example/asset-1.png" alt="B" style="width:120px"></figure></div></figure>',
     );
   });
 
