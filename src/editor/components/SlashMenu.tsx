@@ -30,11 +30,15 @@ const CORE_SLASH_ITEM_SPECS: Array<{
   { id: "bullet", label: (m) => m.slashBulletedList, hint: "•", keywords: ["ul", "bullet", "lista"] },
   { id: "numbered", label: (m) => m.slashNumberedList, hint: "1.", keywords: ["ol", "ordered", "lista"] },
   { id: "table", label: (m) => m.slashTable, hint: "⊞", keywords: ["table", "tabela", "grid"] },
+  { id: "image", label: (m) => m.slashImage, hint: "img", keywords: ["img", "image", "picture", "photo", "imagem"] },
 ];
 
 /** Builds the core block-type slash items with localized labels. */
-export function buildCoreSlashItems(messages: EditorMessages): SlashMenuItem[] {
-  return CORE_SLASH_ITEM_SPECS.map((spec) => ({
+export function buildCoreSlashItems(
+  messages: EditorMessages,
+  options: { includeImage?: boolean | undefined } = {},
+): SlashMenuItem[] {
+  return CORE_SLASH_ITEM_SPECS.filter((spec) => options.includeImage === true || spec.id !== "image").map((spec) => ({
     id: spec.id,
     label: spec.label(messages),
     hint: spec.hint,

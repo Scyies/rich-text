@@ -55,6 +55,8 @@ Deliberate design choices you can depend on:
 - **Markdown:** GFM tables always have a header row, so `showHeader: false` is not represented
   faithfully (the first row becomes the header). Marks without a Markdown equivalent fall back to
   inline HTML; `color` is dropped.
+- **Images:** the document stores image URLs or host asset ids, never binary data. Hosts resolve
+  asset ids for rendering/export and own upload/storage, including pasted/dropped image files.
 - **Two generics on `WealthyDocument`** (`<TBlockMeta, TDocMeta>`), both defaulted, so existing
   single-argument and zero-argument uses keep working.
 

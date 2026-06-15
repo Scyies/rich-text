@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createHeadingBlock, createTableBlock, createTextBlock } from "../core/factories";
+import { createHeadingBlock, createImageBlock, createTableBlock, createTextBlock } from "../core/factories";
 import { createSeparatorBlock } from "../plugins/separator-core";
 import { separatorPlugin } from "../plugins/separator";
-import { SCHEMA_VERSION, type Block, type TextBlock, type WealthyDocument } from "../core/schema";
+import { SCHEMA_VERSION, type Block, type ImageBlock, type TextBlock, type WealthyDocument } from "../core/schema";
 import { setCaretOffset } from "./dom";
 import { DocumentEditor } from "./DocumentEditor";
 
@@ -367,6 +368,112 @@ describe("DocumentEditor", () => {
     expect(cells).toEqual(["first column", "second column"]);
   });
 
+  it("renders image blocks and edits captions", () => {
+    const image = createImageBlock({
+      source: { type: "url", url: "https://example.com/photo.png" },
+      altText: "Photo",
+      caption: "Initial",
+      size: { width: 320, unit: "px" },
+      align: "center",
+    });
+    const onChange = vi.fn();
+    const { container } = render(<DocumentEditor value={docWith([image])} onChange={onChange} />);
+
+    const img = container.querySelector(".wte-image__media") as HTMLImageElement;
+    expect(img.src).toBe("https://example.com/photo.png");
+    expect(img.alt).toBe("Photo");
+    expect(img.style.width).toBe("320px");
+
+    const caption = container.querySelector("figcaption.wte-inline-editor") as HTMLElement;
+    caption.textContent = "Updated";
+    fireEvent.input(caption);
+
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect((latest.blocks[0] as ImageBlock).caption).toEqual([{ type: "text", text: "Updated" }]);
+  });
+
+  it("resolves asset-backed image blocks through the host resolver", () => {
+    const image = createImageBlock({ source: { type: "asset", id: "asset-1" }, altText: "Asset" });
+    const { container } = render(
+      <DocumentEditor
+        value={docWith([image])}
+        resolveImageSource={(block) => (block.source.type === "asset" ? `https://cdn.example/${block.source.id}.png` : undefined)}
+      />,
+    );
+    expect((container.querySelector(".wte-image__media") as HTMLImageElement).src).toBe("https://cdn.example/asset-1.png");
+  });
+
+  it("Backspace at the start of an empty caption deletes the image", () => {
+    const para = createTextBlock({ content: "before" });
+    const image = createImageBlock({ source: { type: "url", url: "https://example.com/a.png" } });
+    const onChange = vi.fn();
+    render(<DocumentEditor value={docWith([para, image])} onChange={onChange} />);
+
+    const caption = getBlockElement(image.id);
+    caption.focus();
+    setCaretOffset(caption, 0);
+    fireEvent.keyDown(caption, { key: "Backspace" });
+
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect(latest.blocks.map((b) => b.type)).toEqual(["text"]);
+  });
+
+  it("Backspace in a non-empty caption keeps the image (no merge target)", () => {
+    const image = createImageBlock({
+      source: { type: "url", url: "https://example.com/a.png" },
+      caption: "Cap",
+    });
+    const onChange = vi.fn();
+    const { container } = render(<DocumentEditor value={docWith([image])} onChange={onChange} />);
+
+    const caption = getBlockElement(image.id);
+    caption.focus();
+    setCaretOffset(caption, 0);
+    fireEvent.keyDown(caption, { key: "Backspace" });
+
+    expect(container.querySelectorAll(".wte-image")).toHaveLength(1);
+  });
+
+  it("Enter in a caption exits the image into a new paragraph below it", () => {
+    const image = createImageBlock({ source: { type: "url", url: "https://example.com/a.png" } });
+    const onChange = vi.fn();
+    render(<DocumentEditor value={docWith([image])} onChange={onChange} />);
+
+    const caption = getBlockElement(image.id);
+    caption.focus();
+    setCaretOffset(caption, 0);
+    fireEvent.keyDown(caption, { key: "Enter" });
+
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect(latest.blocks.map((b) => b.type)).toEqual(["image", "text"]);
+  });
+
+  it("ArrowDown/ArrowUp navigates into and out of an image caption", () => {
+    const para = createTextBlock({ content: "above" });
+    const image = createImageBlock({ source: { type: "url", url: "https://example.com/a.png" } });
+    render(<DocumentEditor value={docWith([para, image])} />);
+
+    const above = getBlockElement(para.id);
+    const caption = getBlockElement(image.id);
+    above.focus();
+    setCaretOffset(above, 2);
+    fireEvent.keyDown(above, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(caption);
+
+    fireEvent.keyDown(caption, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(above);
+  });
+
+  it("shows a resize handle on editable images but not in read-only mode", () => {
+    const image = createImageBlock({ source: { type: "url", url: "https://example.com/a.png" } });
+    const editable = render(<DocumentEditor value={docWith([image])} />);
+    expect(editable.container.querySelector(".wte-image__resize-handle")).not.toBeNull();
+    editable.unmount();
+
+    const readonly = render(<DocumentEditor value={docWith([image])} readOnly />);
+    expect(readonly.container.querySelector(".wte-image__resize-handle")).toBeNull();
+  });
+
   it("block selection via handle click; Delete removes the range in one undo step", () => {
     const a = createTextBlock({ content: "a" });
     const b = createTextBlock({ content: "b" });
@@ -551,6 +658,33 @@ describe("DocumentEditor", () => {
     expect((latest.blocks[0] as TextBlock).content).toEqual([
       { type: "object", kind: "placeholder", data: { label: "Campo" } },
     ]);
+  });
+
+  it("slash image requests an image payload and inserts the returned block", async () => {
+    const block = createTextBlock({ content: "" });
+    const onChange = vi.fn();
+    const onRequestImage = vi.fn(() => ({
+      source: { type: "url" as const, url: "https://example.com/slash.png" },
+      altText: "Slash image",
+    }));
+    render(<DocumentEditor value={docWith([block])} onChange={onChange} onRequestImage={onRequestImage} />);
+
+    const element = getBlockElement(block.id);
+    typeInto(element, "/", 1);
+    typeInto(element, "/img", 4);
+    const option = screen.getAllByRole("option").find((candidate) => candidate.textContent === "Imageimg");
+    expect(option).toBeTruthy();
+    fireEvent.mouseDown(option!);
+
+    await waitFor(() => {
+      const latest = onChange.mock.lastCall?.[0] as WealthyDocument | undefined;
+      expect(latest?.blocks[1]).toMatchObject({
+        type: "image",
+        source: { type: "url", url: "https://example.com/slash.png" },
+        altText: "Slash image",
+      });
+    });
+    expect(onRequestImage).toHaveBeenCalledWith({ blockId: block.id, query: "img" });
   });
 
   it("readOnly renders non-editable blocks without handles", () => {
@@ -802,13 +936,14 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
 describe("DocumentEditor — paste (D11)", () => {
   type Api = import("../hooks/useDocumentEditor").DocumentEditorApi;
 
-  function setup(blocks: Block[]) {
+  function setup(blocks: Block[], props: Partial<ComponentProps<typeof DocumentEditor>> = {}) {
     const onChange = vi.fn();
     let api: Api | null = null;
     render(
       <DocumentEditor
         value={docWith(blocks)}
         onChange={onChange}
+        {...props}
         ref={(value) => {
           api = value;
         }}
@@ -817,12 +952,14 @@ describe("DocumentEditor — paste (D11)", () => {
     return { onChange, getApi: () => api! };
   }
 
-  function paste(api: Api, blockId: string, offset: number, payload: { html?: string; text?: string }): void {
+  function paste(api: Api, blockId: string, offset: number, payload: { html?: string; text?: string; files?: File[] }): void {
     const element = getBlockElement(blockId);
     element.focus();
     act(() => api.setSelection({ type: "text", blockId, anchor: offset, focus: offset }));
     const clipboardData = {
       getData: (type: string) => (type === "text/html" ? (payload.html ?? "") : (payload.text ?? "")),
+      files: payload.files ?? [],
+      items: [],
     };
     fireEvent.paste(element, { clipboardData });
   }
@@ -865,6 +1002,43 @@ describe("DocumentEditor — paste (D11)", () => {
     expect(summary(onChange.mock.lastCall![0] as WealthyDocument)).toEqual(["a", "[separator]", "b"]);
   });
 
+  it("pastes HTML image blocks at the caret", () => {
+    const block = createTextBlock({ content: "abc" });
+    const { onChange, getApi } = setup([block]);
+    paste(getApi(), block.id, 3, { html: '<figure><img src="/pasted.png" alt="P"><figcaption>Caption</figcaption></figure>' });
+
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect(latest.blocks).toHaveLength(2);
+    expect(latest.blocks[1]).toMatchObject({
+      type: "image",
+      source: { type: "url", url: new URL("/pasted.png", document.baseURI).href },
+      altText: "P",
+      caption: [{ type: "text", text: "Caption" }],
+    });
+  });
+
+  it("uploads pasted image files through the host callback", async () => {
+    const block = createTextBlock({ content: "" });
+    const imageFile = new File(["image"], "photo.png", { type: "image/png" });
+    const onUploadImage = vi.fn(async (file: File) => ({
+      source: { type: "asset" as const, id: file.name },
+      altText: "Uploaded",
+    }));
+    const { onChange, getApi } = setup([block], { onUploadImage });
+
+    paste(getApi(), block.id, 0, { files: [imageFile] });
+
+    await waitFor(() => {
+      const latest = onChange.mock.lastCall?.[0] as WealthyDocument | undefined;
+      expect(latest?.blocks[0]).toMatchObject({
+        type: "image",
+        source: { type: "asset", id: "photo.png" },
+        altText: "Uploaded",
+      });
+    });
+    expect(onUploadImage).toHaveBeenCalledWith(imageFile);
+  });
+
   it("is a single undo step (atomic block paste)", () => {
     const block = createTextBlock({ content: "abc" });
     const { onChange, getApi } = setup([block]);
@@ -873,6 +1047,96 @@ describe("DocumentEditor — paste (D11)", () => {
       getApi().commands.undo();
     });
     expect(summary(onChange.mock.lastCall![0] as WealthyDocument)).toEqual(["abc"]);
+  });
+
+  it("drops image files using the upload callback after the target block", async () => {
+    const block = createTextBlock({ content: "target" });
+    const imageFile = new File(["image"], "drop.png", { type: "image/png" });
+    const onUploadImage = vi.fn(async () => ({
+      source: { type: "url" as const, url: "https://cdn.example/drop.png" },
+      altText: "Dropped",
+    }));
+    const { container, onChange } = (() => {
+      const onChangeInner = vi.fn();
+      const rendered = render(
+        <DocumentEditor value={docWith([block])} onChange={onChangeInner} onUploadImage={onUploadImage} />,
+      );
+      return { ...rendered, onChange: onChangeInner };
+    })();
+
+    fireEvent.drop(container.querySelector(`[data-block-id="${block.id}"]`)!, {
+      clientY: 1,
+      dataTransfer: {
+        getData: (type: string) => (type === "text/wte-block" ? "" : ""),
+        files: [imageFile],
+        items: [],
+      },
+    });
+
+    await waitFor(() => {
+      const latest = onChange.mock.lastCall?.[0] as WealthyDocument | undefined;
+      expect(latest?.blocks[1]).toMatchObject({
+        type: "image",
+        source: { type: "url", url: "https://cdn.example/drop.png" },
+        altText: "Dropped",
+      });
+    });
+  });
+
+  it("drops URI-list image URLs as URL image blocks", () => {
+    const block = createTextBlock({ content: "target" });
+    const onChange = vi.fn();
+    const { container } = render(<DocumentEditor value={docWith([block])} onChange={onChange} />);
+
+    fireEvent.drop(container.querySelector(`[data-block-id="${block.id}"]`)!, {
+      clientY: 1,
+      dataTransfer: {
+        getData: (type: string) =>
+          type === "text/wte-block" ? "" : type === "text/uri-list" ? "# source\nhttps://example.com/drop.png" : "",
+        files: [],
+        items: [],
+      },
+    });
+
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect(latest.blocks[1]).toMatchObject({
+      type: "image",
+      source: { type: "url", url: "https://example.com/drop.png" },
+    });
+  });
+
+  it("ignores non-http(s) dropped URLs instead of creating doomed image blocks", () => {
+    const block = createTextBlock({ content: "target" });
+    const onChange = vi.fn();
+    const { container } = render(<DocumentEditor value={docWith([block])} onChange={onChange} />);
+
+    fireEvent.drop(container.querySelector(`[data-block-id="${block.id}"]`)!, {
+      clientY: 1,
+      dataTransfer: {
+        getData: (type: string) => (type === "text/uri-list" ? "javascript:alert(1)" : ""),
+        files: [],
+        items: [],
+      },
+    });
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("does not accept external drops in read-only mode", () => {
+    const block = createTextBlock({ content: "target" });
+    const onChange = vi.fn();
+    const { container } = render(<DocumentEditor value={docWith([block])} onChange={onChange} readOnly />);
+
+    fireEvent.drop(container.querySelector(`[data-block-id="${block.id}"]`)!, {
+      clientY: 1,
+      dataTransfer: {
+        getData: (type: string) => (type === "text/uri-list" ? "https://example.com/drop.png" : ""),
+        files: [],
+        items: [],
+      },
+    });
+
+    expect(onChange).not.toHaveBeenCalled();
   });
 });
 

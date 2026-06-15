@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { exportHtml } from "../exports/html";
-import { SCHEMA_VERSION, type TableBlock, type TextBlock, type WealthyDocument } from "../core/schema";
+import { SCHEMA_VERSION, type ImageBlock, type TableBlock, type TextBlock, type WealthyDocument } from "../core/schema";
 import { parseClipboardToBlocks, parseHtmlToBlocks, parsePlainTextToBlocks } from "./paste";
 
 function cellText(cell: { blocks: TextBlock[] }): string {
@@ -55,6 +55,43 @@ describe("parseHtmlToBlocks", () => {
       { type: "custom", kind: "separator" },
       { type: "text" },
     ]);
+  });
+
+  it("maps pasted img elements to URL image blocks", () => {
+    const [block] = parseHtmlToBlocks('<img src="/photo.png" alt="Photo" width="640" height="480">') as ImageBlock[];
+
+    expect(block).toMatchObject({
+      type: "image",
+      source: { type: "url", url: new URL("/photo.png", document.baseURI).href },
+      altText: "Photo",
+      size: { width: 640, height: 480, unit: "px" },
+    });
+  });
+
+  it("maps figures with captions to image blocks", () => {
+    const [block] = parseHtmlToBlocks(
+      '<figure><img src="https://example.com/a.png" alt="A"><figcaption><strong>Caption</strong></figcaption></figure>',
+    ) as ImageBlock[];
+
+    expect(block).toMatchObject({
+      type: "image",
+      source: { type: "url", url: "https://example.com/a.png" },
+      altText: "A",
+      caption: [{ type: "text", text: "Caption", marks: [{ type: "bold" }] }],
+    });
+  });
+
+  it("only stores http(s) image sources from pasted HTML", () => {
+    for (const src of [
+      "data:image/png;base64,abc",
+      "blob:https://example.com/123",
+      "file:///etc/passwd",
+      "ftp://example.com/a.png",
+      "javascript:alert(1)",
+    ]) {
+      expect(parseHtmlToBlocks(`<img src="${src}" alt="x">`)).toEqual([]);
+    }
+    expect(parseHtmlToBlocks('<img src="https://example.com/ok.png">')).toHaveLength(1);
   });
 
   it("maps a table, detecting the header row and wiring cell column ids", () => {

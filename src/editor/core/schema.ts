@@ -205,6 +205,68 @@ export interface TableBlock<TMeta extends BlockMeta = BlockMeta> extends BaseBlo
   showHeader: boolean;
 }
 
+/**
+ * Image URLs must be durable, host-fetchable references. Ephemeral or inline
+ * schemes (`data:`, `blob:`) bloat/break the document, and `javascript:` is
+ * unsafe — the model only stores `http(s)` URLs. Hosts that need inline or
+ * private bytes use the `asset` source and resolve it at render/export time.
+ */
+const DURABLE_URL_SCHEMES = new Set(["http:", "https:"]);
+
+/**
+ * True when `value` is an absolute http(s) URL — the only kind an image block
+ * stores. Shared by the paste/drop insertion paths so they reject the same
+ * schemes the schema rejects (e.g. data:, blob:, file:, ftp:, javascript:),
+ * rather than letting a doomed block reach patch validation.
+ */
+export function isDurableImageUrl(value: string): boolean {
+  try {
+    return DURABLE_URL_SCHEMES.has(new URL(value).protocol);
+  } catch {
+    return false;
+  }
+}
+
+export const imageSourceSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("url"),
+    url: z.string().refine(isDurableImageUrl, {
+      message: "Image url must be an http(s) URL (no data:, blob:, or javascript: sources)",
+    }),
+  }),
+  z.object({ type: z.literal("asset"), id: z.string().min(1) }),
+]);
+export type ImageSource = z.infer<typeof imageSourceSchema>;
+
+export const imageSizeSchema = z.object({
+  width: z.number().positive().optional(),
+  height: z.number().positive().optional(),
+  unit: z.enum(["px", "percent"]),
+});
+export type ImageSize = z.infer<typeof imageSizeSchema>;
+
+export const imageAlignSchema = z.enum(["left", "center", "right"]);
+export type ImageAlign = z.infer<typeof imageAlignSchema>;
+
+export const imageBlockSchema = z.object({
+  ...baseBlockShape,
+  type: z.literal("image"),
+  source: imageSourceSchema,
+  altText: z.string().optional(),
+  caption: z.array(inlineNodeSchema).optional(),
+  size: imageSizeSchema.optional(),
+  align: imageAlignSchema.optional(),
+});
+
+export interface ImageBlock<TMeta extends BlockMeta = BlockMeta> extends BaseBlock<TMeta> {
+  type: "image";
+  source: ImageSource;
+  altText?: string | undefined;
+  caption?: InlineNode[] | undefined;
+  size?: ImageSize | undefined;
+  align?: ImageAlign | undefined;
+}
+
 /** Host/plugin-defined block (D5), e.g. Minuta's request_list or signature. */
 export const customBlockSchema = z.object({
   ...baseBlockShape,
@@ -223,6 +285,7 @@ export const blockSchema = z.discriminatedUnion("type", [
   headingBlockSchema,
   textBlockSchema,
   tableBlockSchema,
+  imageBlockSchema,
   customBlockSchema,
 ]);
 
@@ -230,6 +293,7 @@ export type Block<TMeta extends BlockMeta = BlockMeta> =
   | HeadingBlock<TMeta>
   | TextBlock<TMeta>
   | TableBlock<TMeta>
+  | ImageBlock<TMeta>
   | CustomBlock<TMeta>;
 
 // ---------------------------------------------------------------------------

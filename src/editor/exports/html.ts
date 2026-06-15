@@ -4,6 +4,7 @@ import type {
   Block,
   BlockMeta,
   CustomBlock,
+  ImageBlock,
   InlineMark,
   InlineNode,
   InlineObjectNode,
@@ -27,6 +28,8 @@ export interface HtmlExportOptions {
   renderCustomBlock?: ((block: CustomBlock) => string) | undefined;
   /** Serialize an inline object to HTML. Default: the escaped label/kind. */
   renderInlineObject?: ((node: InlineObjectNode) => string) | undefined;
+  /** Resolve host-owned image assets to URLs. URL images do not call this. */
+  resolveImageSource?: ((block: ImageBlock) => string | undefined) | undefined;
   /** Prefix headings with computed hierarchical numbers (1., 1.1…). */
   headingNumbers?: boolean | undefined;
 }
@@ -102,6 +105,22 @@ function renderInline(content: InlineNode[], options: HtmlExportOptions): string
 
 function alignStyle(align: string | undefined): string {
   return align !== undefined ? ` style="text-align:${align}"` : "";
+}
+
+function imageUrl(block: ImageBlock, options: HtmlExportOptions): string | undefined {
+  return block.source.type === "url" ? block.source.url : options.resolveImageSource?.(block);
+}
+
+function imageSizeStyle(block: ImageBlock): string {
+  if (block.size === undefined) {
+    return "";
+  }
+  const unit = block.size.unit === "percent" ? "%" : "px";
+  const declarations = [
+    block.size.width !== undefined ? `width:${block.size.width}${unit}` : null,
+    block.size.height !== undefined ? `height:${block.size.height}${unit}` : null,
+  ].filter(Boolean);
+  return declarations.length > 0 ? ` style="${declarations.join(";")}"` : "";
 }
 
 function tableColumnWidthStyle(column: TableBlock["columns"][number]): string {
@@ -184,6 +203,18 @@ function renderTable(block: TableBlock, options: HtmlExportOptions): string {
   return html;
 }
 
+function renderImage(block: ImageBlock, options: HtmlExportOptions): string {
+  const url = imageUrl(block, options);
+  if (url === undefined || url.length === 0) {
+    return "<!-- image block: unresolved source -->";
+  }
+  const caption =
+    block.caption !== undefined
+      ? `<figcaption>${renderInline(block.caption, options)}</figcaption>`
+      : "";
+  return `<figure class="wte-image"${alignStyle(block.align)}><img src="${escapeAttribute(url)}" alt="${escapeAttribute(block.altText ?? "")}"${imageSizeStyle(block)}>${caption}</figure>`;
+}
+
 export function exportHtml(document: WealthyDocument<BlockMeta>, options: HtmlExportOptions = {}): string {
   const headingNumbers = options.headingNumbers === true ? getHeadingNumbers(document) : null;
   const parts: string[] = [];
@@ -215,6 +246,9 @@ export function exportHtml(document: WealthyDocument<BlockMeta>, options: HtmlEx
         break;
       case "table":
         parts.push(renderTable(block, options));
+        break;
+      case "image":
+        parts.push(renderImage(block, options));
         break;
       case "custom":
         parts.push(

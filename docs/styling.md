@@ -52,6 +52,7 @@ These class names are part of the public contract and safe to target:
 | `.wte-inline-editor` | A block's editable line |
 | `.wte-inline-object` | An inline-object chip |
 | `.wte-table` | A table |
+| `.wte-image` | An image figure |
 | `.wte-separator` | The separator block |
 
 ## Internal classes (not stable)
@@ -62,6 +63,7 @@ notice — don't rely on it. This includes (non-exhaustively):
 - `.wte-floating-toolbar`, `.wte-floating-toolbar__*`
 - `.wte-slash-menu`, `.wte-slash-menu__*`
 - `.wte-chip-popover`
+- `.wte-image__media`, `.wte-image__missing`
 - `.wte-block__gutter`, `.wte-block__handle`, `.wte-block__chevron`, `.wte-block__marker`,
   `.wte-block__number`, `.wte-block__line`
 - `.wte-block--*` modifiers (`--heading`, `--paragraph`, `--bullet`, `--numbered`, `--selected`, …)

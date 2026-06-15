@@ -1,5 +1,6 @@
-import { createHeadingBlock, createTextBlock, generateBlockId } from "../core/factories";
+import { createHeadingBlock, createImageBlock, createTextBlock, generateBlockId } from "../core/factories";
 import { createSeparatorBlock } from "../plugins/separator-core";
+import { isDurableImageUrl } from "../core/schema";
 import type {
   Block,
   HeadingLevel,
@@ -33,6 +34,7 @@ const BLOCK_TAGS = new Set([
   "OL",
   "TABLE",
   "HR",
+  "IMG",
   "BLOCKQUOTE",
   "PRE",
   "DIV",
@@ -99,9 +101,30 @@ function mapBlock(element: Element, out: Block[], indent: number): void {
   }
 
   switch (element.tagName) {
+    case "IMG": {
+      const image = mapImage(element as HTMLImageElement);
+      if (image !== null) {
+        out.push(image);
+      }
+      return;
+    }
+    case "FIGURE": {
+      const image = mapFigure(element as HTMLElement);
+      if (image !== null) {
+        out.push(image);
+        return;
+      }
+      walkChildren(element, out, indent);
+      return;
+    }
     case "P":
     case "BLOCKQUOTE":
     case "PRE": {
+      const image = mapImageOnlyContainer(element as HTMLElement);
+      if (image !== null) {
+        out.push(image);
+        return;
+      }
       const content = domToInlineNodes(element as HTMLElement);
       if (content.length > 0) {
         out.push(createTextBlock({ content }));
@@ -123,10 +146,91 @@ function mapBlock(element: Element, out: Block[], indent: number): void {
       out.push(createSeparatorBlock());
       return;
     default:
-      // DIV / SECTION / ARTICLE / … — a wrapper; recurse into it.
+      // DIV / SECTION / ARTICLE / ... - a wrapper; recurse into it.
       walkChildren(element, out, indent);
       return;
   }
+}
+
+function mapFigure(figure: HTMLElement): Block | null {
+  const image = figure.querySelector("img");
+  if (!(image instanceof HTMLImageElement)) {
+    return null;
+  }
+  const figcaption = figure.querySelector("figcaption");
+  const caption =
+    figcaption instanceof HTMLElement ? omitWhitespaceOnly(domToInlineNodes(figcaption)) : undefined;
+  return mapImage(image, caption);
+}
+
+function mapImageOnlyContainer(element: HTMLElement): Block | null {
+  const images = Array.from(element.querySelectorAll("img"));
+  if (images.length !== 1) {
+    return null;
+  }
+  const clone = element.cloneNode(true) as HTMLElement;
+  for (const img of Array.from(clone.querySelectorAll("img"))) {
+    img.remove();
+  }
+  if ((clone.textContent ?? "").trim().length > 0) {
+    return null;
+  }
+  return mapImage(images[0]!);
+}
+
+function mapImage(image: HTMLImageElement, caption?: InlineNode[] | undefined): Block | null {
+  const source = imageSourceFromElement(image);
+  if (source === null) {
+    return null;
+  }
+  const width = parseImageDimension(image.getAttribute("width"));
+  const height = parseImageDimension(image.getAttribute("height"));
+  const altText = image.getAttribute("alt")?.trim();
+  return createImageBlock({
+    source: { type: "url", url: source },
+    ...(altText !== undefined && altText.length > 0 ? { altText } : {}),
+    ...(caption !== undefined && caption.length > 0 ? { caption } : {}),
+    ...(width !== undefined || height !== undefined
+      ? { size: { ...(width !== undefined ? { width } : {}), ...(height !== undefined ? { height } : {}), unit: "px" } }
+      : {}),
+  });
+}
+
+function imageSourceFromElement(image: HTMLImageElement): string | null {
+  const source = image.getAttribute("src")?.trim();
+  if (source === undefined || source.length === 0) {
+    return null;
+  }
+  // The document model stores durable http(s) URLs (or host asset ids) only —
+  // resolve to an absolute URL and validate it against the same rule the
+  // schema enforces, so data:/blob:/file:/ftp:/javascript: never reach it.
+  const resolved = resolveAbsoluteUrl(source, image.ownerDocument.baseURI);
+  return resolved !== null && isDurableImageUrl(resolved) ? resolved : null;
+}
+
+function resolveAbsoluteUrl(value: string, fallbackBase: string): string | null {
+  try {
+    return new URL(value).href;
+  } catch {
+    const base = typeof document !== "undefined" ? document.baseURI : fallbackBase;
+    try {
+      return new URL(value, base).href;
+    } catch {
+      return null;
+    }
+  }
+}
+
+function parseImageDimension(value: string | null): number | undefined {
+  if (value === null) {
+    return undefined;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function omitWhitespaceOnly(content: InlineNode[]): InlineNode[] | undefined {
+  return isWhitespaceOnly(content) ? undefined : content;
 }
 
 function mapList(listElement: Element, out: Block[], indent: number, ordered: boolean): void {

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createTableBlock, createTextBlock } from "../core/factories";
-import type { Block, TableBlock, TextBlock } from "../core/schema";
+import { createImageBlock, createTableBlock, createTextBlock } from "../core/factories";
+import type { Block, ImageBlock, TableBlock, TextBlock } from "../core/schema";
 import { setCaretOffset } from "./dom";
 import { BlockEditor } from "./BlockEditor";
 
@@ -50,5 +50,17 @@ describe("BlockEditor", () => {
 
     const latest = onChange.mock.lastCall![0] as TableBlock;
     expect(latest.rows[0]!.cells[0]!.blocks[0]!.content).toEqual([{ type: "text", text: "cell text" }]);
+  });
+
+  it("edits image captions", () => {
+    const image = createImageBlock({ source: { type: "url", url: "https://example.com/a.png" } });
+    const onChange = vi.fn();
+    const { container } = render(<BlockEditor value={image as Block} onChange={onChange} />);
+
+    const caption = container.querySelector("figcaption.wte-inline-editor") as HTMLElement;
+    caption.textContent = "caption";
+    fireEvent.input(caption);
+
+    expect((onChange.mock.lastCall![0] as ImageBlock).caption).toEqual([{ type: "text", text: "caption" }]);
   });
 });

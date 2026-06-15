@@ -4,6 +4,7 @@ import {
   createCustomBlock,
   createEmptyDocument,
   createHeadingBlock,
+  createImageBlock,
   createTableBlock,
   createTextBlock,
   generateBlockId,
@@ -13,6 +14,7 @@ import {
   blockSchema,
   documentSchema,
   inlineNodeSchema,
+  imageBlockSchema,
   safeValidateDocument,
   tableBlockSchema,
   validateDocument,
@@ -71,6 +73,38 @@ describe("block schemas", () => {
   it("rejects custom blocks with an empty kind", () => {
     const block = { ...createCustomBlock({ kind: "x" }), kind: "" };
     expect(blockSchema.safeParse(block).success).toBe(false);
+  });
+
+  it("accepts image blocks with URL or asset sources", () => {
+    const urlImage = createImageBlock({
+      source: { type: "url", url: "https://example.com/photo.png" },
+      altText: "Photo",
+      caption: "A caption",
+      size: { width: 50, unit: "percent" },
+      align: "center",
+    });
+    expect(imageBlockSchema.parse(urlImage)).toEqual(urlImage);
+
+    const assetImage = createImageBlock({ source: { type: "asset", id: "asset-123" } });
+    expect(blockSchema.parse(assetImage)).toEqual(assetImage);
+  });
+
+  it("rejects image blocks with invalid sources or sizes", () => {
+    const image = createImageBlock({ source: { type: "url", url: "https://example.com/photo.png" } });
+    expect(imageBlockSchema.safeParse({ ...image, source: { type: "url", url: "not-url" } }).success).toBe(false);
+    expect(imageBlockSchema.safeParse({ ...image, source: { type: "asset", id: "" } }).success).toBe(false);
+    expect(imageBlockSchema.safeParse({ ...image, size: { width: -1, unit: "px" } }).success).toBe(false);
+  });
+
+  it("rejects non-durable image url schemes at the model boundary", () => {
+    const image = createImageBlock({ source: { type: "url", url: "https://example.com/photo.png" } });
+    for (const url of [
+      "data:image/png;base64,abc",
+      "blob:https://example.com/123",
+      "javascript:alert(1)",
+    ]) {
+      expect(imageBlockSchema.safeParse({ ...image, source: { type: "url", url } }).success).toBe(false);
+    }
   });
 });
 
@@ -169,6 +203,7 @@ describe("document schema", () => {
       createTextBlock({ content: "First paragraph." }),
       createTextBlock({ variant: "bullet", content: "A bullet", indent: 0 }),
       createTableBlock({ columnCount: 2, rowCount: 1 }),
+      createImageBlock({ source: { type: "url", url: "https://example.com/image.png" } }),
       createCustomBlock({ kind: "signature", data: { lawyerId: generateBlockId() } }),
     ]);
     expect(validateDocument(doc)).toEqual(doc);
@@ -249,6 +284,7 @@ describe("factories", () => {
     expect(createBlock({ type: "heading", level: 3 }).type).toBe("heading");
     expect(createBlock({ type: "text", variant: "bullet" })).toMatchObject({ type: "text", variant: "bullet" });
     expect(createBlock({ type: "table", columnCount: 1, rowCount: 1 }).type).toBe("table");
+    expect(createBlock({ type: "image", source: { type: "asset", id: "asset-1" } }).type).toBe("image");
     expect(createBlock({ type: "custom", kind: "x" })).toMatchObject({ type: "custom", kind: "x", data: {} });
   });
 

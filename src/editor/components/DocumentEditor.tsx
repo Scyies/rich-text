@@ -18,11 +18,13 @@ import { getInlineLength, getInlineText, splitInlineContent, concatInlineContent
 import { getActiveMarks, toggleMark } from "../core/marks";
 import { getHeadingNumbers, getListItemNumbers, formatHeadingNumber } from "../core/numbering";
 import { getSelectedBlockRange } from "../core/selection";
-import { createTableBlock, createTextBlock } from "../core/factories";
+import { createImageBlock, createTableBlock, createTextBlock, type CreateImageBlockInput } from "../core/factories";
+import { isDurableImageUrl } from "../core/schema";
 import type {
   Block,
   BlockMeta,
   CustomBlock,
+  ImageBlock,
   InlineMark,
   InlineNode,
   TableBlock,
@@ -40,10 +42,11 @@ import {
   type InlineRenderConfig,
 } from "./dom";
 import { matchInputRule } from "./inputRules";
-import { parseClipboardToBlocks } from "./paste";
+import { parseClipboardToBlocks, parseHtmlToBlocks } from "./paste";
 import { resolveMessages, MessagesProvider, useMessages, type EditorMessages, type Locale } from "../i18n";
 import { ChipPopover } from "./ChipPopover";
 import { FloatingToolbar, type FloatingToolbarExtraItem } from "./FloatingToolbar";
+import { ImageView } from "./ImageView";
 import { InlineEditor, type InlineEditorHandle } from "./InlineEditor";
 import { buildCoreSlashItems, filterSlashItems, SlashMenu, type SlashMenuItem } from "./SlashMenu";
 import { TableView } from "./TableView";
@@ -77,6 +80,19 @@ export function defaultInlineTagToNode(label: string): InlineNode {
   return { type: "object", kind: "placeholder", data: { key: key.length > 0 ? key : "campo", label } };
 }
 
+export interface ImageRequestContext {
+  blockId: string;
+  /** The text typed after "/" when the image command was applied. */
+  query: string;
+}
+
+export type ImageInsertionInput<TMeta extends BlockMeta = BlockMeta> = CreateImageBlockInput<TMeta>;
+
+export type ImageInsertionResult<TMeta extends BlockMeta = BlockMeta> =
+  | ImageInsertionInput<TMeta>
+  | null
+  | undefined;
+
 export interface DocumentEditorProps<TMeta extends BlockMeta = BlockMeta> {
   value: WealthyDocument<TMeta>;
   onChange?: ((document: WealthyDocument<TMeta>, info: ChangeInfo) => void) | undefined;
@@ -98,6 +114,22 @@ export interface DocumentEditorProps<TMeta extends BlockMeta = BlockMeta> {
    * registration for the same `kind` takes precedence over this prop.
    */
   renderBlock?: ((props: RenderBlockProps<TMeta>) => ReactNode) | undefined;
+  /** Resolve host-owned image assets to renderable URLs. URL images do not call this. */
+  resolveImageSource?: ((block: ImageBlock<TMeta>) => string | undefined) | undefined;
+  /**
+   * Called by the built-in `/image` slash item. The host should return a URL
+   * or asset-backed image payload, or null to cancel.
+   */
+  onRequestImage?:
+    | ((context: ImageRequestContext) => ImageInsertionResult<TMeta> | Promise<ImageInsertionResult<TMeta>>)
+    | undefined;
+  /**
+   * Called for pasted/dropped image files. Upload/storage stays host-owned;
+   * the returned payload is inserted as an image block.
+   */
+  onUploadImage?:
+    | ((file: File) => ImageInsertionResult<TMeta> | Promise<ImageInsertionResult<TMeta>>)
+    | undefined;
   /** Extra slash menu items (shown after the core block types and plugin items). */
   slashItems?: CustomSlashItem<TMeta>[] | undefined;
   /**
@@ -138,8 +170,69 @@ function isTextLike(block: Block): block is Extract<Block, { type: "heading" | "
   return block.type === "heading" || block.type === "text";
 }
 
+function isImageFile(file: File): boolean {
+  return file.type.startsWith("image/");
+}
+
+function getImageFiles(dataTransfer: DataTransfer): File[] {
+  const files = Array.from(dataTransfer.files ?? []).filter(isImageFile);
+  if (files.length > 0) {
+    return files;
+  }
+  return Array.from(dataTransfer.items ?? [])
+    .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => file !== null);
+}
+
+function durableUrlFromDataTransfer(dataTransfer: DataTransfer): string | null {
+  const uriList = dataTransfer.getData("text/uri-list");
+  const uri = uriList
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0 && !line.startsWith("#"));
+  const candidate = uri ?? dataTransfer.getData("text/plain").trim();
+  if (candidate.length === 0) {
+    return null;
+  }
+  // Match the schema: only absolute http(s) URLs become image blocks, so a
+  // dropped data:/blob:/file:/ftp:/javascript: link never reaches validation.
+  const resolved = resolveDroppedUrl(candidate);
+  return resolved !== null && isDurableImageUrl(resolved) ? resolved : null;
+}
+
+function resolveDroppedUrl(candidate: string): string | null {
+  try {
+    return new URL(candidate).href;
+  } catch {
+    const base = typeof document !== "undefined" ? document.baseURI : undefined;
+    if (base === undefined) {
+      return null;
+    }
+    try {
+      return new URL(candidate, base).href;
+    } catch {
+      return null;
+    }
+  }
+}
+
+function imageBlocksFromHtml(html: string): Block[] {
+  if (html.trim().length === 0) {
+    return [];
+  }
+  return parseHtmlToBlocks(html).filter((block) => block.type === "image");
+}
+
 export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: DocumentEditorProps<TMeta>) {
-  const { readOnly = false, showHeadingNumbers = false, renderBlock } = props;
+  const {
+    readOnly = false,
+    showHeadingNumbers = false,
+    renderBlock,
+    resolveImageSource,
+    onRequestImage,
+    onUploadImage,
+  } = props;
 
   const messages = useMemo(
     () => resolveMessages(props.locale, props.messages),
@@ -234,8 +327,12 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
   const [slash, setSlash] = useState<SlashState | null>(null);
   const [slashIndex, setSlashIndex] = useState(0);
   const allSlashItems = useMemo(
-    () => [...buildCoreSlashItems(messages), ...(props.slashItems ?? []), ...registry.slashItems],
-    [messages, props.slashItems, registry],
+    () => [
+      ...buildCoreSlashItems(messages, { includeImage: onRequestImage !== undefined }),
+      ...(props.slashItems ?? []),
+      ...registry.slashItems,
+    ],
+    [messages, onRequestImage, props.slashItems, registry],
   );
   const slashItems = useMemo(
     () => (slash === null ? [] : filterSlashItems(allSlashItems, slash.query)),
@@ -246,6 +343,112 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     setSlash(null);
     setSlashIndex(0);
   }, []);
+
+  const insertBlocksAfter = useCallback(
+    (afterBlockId: string | null, blocks: Block<TMeta>[]) => {
+      if (blocks.length === 0) {
+        return;
+      }
+      commands.applyPatches(
+        blocks.map((block, position) => ({
+          op: "insert_block_after",
+          afterBlockId: position === 0 ? afterBlockId : blocks[position - 1]!.id,
+          block,
+        })),
+      );
+    },
+    [commands],
+  );
+
+  const insertImageAfter = useCallback(
+    (afterBlockId: string | null, input: ImageInsertionInput<TMeta>) => {
+      insertBlocksAfter(afterBlockId, [createImageBlock<TMeta>(input)]);
+    },
+    [insertBlocksAfter],
+  );
+
+  const insertBlocksAtTextSelection = useCallback(
+    (selection: { blockId: string; anchor: number; focus: number }, pasted: Block<TMeta>[], inlineSingleParagraph: boolean) => {
+      if (pasted.length === 0) {
+        return;
+      }
+      const currentDocument = engine.getDocument();
+      const block = currentDocument.blocks.find((candidate) => candidate.id === selection.blockId);
+      if (block === undefined || !isTextLike(block)) {
+        return;
+      }
+
+      const start = Math.min(selection.anchor, selection.focus);
+      const end = Math.max(selection.anchor, selection.focus);
+      const [left] = splitInlineContent(block.content, start);
+      const [, right] = splitInlineContent(block.content, end);
+
+      // Inline paste: a single paragraph splices into the current block (keeps its type).
+      const only = pasted.length === 1 ? pasted[0] : undefined;
+      if (inlineSingleParagraph && only !== undefined && only.type === "text" && only.variant === "paragraph") {
+        const merged = concatInlineContent(concatInlineContent(left, only.content), right);
+        commands.updateBlock(block.id, { content: merged });
+        requestFocus(block.id, getInlineLength(left) + getInlineLength(only.content));
+        return;
+      }
+
+      // Block paste: split the current line, splice the blocks between, as one
+      // atomic (single-undo) transaction through the patch pipeline.
+      const index = currentDocument.blocks.findIndex((candidate) => candidate.id === block.id);
+      const previousId = index > 0 ? currentDocument.blocks[index - 1]!.id : null;
+      const rightBlock = getInlineLength(right) > 0 ? createTextBlock<TMeta>({ content: right }) : null;
+      const patches: unknown[] = [];
+
+      if (getInlineLength(left) === 0 && rightBlock === null) {
+        // Pasting into an empty line replaces it.
+        pasted.forEach((pastedBlock, position) =>
+          patches.push({
+            op: "insert_block_after",
+            afterBlockId: position === 0 ? previousId : pasted[position - 1]!.id,
+            block: pastedBlock,
+          }),
+        );
+        patches.push({ op: "delete_block", blockId: block.id });
+      } else {
+        patches.push({ op: "update_block", blockId: block.id, changes: { content: left } });
+        pasted.forEach((pastedBlock, position) =>
+          patches.push({
+            op: "insert_block_after",
+            afterBlockId: position === 0 ? block.id : pasted[position - 1]!.id,
+            block: pastedBlock,
+          }),
+        );
+        if (rightBlock !== null) {
+          patches.push({ op: "insert_block_after", afterBlockId: pasted[pasted.length - 1]!.id, block: rightBlock });
+        }
+      }
+      commands.applyPatches(patches);
+
+      // Caret goes to the remainder, else the end of the last text-like pasted block.
+      if (rightBlock !== null) {
+        requestFocus(rightBlock.id, 0);
+      } else {
+        const lastTextLike = [...pasted].reverse().find((candidate) => isTextLike(candidate));
+        if (lastTextLike !== undefined && isTextLike(lastTextLike)) {
+          requestFocus(lastTextLike.id, getInlineLength(lastTextLike.content));
+        }
+      }
+    },
+    [engine, commands, requestFocus],
+  );
+
+  const uploadImageFiles = useCallback(
+    async (files: File[]): Promise<Block<TMeta>[]> => {
+      if (onUploadImage === undefined || files.length === 0) {
+        return [];
+      }
+      const inputs = await Promise.all(files.map((file) => onUploadImage(file)));
+      return inputs
+        .filter((input): input is ImageInsertionInput<TMeta> => input !== null && input !== undefined)
+        .map((input) => createImageBlock<TMeta>(input));
+    },
+    [onUploadImage],
+  );
 
   const applySlashItem = useCallback(
     (item: SlashMenuItem) => {
@@ -300,12 +503,21 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
         case "table":
           commands.insertBlockAfter(current.id, createTableBlock({ columnCount: 3, rowCount: 3 }) as Block<TMeta>);
           break;
+        case "image":
+          if (onRequestImage !== undefined) {
+            void Promise.resolve(onRequestImage({ blockId: current.id, query: slash.query })).then((input) => {
+              if (input !== null && input !== undefined) {
+                insertImageAfter(current.id, input);
+              }
+            }).catch(() => undefined);
+          }
+          break;
         default:
           break;
       }
       requestFocus(current.id, slash.slashOffset);
     },
-    [slash, engine, commands, closeSlash, requestFocus, props.slashItems, registry],
+    [slash, engine, commands, closeSlash, requestFocus, props.slashItems, registry, onRequestImage, insertImageAfter],
   );
 
   // ---- content change pipeline (input rules + slash detection) ----
@@ -492,79 +704,48 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
 
       const html = event.clipboardData.getData("text/html");
       const text = event.clipboardData.getData("text/plain");
-      if (html.trim().length === 0 && text.length === 0) {
-        return;
-      }
-      const pasted = parseClipboardToBlocks({ html, text });
-      if (pasted.length === 0) {
+      const imageFiles = getImageFiles(event.clipboardData);
+      if (html.trim().length === 0 && text.length === 0 && imageFiles.length === 0) {
         return;
       }
       event.preventDefault();
       closeSlash();
 
-      const start = Math.min(selection.anchor, selection.focus);
-      const end = Math.max(selection.anchor, selection.focus);
-      const [left] = splitInlineContent(block.content, start);
-      const [, right] = splitInlineContent(block.content, end);
+      const pasteSelection = { blockId: selection.blockId, anchor: selection.anchor, focus: selection.focus };
+      const insertParsedClipboard = () => {
+        const pasted = parseClipboardToBlocks({ html, text }) as Block<TMeta>[];
+        insertBlocksAtTextSelection(pasteSelection, pasted, true);
+      };
 
-      // Inline paste: a single paragraph splices into the current block (keeps its type).
-      const only = pasted.length === 1 ? pasted[0] : undefined;
-      if (only !== undefined && only.type === "text" && only.variant === "paragraph") {
-        const merged = concatInlineContent(concatInlineContent(left, only.content), right);
-        commands.updateBlock(block.id, { content: merged });
-        requestFocus(block.id, getInlineLength(left) + getInlineLength(only.content));
+      if (imageFiles.length > 0 && onUploadImage !== undefined) {
+        void uploadImageFiles(imageFiles).then((imageBlocks) => {
+          if (imageBlocks.length > 0) {
+            insertBlocksAtTextSelection(pasteSelection, imageBlocks, false);
+          } else if (html.trim().length > 0 || text.length > 0) {
+            insertParsedClipboard();
+          }
+        }).catch(() => undefined);
         return;
       }
 
-      // Block paste: split the current line, splice the blocks between, as one
-      // atomic (single-undo) transaction through the patch pipeline.
-      const index = currentDocument.blocks.findIndex((candidate) => candidate.id === block.id);
-      const previousId = index > 0 ? currentDocument.blocks[index - 1]!.id : null;
-      const rightBlock = getInlineLength(right) > 0 ? createTextBlock({ content: right }) : null;
-      const patches: unknown[] = [];
-
-      if (getInlineLength(left) === 0 && rightBlock === null) {
-        // Pasting into an empty line replaces it.
-        pasted.forEach((pastedBlock, position) =>
-          patches.push({
-            op: "insert_block_after",
-            afterBlockId: position === 0 ? previousId : pasted[position - 1]!.id,
-            block: pastedBlock,
-          }),
-        );
-        patches.push({ op: "delete_block", blockId: block.id });
-      } else {
-        patches.push({ op: "update_block", blockId: block.id, changes: { content: left } });
-        pasted.forEach((pastedBlock, position) =>
-          patches.push({
-            op: "insert_block_after",
-            afterBlockId: position === 0 ? block.id : pasted[position - 1]!.id,
-            block: pastedBlock,
-          }),
-        );
-        if (rightBlock !== null) {
-          patches.push({ op: "insert_block_after", afterBlockId: pasted[pasted.length - 1]!.id, block: rightBlock });
-        }
-      }
-      commands.applyPatches(patches);
-
-      // Caret goes to the remainder, else the end of the last text-like pasted block.
-      if (rightBlock !== null) {
-        requestFocus(rightBlock.id, 0);
-      } else {
-        const lastTextLike = [...pasted].reverse().find((candidate) => isTextLike(candidate));
-        if (lastTextLike !== undefined && isTextLike(lastTextLike)) {
-          requestFocus(lastTextLike.id, getInlineLength(lastTextLike.content));
-        }
+      if (html.trim().length > 0 || text.length > 0) {
+        insertParsedClipboard();
       }
     },
-    [readOnly, engine, commands, requestFocus, closeSlash],
+    [readOnly, engine, closeSlash, insertBlocksAtTextSelection, onUploadImage, uploadImageFiles],
   );
 
   // ---- keyboard structure ----
   const handleEnter = useCallback(
     (blockId: string, offset: number) => {
       const block = engine.getDocument().blocks.find((candidate) => candidate.id === blockId);
+      // Captions are single-line: Enter exits the image into a fresh paragraph
+      // below it rather than splitting the caption.
+      if (block?.type === "image") {
+        const newId = commands.insertBlockAfter(blockId, createTextBlock({ content: [] }) as Block<TMeta>);
+        requestFocus(newId, 0);
+        return;
+      }
       // Enter on an empty list item exits the list instead of adding another
       // bullet: outdent one level if nested, else turn back into a paragraph
       // (mirrors Backspace-at-start). Applies to bullet and numbered variants.
@@ -593,7 +774,24 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
       const blocks = engine.getDocument().blocks;
       const index = blocks.findIndex((candidate) => candidate.id === blockId);
       const block = index === -1 ? undefined : blocks[index];
-      if (block === undefined || !isTextLike(block)) {
+      if (block === undefined) {
+        return;
+      }
+      // Backspace at the start of an empty image caption removes the image
+      // (a non-empty caption has its own text to delete first). There is no
+      // text to merge into an image, so this is the block's delete affordance.
+      if (block.type === "image") {
+        if (block.caption !== undefined && getInlineLength(block.caption) > 0) {
+          return;
+        }
+        const previous = index > 0 ? blocks[index - 1] : undefined;
+        commands.deleteBlock(blockId);
+        if (previous !== undefined && isTextLike(previous)) {
+          requestFocus(previous.id, Number.MAX_SAFE_INTEGER);
+        }
+        return;
+      }
+      if (!isTextLike(block)) {
         return;
       }
       if (block.type === "text" && (block.indent ?? 0) > 0) {
@@ -660,7 +858,9 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
       for (let cursor = index + direction; cursor >= 0 && cursor < blocks.length; cursor += direction) {
         const candidate = blocks[cursor]!;
         const handle = editorsRef.current.get(candidate.id);
-        if (isTextLike(candidate) && handle !== undefined) {
+        // Image blocks have no primary editor, but their caption is editable —
+        // navigation lands on it just like a text-like block.
+        if ((isTextLike(candidate) || candidate.type === "image") && handle !== undefined) {
           let offset: number | null = null;
           const targetElement = handle.getElement();
           if (caretX !== null && targetElement !== null) {
@@ -792,11 +992,47 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     [engine, commands],
   );
 
+  const handleExternalDrop = useCallback(
+    (targetBlockId: string, position: "before" | "after", dataTransfer: DataTransfer) => {
+      setDropIndicator(null);
+      if (readOnly) {
+        return;
+      }
+      const blocks = engine.getDocument().blocks;
+      const targetIndex = blocks.findIndex((candidate) => candidate.id === targetBlockId);
+      if (targetIndex === -1) {
+        return;
+      }
+      const afterBlockId =
+        position === "after" ? targetBlockId : targetIndex === 0 ? null : blocks[targetIndex - 1]!.id;
+
+      const imageFiles = getImageFiles(dataTransfer);
+      if (imageFiles.length > 0 && onUploadImage !== undefined) {
+        void uploadImageFiles(imageFiles)
+          .then((imageBlocks) => insertBlocksAfter(afterBlockId, imageBlocks))
+          .catch(() => undefined);
+        return;
+      }
+
+      const htmlImageBlocks = imageBlocksFromHtml(dataTransfer.getData("text/html")) as Block<TMeta>[];
+      if (htmlImageBlocks.length > 0) {
+        insertBlocksAfter(afterBlockId, htmlImageBlocks);
+        return;
+      }
+
+      const url = durableUrlFromDataTransfer(dataTransfer);
+      if (url !== null) {
+        insertImageAfter(afterBlockId, { source: { type: "url", url } });
+      }
+    },
+    [readOnly, engine, onUploadImage, uploadImageFiles, insertBlocksAfter, insertImageAfter],
+  );
+
   // ---- floating toolbar ----
   const textSelection = editor.selection?.type === "text" ? editor.selection : null;
   const toolbarTarget =
     textSelection !== null && textSelection.anchor !== textSelection.focus
-      ? document.blocks.find((candidate) => candidate.id === textSelection.blockId)
+      ? document.blocks.find((candidate) => candidate.id === textSelection.blockId && isTextLike(candidate))
       : undefined;
 
   const activeMarkTypes = useMemo<ReadonlySet<InlineMark["type"]>>(() => {
@@ -982,12 +1218,14 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
           onToggleCollapsed={editor.toggleSectionCollapsed}
           onDropIndicatorChange={setDropIndicator}
           onDropBlock={handleDrop}
+          onDropExternal={handleExternalDrop}
           onInterceptKeyDown={interceptKeyDown}
           inlineRenderers={inlineRenderers}
           blockRenderers={
             registry.blockRenderers as unknown as ReadonlyMap<string, (props: RenderBlockProps) => ReactNode>
           }
           renderBlock={renderBlock as DocumentEditorProps["renderBlock"]}
+          resolveImageSource={resolveImageSource as DocumentEditorProps["resolveImageSource"]}
           commandsUpdateBlock={commands.updateBlock}
         />
       ))}
@@ -1076,10 +1314,12 @@ interface BlockRowProps {
   onToggleCollapsed(headingId: string): void;
   onDropIndicatorChange(indicator: DropIndicator | null): void;
   onDropBlock(targetBlockId: string, position: "before" | "after", draggedBlockId: string): void;
+  onDropExternal(targetBlockId: string, position: "before" | "after", dataTransfer: DataTransfer): void;
   onInterceptKeyDown(blockId: string, event: ReactKeyboardEvent): boolean;
   inlineRenderers: ReadonlyMap<string, InlineRenderConfig>;
   blockRenderers: ReadonlyMap<string, (props: RenderBlockProps) => ReactNode>;
   renderBlock: DocumentEditorProps["renderBlock"];
+  resolveImageSource: DocumentEditorProps["resolveImageSource"];
   commandsUpdateBlock(blockId: string, patch: Record<string, unknown>): void;
 }
 
@@ -1105,10 +1345,12 @@ function BlockRow({
   onToggleCollapsed,
   onDropIndicatorChange,
   onDropBlock,
+  onDropExternal,
   onInterceptKeyDown,
   inlineRenderers,
   blockRenderers,
   renderBlock,
+  resolveImageSource,
   commandsUpdateBlock,
 }: BlockRowProps) {
   const messages = useMessages();
@@ -1134,6 +1376,9 @@ function BlockRow({
       data-block-id={block.id}
       style={indent > 0 ? { marginLeft: `${indent * 24}px` } : undefined}
       onDragOver={(event) => {
+        if (readOnly) {
+          return;
+        }
         event.preventDefault();
         const rect = event.currentTarget.getBoundingClientRect();
         const position = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
@@ -1141,12 +1386,18 @@ function BlockRow({
       }}
       onDragLeave={() => onDropIndicatorChange(null)}
       onDrop={(event) => {
+        if (readOnly) {
+          return;
+        }
         event.preventDefault();
+        onDropIndicatorChange(null);
         const draggedId = event.dataTransfer.getData("text/wte-block");
+        const rect = event.currentTarget.getBoundingClientRect();
+        const position = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
         if (draggedId.length > 0) {
-          const rect = event.currentTarget.getBoundingClientRect();
-          const position = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
           onDropBlock(block.id, position, draggedId);
+        } else {
+          onDropExternal(block.id, position, event.dataTransfer);
         }
       }}
     >
@@ -1240,6 +1491,23 @@ function BlockRow({
             block={block as TableBlock}
             readOnly={readOnly}
             onTableChange={(patch) => commandsUpdateBlock(block.id, patch)}
+          />
+        )}
+
+        {block.type === "image" && (
+          <ImageView
+            block={block as ImageBlock}
+            readOnly={readOnly}
+            resolveImageSource={resolveImageSource as ((block: ImageBlock) => string | undefined) | undefined}
+            onImageChange={(patch) => commandsUpdateBlock(block.id, patch)}
+            registerCaptionEditor={(handle) => registerEditor(block.id, handle)}
+            onCaptionSelectionChange={(start, end) => onSelectionChange(block.id, start, end)}
+            onCaptionFocus={() => onEditorFocus(block.id)}
+            onCaptionBlur={() => onEditorBlur(block.id)}
+            onCaptionEnter={() => onEnter(block.id, 0)}
+            onCaptionBackspaceAtStart={() => onBackspaceAtStart(block.id)}
+            onCaptionArrowUp={() => onMoveFocus(block.id, -1)}
+            onCaptionArrowDown={() => onMoveFocus(block.id, 1)}
           />
         )}
 

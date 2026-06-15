@@ -74,6 +74,7 @@ const PATCHABLE_KEYS: Record<Block<BlockMeta>["type"], ReadonlySet<string>> = {
   heading: new Set(["level", "align", "content", "meta"]),
   text: new Set(["variant", "indent", "align", "content", "meta"]),
   table: new Set(["columns", "rows", "showHeader", "meta"]),
+  image: new Set(["source", "altText", "caption", "size", "align", "meta"]),
   custom: new Set(["kind", "data", "meta"]),
 };
 

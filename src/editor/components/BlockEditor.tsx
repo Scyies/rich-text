@@ -1,9 +1,10 @@
 import { useCallback, useMemo, type FocusEvent as ReactFocusEvent, type ReactNode } from "react";
 import type { ChangeInfo } from "../core/commands";
-import type { Block, BlockMeta, CustomBlock, TableBlock } from "../core/schema";
+import type { Block, BlockMeta, CustomBlock, ImageBlock, TableBlock } from "../core/schema";
 import { useBlockEditor } from "../hooks/useBlockEditor";
 import { resolveMessages, MessagesProvider, type EditorMessages, type Locale } from "../i18n";
 import type { RenderBlockProps } from "../plugins/types";
+import { ImageView } from "./ImageView";
 import { InlineEditor } from "./InlineEditor";
 import { TableView } from "./TableView";
 
@@ -26,6 +27,8 @@ export interface BlockEditorProps<TMeta extends BlockMeta = BlockMeta> {
   messages?: Partial<EditorMessages> | undefined;
   className?: string | undefined;
   ariaLabel?: string | undefined;
+  /** Resolve host-owned image assets to renderable URLs. URL images do not call this. */
+  resolveImageSource?: ((block: ImageBlock<TMeta>) => string | undefined) | undefined;
   renderBlock?: ((props: RenderBlockProps<TMeta>) => ReactNode) | undefined;
 }
 
@@ -97,6 +100,15 @@ export function BlockEditor<TMeta extends BlockMeta = BlockMeta>(props: BlockEdi
           block={block as TableBlock}
           readOnly={readOnly}
           onTableChange={(patch) => editor.update(patch)}
+        />
+      )}
+
+      {block.type === "image" && (
+        <ImageView
+          block={block as ImageBlock}
+          readOnly={readOnly}
+          resolveImageSource={props.resolveImageSource as ((block: ImageBlock) => string | undefined) | undefined}
+          onImageChange={(patch) => editor.update(patch)}
         />
       )}
 

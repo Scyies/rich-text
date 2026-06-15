@@ -246,6 +246,67 @@ h6.wte-inline-editor { font-size: 1.05em; }
   cursor: default;
 }
 
+/* ---- image ---- */
+
+.wte-image {
+  margin: 0.35em 0;
+}
+
+.wte-image__frame {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  line-height: 0;
+}
+
+.wte-image__media {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--wte-radius);
+}
+
+.wte-image__resize-handle {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  padding: 0;
+  border: 2px solid var(--wte-bg, #fff);
+  border-radius: 3px;
+  background: var(--wte-accent, #3b82f6);
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity 0.1s ease-in-out;
+  touch-action: none;
+}
+
+.wte-image__frame:hover .wte-image__resize-handle,
+.wte-image__resize-handle:focus-visible {
+  opacity: 1;
+}
+
+.wte-image__missing {
+  display: inline-flex;
+  align-items: center;
+  min-height: 4rem;
+  max-width: 100%;
+  border: 1px dashed var(--wte-border);
+  border-radius: var(--wte-radius);
+  padding: 0.75em 1em;
+  color: var(--wte-muted);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.wte-image figcaption.wte-inline-editor {
+  margin-top: 0.25em;
+  color: var(--wte-muted);
+  font-size: 0.9em;
+  line-height: 1.4;
+}
+
 /* ---- slash menu ---- */
 
 .wte-slash-menu {

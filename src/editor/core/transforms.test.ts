@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createCustomBlock, createHeadingBlock, createTableBlock, createTextBlock } from "./factories";
+import { createCustomBlock, createHeadingBlock, createImageBlock, createTableBlock, createTextBlock } from "./factories";
 import { SCHEMA_VERSION, type Block, type HeadingBlock, type WealthyDocument } from "./schema";
 import {
   deleteBlock,
@@ -74,6 +74,17 @@ describe("updateBlock", () => {
     const heading = createHeadingBlock({ level: 1 });
     expect(() => updateBlock(docWith([heading]), heading.id, { level: 9 })).toThrow();
   });
+
+  it("updates image metadata and validates source changes", () => {
+    const image = createImageBlock({ source: { type: "url", url: "https://example.com/a.png" } });
+    const next = updateBlock(docWith([image]), image.id, {
+      altText: "Alt",
+      caption: [{ type: "text", text: "Caption" }],
+      align: "right",
+    });
+    expect(next.blocks[0]).toMatchObject({ altText: "Alt", caption: [{ type: "text", text: "Caption" }], align: "right" });
+    expect(() => updateBlock(docWith([image]), image.id, { source: { type: "url", url: "nope" } })).toThrow();
+  });
 });
 
 describe("turnInto (D1: one-block type change)", () => {
@@ -102,9 +113,11 @@ describe("turnInto (D1: one-block type change)", () => {
     expect(next.blocks[0]).toMatchObject({ variant: "numbered", indent: 2 });
   });
 
-  it("rejects table/custom blocks", () => {
+  it("rejects table/image/custom blocks", () => {
     const table = createTableBlock({ columnCount: 1, rowCount: 0 });
+    const image = createImageBlock({ source: { type: "url", url: "https://example.com/a.png" } });
     expect(() => turnInto(docWith([table]), table.id, { type: "text", variant: "paragraph" })).toThrow(RangeError);
+    expect(() => turnInto(docWith([image]), image.id, { type: "text", variant: "paragraph" })).toThrow(RangeError);
   });
 });
 

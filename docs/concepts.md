@@ -34,6 +34,7 @@ the data: no `children`, no `parentId`. Containment (a heading and the blocks un
 | `heading` | `{ id, type, level: 1–6, align?, content, meta? }` | `level` drives section structure. |
 | `text` | `{ id, type, variant, indent?, align?, content, meta? }` | `variant`: `paragraph` \| `bullet` \| `numbered`. |
 | `table` | `{ id, type, columns, rows, showHeader, meta? }` | Cells hold text blocks only (below). |
+| `image` | `{ id, type, source, altText?, caption?, size?, align?, meta? }` | Binary/upload storage is host-owned. |
 | `custom` | `{ id, type, kind, data, meta? }` | Host/plugin-defined; `data` is opaque. |
 
 - `id` is a UUID, stable for the block's lifetime and never reused.
@@ -53,6 +54,26 @@ Cells are addressed **by column id**, and hold a restricted list of **text block
 nested headings, tables, or custom blocks (deliberate; widening this later is non-breaking).
 `column.width` is honored by the editor UI and the HTML exporter; the docx exporter ignores
 it in v1.0.
+
+### Images
+
+```ts
+type ImageSource = { type: "url"; url: string } | { type: "asset"; id: string };
+
+interface ImageBlock {
+  type: "image";
+  source: ImageSource;
+  altText?: string;
+  caption?: InlineNode[];
+  size?: { width?: number; height?: number; unit: "px" | "percent" };
+  align?: "left" | "center" | "right";
+}
+```
+
+The core stores only a URL or a host asset id. It does **not** store `File`, `Blob`,
+object URLs, or base64 image data. Hosts that use `{ type: "asset" }` provide a resolver to
+the React components and exporters. Clipboard/drop image files go through host upload callbacks;
+URL-backed pasted/dropped images become ordinary image blocks.
 
 ## Inline content
 

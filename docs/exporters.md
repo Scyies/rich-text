@@ -28,6 +28,10 @@ exportHtml(doc, {
 Without serializers, the defaults emit a readable fallback and never throw. The `meta`/`data`
 bags are passed through to your serializers untouched.
 
+Image blocks with `{ type: "url" }` export directly to HTML/Markdown. Image blocks with
+`{ type: "asset" }` are host-owned; pass `resolveImageSource` to HTML/Markdown exporters, or
+`renderImageBlock` to the docx exporter after resolving the asset bytes yourself.
+
 ## HTML
 
 `exportHtml(document, options?): string`
@@ -36,6 +40,7 @@ bags are passed through to your serializers untouched.
 interface HtmlExportOptions {
   renderCustomBlock?: (block: CustomBlock) => string;
   renderInlineObject?: (node: InlineObjectNode) => string;
+  resolveImageSource?: (block: ImageBlock) => string | undefined;
   headingNumbers?: boolean; // prefix headings with 1., 1.1, …
 }
 ```
@@ -43,7 +48,8 @@ interface HtmlExportOptions {
 Produces clean, semantic HTML: headings, paragraphs, nested lists grouped from the flat block
 list by `indent`, and tables. Tables emit a `<colgroup>` that honors `column.width`
 (`percent`/`px`). Marks map to semantic tags; `color`/`highlight` emit
-`wte-color-*` / `wte-highlight-*` classes.
+`wte-color-*` / `wte-highlight-*` classes. Images emit `<figure class="wte-image"><img …>` and
+an optional `<figcaption>`.
 
 ## Markdown
 
@@ -53,6 +59,7 @@ list by `indent`, and tables. Tables emit a `<colgroup>` that honors `column.wid
 interface MarkdownExportOptions {
   renderCustomBlock?: (block: CustomBlock) => string;
   renderInlineObject?: (node: InlineObjectNode) => string;
+  resolveImageSource?: (block: ImageBlock) => string | undefined;
   headingNumbers?: boolean;
 }
 ```
@@ -63,6 +70,7 @@ Standard CommonMark/GFM. Limitations to be aware of:
   `color` is **dropped**.
 - GFM tables **always** render a header row, so `showHeader: false` is not represented
   faithfully — the exporter uses the first row as the header.
+- Markdown has no standard caption syntax; image captions are emitted as a following paragraph.
 
 ## docx
 
@@ -73,6 +81,7 @@ import { Packer } from "docx";
 
 const docxDocument = exportDocx(doc, {
   renderCustomBlock: (block) => /* FileChild | FileChild[] */,
+  renderImageBlock: (block) => /* FileChild | FileChild[] */,
   renderInlineObject: (node) => node.data.label as string,
 });
 
@@ -83,6 +92,7 @@ const blob = await Packer.toBlob(docxDocument);     // browser
 ```ts
 interface DocxExportOptions {
   renderCustomBlock?: (block: CustomBlock) => FileChild | FileChild[];
+  renderImageBlock?: (block: ImageBlock) => FileChild | FileChild[] | undefined;
   renderInlineObject?: (node: InlineObjectNode) => string;
 }
 ```
@@ -95,6 +105,9 @@ Notes:
   first (add a cover page, headers/footers, etc.).
 - Mark support is best-effort: `code` → monospace run, `color` applied only when the token is a
   6-digit hex, `highlight` dropped. `TableColumn.width` is ignored in v1.0.
+- Image embedding is host-owned. Without `renderImageBlock`, the exporter emits a readable
+  fallback paragraph; use `renderImageBlock` to return a `Paragraph` containing docx's
+  `ImageRun` after resolving your asset bytes.
 
 ### Template-grade Word output
 

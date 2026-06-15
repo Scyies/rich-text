@@ -4,6 +4,7 @@ import type {
   Block,
   BlockMeta,
   CustomBlock,
+  ImageBlock,
   InlineMark,
   InlineNode,
   InlineObjectNode,
@@ -30,6 +31,8 @@ export interface MarkdownExportOptions {
   renderCustomBlock?: ((block: CustomBlock) => string) | undefined;
   /** Serialize an inline object. Default: the label/kind as plain text. */
   renderInlineObject?: ((node: InlineObjectNode) => string) | undefined;
+  /** Resolve host-owned image assets to URLs. URL images do not call this. */
+  resolveImageSource?: ((block: ImageBlock) => string | undefined) | undefined;
   /** Prefix headings with computed hierarchical numbers (1., 1.1…). */
   headingNumbers?: boolean | undefined;
 }
@@ -96,6 +99,14 @@ function renderInline(content: InlineNode[], options: MarkdownExportOptions): st
   return markdown;
 }
 
+function imageUrl(block: ImageBlock, options: MarkdownExportOptions): string | undefined {
+  return block.source.type === "url" ? block.source.url : options.resolveImageSource?.(block);
+}
+
+function escapeMarkdownUrl(url: string): string {
+  return url.replaceAll(")", "%29").replaceAll(" ", "%20");
+}
+
 function isListBlock(block: Block): block is TextBlock & { variant: "bullet" | "numbered" } {
   return block.type === "text" && (block.variant === "bullet" || block.variant === "numbered");
 }
@@ -148,6 +159,17 @@ function renderTable(block: TableBlock, options: MarkdownExportOptions): string 
   return lines.join("\n");
 }
 
+function renderImage(block: ImageBlock, options: MarkdownExportOptions): string {
+  const url = imageUrl(block, options);
+  if (url === undefined || url.length === 0) {
+    return "<!-- image block: unresolved source -->";
+  }
+  const image = `![${escapeMarkdown(block.altText ?? "")}](${escapeMarkdownUrl(url)})`;
+  return block.caption !== undefined
+    ? `${image}\n\n${renderInline(block.caption, options)}`
+    : image;
+}
+
 export function exportMarkdown(
   document: WealthyDocument<BlockMeta>,
   options: MarkdownExportOptions = {},
@@ -183,6 +205,9 @@ export function exportMarkdown(
         break;
       case "table":
         parts.push(renderTable(block, options));
+        break;
+      case "image":
+        parts.push(renderImage(block, options));
         break;
       case "custom":
         parts.push(

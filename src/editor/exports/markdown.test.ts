@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createCustomBlock, createHeadingBlock, createTableBlock, createTextBlock } from "../core/factories";
+import { createCustomBlock, createHeadingBlock, createImageBlock, createTableBlock, createTextBlock } from "../core/factories";
 import { createSeparatorBlock } from "../plugins/separator-core";
 import { SCHEMA_VERSION, type Block, type WealthyDocument } from "../core/schema";
 import { exportMarkdown } from "./markdown";
@@ -56,6 +56,22 @@ describe("exportMarkdown", () => {
     table.rows[1]!.cells[0]!.blocks = [createTextBlock({ content: "a" })];
     table.rows[1]!.cells[1]!.blocks = [createTextBlock({ content: "b" })];
     expect(exportMarkdown(docWith([table]))).toBe("| H1 | H2 |\n| --- | ---: |\n| a | b |");
+  });
+
+  it("renders image blocks and optional captions", () => {
+    const image = createImageBlock({
+      source: { type: "url", url: "https://example.com/a photo.png" },
+      altText: "A [photo]",
+      caption: "Caption",
+    });
+    expect(exportMarkdown(docWith([image]))).toBe("![A \\[photo\\]](https://example.com/a%20photo.png)\n\nCaption");
+  });
+
+  it("resolves asset image blocks through an export option", () => {
+    const image = createImageBlock({ source: { type: "asset", id: "asset-1" } });
+    expect(exportMarkdown(docWith([image]), { resolveImageSource: () => "https://cdn.example/asset-1.png" })).toBe(
+      "![](https://cdn.example/asset-1.png)",
+    );
   });
 
   it("uses per-kind serializers and falls back otherwise", () => {

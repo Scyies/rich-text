@@ -21,6 +21,7 @@ export interface EditorMessages {
   slashBulletedList: string;
   slashNumberedList: string;
   slashTable: string;
+  slashImage: string;
   slashNoResults: string;
   slashMenuAriaLabel: string;
 
@@ -53,6 +54,12 @@ export interface EditorMessages {
   tableRowLabel: string;
   tableColumnLabel: string;
 
+  // Image
+  imageMissingSource: string;
+  imageCaptionPlaceholder: string;
+  imageCaptionAriaLabel: string;
+  imageResizeAriaLabel: string;
+
   // Inline-object chip popover
   chipEditAriaLabel: string;
 }
@@ -65,6 +72,7 @@ export const en: EditorMessages = {
   slashBulletedList: "Bulleted list",
   slashNumberedList: "Numbered list",
   slashTable: "Table",
+  slashImage: "Image",
   slashNoResults: "No results",
   slashMenuAriaLabel: "Block types",
 
@@ -93,6 +101,11 @@ export const en: EditorMessages = {
   tableRowLabel: "Row",
   tableColumnLabel: "Col",
 
+  imageMissingSource: "Image source unavailable",
+  imageCaptionPlaceholder: "Add caption",
+  imageCaptionAriaLabel: "Image caption",
+  imageResizeAriaLabel: "Resize image",
+
   chipEditAriaLabel: "Edit field",
 };
 
@@ -104,6 +117,7 @@ export const ptBR: EditorMessages = {
   slashBulletedList: "Lista com marcadores",
   slashNumberedList: "Lista numerada",
   slashTable: "Tabela",
+  slashImage: "Imagem",
   slashNoResults: "Nenhum resultado",
   slashMenuAriaLabel: "Tipos de bloco",
 
@@ -131,6 +145,11 @@ export const ptBR: EditorMessages = {
   tableRemoveColumn: "Remover coluna",
   tableRowLabel: "Linha",
   tableColumnLabel: "Coluna",
+
+  imageMissingSource: "Fonte da imagem indisponível",
+  imageCaptionPlaceholder: "Adicionar legenda",
+  imageCaptionAriaLabel: "Legenda da imagem",
+  imageResizeAriaLabel: "Redimensionar imagem",
 
   chipEditAriaLabel: "Editar campo",
 };

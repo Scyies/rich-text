@@ -6,6 +6,10 @@ import {
   type CustomBlock,
   type HeadingBlock,
   type HeadingLevel,
+  type ImageAlign,
+  type ImageBlock,
+  type ImageSize,
+  type ImageSource,
   type InlineNode,
   type TableBlock,
   type TableCell,
@@ -109,6 +113,30 @@ export function createTableBlock<TMeta extends BlockMeta = BlockMeta>(
   };
 }
 
+export interface CreateImageBlockInput<TMeta extends BlockMeta = BlockMeta> {
+  source: ImageSource;
+  altText?: string;
+  caption?: InlineNode[] | string;
+  size?: ImageSize;
+  align?: ImageAlign;
+  meta?: TMeta;
+}
+
+export function createImageBlock<TMeta extends BlockMeta = BlockMeta>(
+  input: CreateImageBlockInput<TMeta>,
+): ImageBlock<TMeta> {
+  return {
+    id: generateBlockId(),
+    type: "image",
+    source: input.source,
+    ...(input.altText !== undefined ? { altText: input.altText } : {}),
+    ...(input.caption !== undefined ? { caption: toContent(input.caption) } : {}),
+    ...(input.size !== undefined ? { size: input.size } : {}),
+    ...(input.align !== undefined ? { align: input.align } : {}),
+    ...(input.meta !== undefined ? { meta: input.meta } : {}),
+  };
+}
+
 export interface CreateCustomBlockInput<TMeta extends BlockMeta = BlockMeta> {
   kind: string;
   data?: Record<string, unknown>;
@@ -131,6 +159,7 @@ export type CreateBlockInput<TMeta extends BlockMeta = BlockMeta> =
   | ({ type: "heading" } & CreateHeadingBlockInput<TMeta>)
   | ({ type: "text" } & CreateTextBlockInput<TMeta>)
   | ({ type: "table" } & CreateTableBlockInput<TMeta>)
+  | ({ type: "image" } & CreateImageBlockInput<TMeta>)
   | ({ type: "custom" } & CreateCustomBlockInput<TMeta>);
 
 export function createBlock<TMeta extends BlockMeta = BlockMeta>(input: CreateBlockInput<TMeta>): Block<TMeta> {
@@ -141,6 +170,8 @@ export function createBlock<TMeta extends BlockMeta = BlockMeta>(input: CreateBl
       return createTextBlock(input);
     case "table":
       return createTableBlock(input);
+    case "image":
+      return createImageBlock(input);
     case "custom":
       return createCustomBlock(input);
   }

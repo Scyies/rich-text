@@ -20,6 +20,7 @@ import type {
   Block,
   BlockMeta,
   CustomBlock,
+  ImageBlock,
   HeadingLevel as WteHeadingLevel,
   InlineMark,
   InlineNode,
@@ -47,6 +48,11 @@ const NUMBERED_REFERENCE = "wte-numbered";
 export interface DocxExportOptions {
   /** Serialize a custom block to docx block(s). Default: a plain paragraph with the kind. */
   renderCustomBlock?: ((block: CustomBlock) => FileChild | FileChild[]) | undefined;
+  /**
+   * Serialize an image block to docx block(s). Hosts can return a Paragraph
+   * containing docx's ImageRun after resolving their own asset bytes.
+   */
+  renderImageBlock?: ((block: ImageBlock) => FileChild | FileChild[] | undefined) | undefined;
   /** Serialize an inline object to its run text. Default: the label/kind. */
   renderInlineObject?: ((node: InlineObjectNode) => string) | undefined;
 }
@@ -162,6 +168,35 @@ function separatorToDocx(): Paragraph {
   });
 }
 
+function imageSourceLabel(block: ImageBlock): string {
+  return block.source.type === "url" ? block.source.url : block.source.id;
+}
+
+function imageToDocx(block: ImageBlock, options: DocxExportOptions): FileChild | FileChild[] {
+  const rendered = options.renderImageBlock?.(block);
+  if (rendered !== undefined) {
+    return rendered;
+  }
+
+  const align = alignment(block.align);
+  const label = block.altText !== undefined && block.altText.length > 0 ? block.altText : imageSourceLabel(block);
+  const children: FileChild[] = [
+    new Paragraph({
+      children: [new TextRun({ text: `[image: ${label}]`, italics: true })],
+      ...(align !== undefined ? { alignment: align } : {}),
+    }),
+  ];
+  if (block.caption !== undefined && block.caption.length > 0) {
+    children.push(
+      new Paragraph({
+        children: inlineToRuns(block.caption, options),
+        ...(align !== undefined ? { alignment: align } : {}),
+      }),
+    );
+  }
+  return children;
+}
+
 function blockToDocx(block: Block, options: DocxExportOptions): FileChild | FileChild[] {
   switch (block.type) {
     case "heading": {
@@ -176,6 +211,8 @@ function blockToDocx(block: Block, options: DocxExportOptions): FileChild | File
       return textBlockParagraph(block, options);
     case "table":
       return tableToDocx(block, options);
+    case "image":
+      return imageToDocx(block, options);
     case "custom":
       if (options.renderCustomBlock === undefined && block.kind === SEPARATOR_BLOCK_KIND) {
         return separatorToDocx();

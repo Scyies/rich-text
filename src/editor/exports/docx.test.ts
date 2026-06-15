@@ -1,7 +1,7 @@
 import { Packer, Paragraph, TextRun } from "docx";
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
-import { createCustomBlock, createHeadingBlock, createTableBlock, createTextBlock } from "../core/factories";
+import { createCustomBlock, createHeadingBlock, createImageBlock, createTableBlock, createTextBlock } from "../core/factories";
 import { createSeparatorBlock } from "../plugins/separator-core";
 import { SCHEMA_VERSION, type Block, type WealthyDocument } from "../core/schema";
 import { exportDocx, type DocxExportOptions } from "./docx";
@@ -38,6 +38,7 @@ describe("exportDocx", () => {
       createTextBlock({ variant: "bullet", content: "BulletItem" }),
       createTextBlock({ variant: "numbered", content: "NumberedItem" }),
       table,
+      createImageBlock({ source: { type: "url", url: "https://example.com/a.png" }, altText: "ImageAlt" }),
     ]);
 
     const { buffer, xml } = await documentXml(doc);
@@ -56,6 +57,7 @@ describe("exportDocx", () => {
     expect(xml).toContain("<w:tbl>"); // table
     expect(xml).toContain("CellA");
     expect(xml).toContain("CellB");
+    expect(xml).toContain("[image: ImageAlt]"); // default image fallback
   });
 
   it("uses per-kind serializers for inline objects and custom blocks", async () => {
@@ -75,6 +77,16 @@ describe("exportDocx", () => {
     });
     expect(xml).toContain("Ana");
     expect(xml).toContain("CALLOUT:NoteText");
+  });
+
+  it("uses an explicit serializer for image blocks", async () => {
+    const doc = docWith([createImageBlock({ source: { type: "asset", id: "asset-1" }, caption: "Caption" })]);
+    const { xml } = await documentXml(doc, {
+      renderImageBlock: (block) =>
+        new Paragraph({ children: [new TextRun({ text: `IMAGE:${block.source.type === "asset" ? block.source.id : block.source.url}` })] }),
+    });
+    expect(xml).toContain("IMAGE:asset-1");
+    expect(xml).not.toContain("[image:");
   });
 
   it("falls back for unknown custom blocks and inline objects", async () => {

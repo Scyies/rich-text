@@ -61,9 +61,10 @@ echoing back what you got from `onChange` is a no-op, so controlled usage is saf
 - `Enter`/`Backspace`/`Tab` structure (split, merge, indent); `Enter` on an empty list item exits the list.
 - Markdown input rules (`# `, `- `, `1. `) and a `/` slash menu.
 - Floating mark toolbar, hierarchical heading numbering, collapsible sections.
+- First-class image blocks with URL or host asset references, plus host-owned slash/paste/drop insertion hooks.
 - `{{label}}` → placeholder chips; a full [plugin system](./docs/plugins.md) for custom blocks,
   inline-object chips, slash items, and toolbar buttons.
-- Rich paste from Word / Google Docs / the web.
+- Rich paste from Word / Google Docs / the web, including URL-backed `<img>` / `<figure>` content.
 - [Exporters](./docs/exporters.md) to HTML, Markdown, and docx.
 - [i18n](./docs/i18n.md) (`en` default, `pt-BR` built in) and a headless, server-safe core.
 

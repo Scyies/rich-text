@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createCustomBlock, createHeadingBlock, createTableBlock, createTextBlock } from "../core/factories";
+import { createCustomBlock, createHeadingBlock, createImageBlock, createTableBlock, createTextBlock } from "../core/factories";
 import { createSeparatorBlock } from "../plugins/separator-core";
 import { SCHEMA_VERSION, type Block, type WealthyDocument } from "../core/schema";
 import { exportHtml } from "./html";
@@ -84,6 +84,26 @@ describe("exportHtml", () => {
     table.columns[1] = { ...table.columns[1]!, width: { value: 180, unit: "px" } };
     expect(exportHtml(docWith([table]))).toContain(
       '<colgroup><col style="width:30%"><col style="width:180px"></colgroup>',
+    );
+  });
+
+  it("renders URL image blocks with alt text, size, alignment, and caption", () => {
+    const image = createImageBlock({
+      source: { type: "url", url: "https://example.com/a.png?x=1&y=2" },
+      altText: "<Alt>",
+      caption: [{ type: "text", text: "Caption" }],
+      size: { width: 40, unit: "percent" },
+      align: "center",
+    });
+    expect(exportHtml(docWith([image]))).toBe(
+      '<figure class="wte-image" style="text-align:center"><img src="https://example.com/a.png?x=1&amp;y=2" alt="&lt;Alt&gt;" style="width:40%"><figcaption>Caption</figcaption></figure>',
+    );
+  });
+
+  it("resolves asset image blocks through an export option", () => {
+    const image = createImageBlock({ source: { type: "asset", id: "asset-1" } });
+    expect(exportHtml(docWith([image]), { resolveImageSource: () => "https://cdn.example/asset-1.png" })).toBe(
+      '<figure class="wte-image"><img src="https://cdn.example/asset-1.png" alt=""></figure>',
     );
   });
 
