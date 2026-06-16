@@ -124,9 +124,15 @@ engine wraps these as undoable transactions; call them directly only for off-eng
 
 `insertBlockAfter`, `updateBlock`, `deleteBlock`, `moveBlock`, `turnInto`, `splitBlock`,
 `mergeWithPrevious`, `indentBlock`, `outdentBlock`, `insertInlineNode`, `updateInlineObjectAt`,
-`removeInlineNodeAt`, `moveSection`, `deleteSection`, `duplicateSection`, `getInlineNodeLength`,
+`removeInlineNodeAt`, `insertImageGroupEntry`, `updateImageGroupEntry`, `removeImageGroupEntry`,
+`splitImageGroup`, `moveSection`, `deleteSection`, `duplicateSection`, `getInlineNodeLength`,
 and the constant `MAX_INDENT`. **Type:** `TurnIntoTarget` (`{ type: "heading"; level }` |
 `{ type: "text"; variant }`).
+
+The image-group transforms operate on entries within an `imageGroup`: `removeImageGroupEntry`
+collapses a group reduced to one entry back into a plain `image` block (reusing the block id), and
+`splitImageGroup` splits a group before an entry, collapsing either resulting one-entry side the
+same way.
 
 ### Patches (D10)
 
@@ -145,15 +151,22 @@ point for **external (LLM/server) edits** — see [Headless & server use](./head
 
 | Export | Signature |
 | --- | --- |
-| `caretAt` | `(blockId, offset) => TextSelection` |
+| `caretAt` | `(blockId, offset, entryId?) => TextSelection` |
 | `isCollapsed` | `(selection) => boolean` |
 | `clampSelection` | `(document, selection) => EditorSelection \| null` |
 | `getSelectedBlockRange` | `(document, selection) => { start, end } \| null` |
 | `selectionsEqual` | `(a, b) => boolean` |
 
 **Types:** `EditorSelection` (= `TextSelection \| BlockSelection`), `TextSelection`
-(`{ type: "text"; blockId; anchor; focus }`), `BlockSelection`
+(`{ type: "text"; blockId; entryId?; anchor; focus }`), `BlockSelection`
 (`{ type: "blocks"; anchorBlockId; focusBlockId }`).
+
+`entryId` addresses an editable region nested inside a block. It is omitted for a block's
+primary content (heading/text) and for a single image's caption; it is set to an entry id to
+target one caption inside an `imageGroup`. A `TextSelection` is valid (survives `clampSelection`)
+only when the `(blockId, entryId)` pair resolves to a real editable region — so an `entryId` on a
+heading/text/image selection, or a missing/unknown `entryId` on an `imageGroup` selection, clamps
+to `null`.
 
 ### Marks (range operations)
 
@@ -188,6 +201,10 @@ Every command runs as one undoable transaction and throws on invalid input.
 | `insertInlineNode(id, offset, node)` | `number` | Caret offset after the node. |
 | `updateInlineObject(id, offset, { data?, meta? })` | `void` | Edits a chip in place. |
 | `removeInlineNode(id, offset)` | `void` | |
+| `insertImageGroupEntry(groupId, afterEntryId \| null, entry)` | `void` | |
+| `updateImageGroupEntry(groupId, entryId, patch)` | `void` | Shallow patch; caption edits coalesce. |
+| `removeImageGroupEntry(groupId, entryId)` | `void` | Collapses to an image at one entry; deletes at zero. |
+| `splitImageGroup(groupId, beforeEntryId)` | `string` | Id of the new (second) block. |
 | `indent(id)` / `outdent(id)` | `void` | |
 | `moveSection(headingId, afterId \| null)` | `void` | Re-levels the subtree (D4). |
 | `deleteSection(headingId)` | `void` | |
@@ -257,7 +274,9 @@ The primary multi-block editor. Props (`DocumentEditorProps<TMeta>`):
 | `resolveImageSource?` | `(block: ImageBlock<TMeta>) => string \| undefined` |
 | `resolveImageContentSource?` | `(entry: ImageGroupEntry<TMeta>) => string \| undefined` |
 | `onRequestImage?` | `(context: ImageRequestContext) => ImageInsertionResult<TMeta> \| Promise<ImageInsertionResult<TMeta>>` |
+| `onRequestImageGroup?` | `(context: ImageRequestContext) => ImageGroupInsertionResult<TMeta> \| Promise<ImageGroupInsertionResult<TMeta>>` |
 | `onUploadImage?` | `(file: File) => ImageInsertionResult<TMeta> \| Promise<ImageInsertionResult<TMeta>>` |
+| `groupUploadedImages?` | `boolean` |
 | `slashItems?` | `CustomSlashItem<TMeta>[]` |
 | `inlineTagToNode?` | `(text: string) => InlineNode \| null` \| `false` |
 | `ariaLabel?` | `string` |
@@ -269,6 +288,11 @@ The primary multi-block editor. Props (`DocumentEditorProps<TMeta>`):
 `onRequestImage` enables the built-in `/image` slash item. `onUploadImage` handles pasted/dropped
 image files. Both callbacks keep upload/storage host-owned and return an image-block creation
 payload, or `null` / `undefined` to cancel.
+
+`onRequestImageGroup` enables the built-in `/image row` slash item and returns an image-group
+creation payload (one or more entries). When `groupUploadedImages` is `true`, pasting/dropping two
+or more image files at once inserts a single side-by-side `imageGroup` instead of separate image
+blocks; it defaults to `false` for back-compat, and a single file is always a plain image.
 
 #### `BlockEditor`
 

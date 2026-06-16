@@ -18,7 +18,15 @@ import { getInlineLength, getInlineText, splitInlineContent, concatInlineContent
 import { getActiveMarks, toggleMark } from "../core/marks";
 import { getHeadingNumbers, getListItemNumbers, formatHeadingNumber } from "../core/numbering";
 import { getSelectedBlockRange } from "../core/selection";
-import { createImageBlock, createTableBlock, createTextBlock, type CreateImageBlockInput } from "../core/factories";
+import {
+  createImageBlock,
+  createImageGroupBlock,
+  createTableBlock,
+  createTextBlock,
+  type CreateImageBlockInput,
+  type CreateImageGroupBlockInput,
+  type CreateImageGroupEntryInput,
+} from "../core/factories";
 import { isDurableImageUrl } from "../core/schema";
 import type {
   Block,
@@ -95,6 +103,13 @@ export type ImageInsertionResult<TMeta extends BlockMeta = BlockMeta> =
   | null
   | undefined;
 
+export type ImageGroupInsertionInput<TMeta extends BlockMeta = BlockMeta> = CreateImageGroupBlockInput<TMeta>;
+
+export type ImageGroupInsertionResult<TMeta extends BlockMeta = BlockMeta> =
+  | ImageGroupInsertionInput<TMeta>
+  | null
+  | undefined;
+
 export interface DocumentEditorProps<TMeta extends BlockMeta = BlockMeta> {
   value: WealthyDocument<TMeta>;
   onChange?: ((document: WealthyDocument<TMeta>, info: ChangeInfo) => void) | undefined;
@@ -128,12 +143,26 @@ export interface DocumentEditorProps<TMeta extends BlockMeta = BlockMeta> {
     | ((context: ImageRequestContext) => ImageInsertionResult<TMeta> | Promise<ImageInsertionResult<TMeta>>)
     | undefined;
   /**
+   * Called by the built-in `/image row` slash item. The host should return an
+   * image-group payload (one or more entries), or null to cancel. The item is
+   * only shown when this is provided.
+   */
+  onRequestImageGroup?:
+    | ((context: ImageRequestContext) => ImageGroupInsertionResult<TMeta> | Promise<ImageGroupInsertionResult<TMeta>>)
+    | undefined;
+  /**
    * Called for pasted/dropped image files. Upload/storage stays host-owned;
    * the returned payload is inserted as an image block.
    */
   onUploadImage?:
     | ((file: File) => ImageInsertionResult<TMeta> | Promise<ImageInsertionResult<TMeta>>)
     | undefined;
+  /**
+   * When true, pasting/dropping two or more image files at once inserts a
+   * single side-by-side `imageGroup` instead of separate image blocks. A single
+   * file is always inserted as a plain image. Defaults to false (back-compat).
+   */
+  groupUploadedImages?: boolean | undefined;
   /** Extra slash menu items (shown after the core block types and plugin items). */
   slashItems?: CustomSlashItem<TMeta>[] | undefined;
   /**
@@ -150,8 +179,36 @@ export interface DocumentEditorProps<TMeta extends BlockMeta = BlockMeta> {
   ref?: Ref<DocumentEditorApi<TMeta>> | undefined;
 }
 
+/**
+ * Addresses one editable InlineEditor in the document. `block` covers a
+ * heading/text primary editor; `imageCaption` a single image's caption;
+ * `imageGroupCaption` one caption inside an image group. The first two share a
+ * block id (a block is never both), so they serialize to the same registry id;
+ * group captions need the entry id to disambiguate siblings.
+ */
+type EditorKey =
+  | { kind: "block"; blockId: string }
+  | { kind: "imageCaption"; blockId: string }
+  | { kind: "imageGroupCaption"; blockId: string; entryId: string };
+
+function editorKeyId(key: EditorKey): string {
+  return key.kind === "imageGroupCaption" ? `${key.blockId}::${key.entryId}` : key.blockId;
+}
+
+function blockKey(blockId: string): EditorKey {
+  return { kind: "block", blockId };
+}
+
+/** Maps an uploaded image payload to a group entry input (entries have no `align`). */
+function imageInputToGroupEntry<TMeta extends BlockMeta>(
+  input: CreateImageBlockInput<TMeta>,
+): CreateImageGroupEntryInput<TMeta> {
+  const { align: _align, ...entry } = input;
+  return entry;
+}
+
 interface FocusRequest {
-  blockId: string;
+  key: EditorKey;
   offset: number;
   token: number;
 }
@@ -236,7 +293,9 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     resolveImageSource,
     resolveImageContentSource,
     onRequestImage,
+    onRequestImageGroup,
     onUploadImage,
+    groupUploadedImages = false,
   } = props;
 
   const messages = useMemo(
@@ -292,9 +351,9 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
   const appliedFocusTokenRef = useRef(0);
 
-  const requestFocus = useCallback((blockId: string, offset: number) => {
+  const requestFocus = useCallback((key: EditorKey, offset: number) => {
     focusTokenRef.current += 1;
-    setFocusRequest({ blockId, offset, token: focusTokenRef.current });
+    setFocusRequest({ key, offset, token: focusTokenRef.current });
   }, []);
 
   useLayoutEffect(() => {
@@ -302,14 +361,15 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
       return;
     }
     appliedFocusTokenRef.current = focusRequest.token;
-    editorsRef.current.get(focusRequest.blockId)?.focus(focusRequest.offset);
+    editorsRef.current.get(editorKeyId(focusRequest.key))?.focus(focusRequest.offset);
   }, [focusRequest]);
 
-  const registerEditor = useCallback((blockId: string, handle: InlineEditorHandle | null) => {
+  const registerEditor = useCallback((key: EditorKey, handle: InlineEditorHandle | null) => {
+    const id = editorKeyId(key);
     if (handle === null) {
-      editorsRef.current.delete(blockId);
+      editorsRef.current.delete(id);
     } else {
-      editorsRef.current.set(blockId, handle);
+      editorsRef.current.set(id, handle);
     }
   }, []);
 
@@ -333,11 +393,14 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
   const [slashIndex, setSlashIndex] = useState(0);
   const allSlashItems = useMemo(
     () => [
-      ...buildCoreSlashItems(messages, { includeImage: onRequestImage !== undefined }),
+      ...buildCoreSlashItems(messages, {
+        includeImage: onRequestImage !== undefined,
+        includeImageGroup: onRequestImageGroup !== undefined,
+      }),
       ...(props.slashItems ?? []),
       ...registry.slashItems,
     ],
-    [messages, onRequestImage, props.slashItems, registry],
+    [messages, onRequestImage, onRequestImageGroup, props.slashItems, registry],
   );
   const slashItems = useMemo(
     () => (slash === null ? [] : filterSlashItems(allSlashItems, slash.query)),
@@ -372,6 +435,13 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     [insertBlocksAfter],
   );
 
+  const insertImageGroupAfter = useCallback(
+    (afterBlockId: string | null, input: ImageGroupInsertionInput<TMeta>) => {
+      insertBlocksAfter(afterBlockId, [createImageGroupBlock<TMeta>(input)]);
+    },
+    [insertBlocksAfter],
+  );
+
   const insertBlocksAtTextSelection = useCallback(
     (selection: { blockId: string; anchor: number; focus: number }, pasted: Block<TMeta>[], inlineSingleParagraph: boolean) => {
       if (pasted.length === 0) {
@@ -393,7 +463,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
       if (inlineSingleParagraph && only !== undefined && only.type === "text" && only.variant === "paragraph") {
         const merged = concatInlineContent(concatInlineContent(left, only.content), right);
         commands.updateBlock(block.id, { content: merged });
-        requestFocus(block.id, getInlineLength(left) + getInlineLength(only.content));
+        requestFocus(blockKey(block.id), getInlineLength(left) + getInlineLength(only.content));
         return;
       }
 
@@ -431,11 +501,11 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
 
       // Caret goes to the remainder, else the end of the last text-like pasted block.
       if (rightBlock !== null) {
-        requestFocus(rightBlock.id, 0);
+        requestFocus(blockKey(rightBlock.id), 0);
       } else {
         const lastTextLike = [...pasted].reverse().find((candidate) => isTextLike(candidate));
         if (lastTextLike !== undefined && isTextLike(lastTextLike)) {
-          requestFocus(lastTextLike.id, getInlineLength(lastTextLike.content));
+          requestFocus(blockKey(lastTextLike.id), getInlineLength(lastTextLike.content));
         }
       }
     },
@@ -448,11 +518,17 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
         return [];
       }
       const inputs = await Promise.all(files.map((file) => onUploadImage(file)));
-      return inputs
-        .filter((input): input is ImageInsertionInput<TMeta> => input !== null && input !== undefined)
-        .map((input) => createImageBlock<TMeta>(input));
+      const resolved = inputs.filter(
+        (input): input is ImageInsertionInput<TMeta> => input !== null && input !== undefined,
+      );
+      // Multiple files become one side-by-side group when opted in; a single
+      // file (or the default) stays a plain image block per upload.
+      if (groupUploadedImages && resolved.length >= 2) {
+        return [createImageGroupBlock<TMeta>({ images: resolved.map(imageInputToGroupEntry) })];
+      }
+      return resolved.map((input) => createImageBlock<TMeta>(input));
     },
-    [onUploadImage],
+    [onUploadImage, groupUploadedImages],
   );
 
   const applySlashItem = useCallback(
@@ -482,7 +558,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
           commands,
           insertInlineNode: (node) => {
             const caret = commands.insertInlineNode(current.id, slash.slashOffset, node);
-            requestFocus(current.id, caret);
+            requestFocus(blockKey(current.id), caret);
           },
         });
         return;
@@ -517,12 +593,33 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
             }).catch(() => undefined);
           }
           break;
+        case "image-group":
+          if (onRequestImageGroup !== undefined) {
+            void Promise.resolve(onRequestImageGroup({ blockId: current.id, query: slash.query })).then((input) => {
+              if (input !== null && input !== undefined && input.images.length > 0) {
+                insertImageGroupAfter(current.id, input);
+              }
+            }).catch(() => undefined);
+          }
+          break;
         default:
           break;
       }
-      requestFocus(current.id, slash.slashOffset);
+      requestFocus(blockKey(current.id), slash.slashOffset);
     },
-    [slash, engine, commands, closeSlash, requestFocus, props.slashItems, registry, onRequestImage, insertImageAfter],
+    [
+      slash,
+      engine,
+      commands,
+      closeSlash,
+      requestFocus,
+      props.slashItems,
+      registry,
+      onRequestImage,
+      insertImageAfter,
+      onRequestImageGroup,
+      insertImageGroupAfter,
+    ],
   );
 
   // ---- content change pipeline (input rules + slash detection) ----
@@ -541,7 +638,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
           const [, remainder] = splitInlineContent(inline, match.prefixLength);
           commands.updateBlock(blockId, { content: remainder });
           commands.turnInto(blockId, match.target);
-          requestFocus(blockId, 0);
+          requestFocus(blockKey(blockId), 0);
           closeSlash();
           return;
         }
@@ -559,7 +656,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
             commands.updateBlock(blockId, {
               content: concatInlineContent(concatInlineContent(left, [node]), right),
             });
-            requestFocus(blockId, start + getInlineNodeLength(node));
+            requestFocus(blockKey(blockId), start + getInlineNodeLength(node));
             closeSlash();
             return;
           }
@@ -744,11 +841,11 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
   const handleEnter = useCallback(
     (blockId: string, offset: number) => {
       const block = engine.getDocument().blocks.find((candidate) => candidate.id === blockId);
-      // Captions are single-line: Enter exits the image into a fresh paragraph
-      // below it rather than splitting the caption.
-      if (block?.type === "image") {
+      // Captions are single-line: Enter exits the image (or image group) into a
+      // fresh paragraph below it rather than splitting the caption.
+      if (block?.type === "image" || block?.type === "imageGroup") {
         const newId = commands.insertBlockAfter(blockId, createTextBlock({ content: [] }) as Block<TMeta>);
-        requestFocus(newId, 0);
+        requestFocus(blockKey(newId), 0);
         return;
       }
       // Enter on an empty list item exits the list instead of adding another
@@ -765,17 +862,17 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
         } else {
           commands.turnInto(blockId, { type: "text", variant: "paragraph" });
         }
-        requestFocus(blockId, 0);
+        requestFocus(blockKey(blockId), 0);
         return;
       }
       const newBlockId = commands.splitBlock(blockId, offset);
-      requestFocus(newBlockId, 0);
+      requestFocus(blockKey(newBlockId), 0);
     },
     [engine, commands, requestFocus],
   );
 
   const handleBackspaceAtStart = useCallback(
-    (blockId: string) => {
+    (blockId: string, entryId?: string) => {
       const blocks = engine.getDocument().blocks;
       const index = blocks.findIndex((candidate) => candidate.id === blockId);
       const block = index === -1 ? undefined : blocks[index];
@@ -792,7 +889,35 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
         const previous = index > 0 ? blocks[index - 1] : undefined;
         commands.deleteBlock(blockId);
         if (previous !== undefined && isTextLike(previous)) {
-          requestFocus(previous.id, Number.MAX_SAFE_INTEGER);
+          requestFocus(blockKey(previous.id), Number.MAX_SAFE_INTEGER);
+        }
+        return;
+      }
+      // Backspace at the start of an empty group caption removes that entry,
+      // which may collapse the group to a single image or delete the block.
+      if (block.type === "imageGroup") {
+        if (entryId === undefined) {
+          return;
+        }
+        const entryIndex = block.images.findIndex((candidate) => candidate.id === entryId);
+        const entry = entryIndex === -1 ? undefined : block.images[entryIndex];
+        if (entry === undefined) {
+          return;
+        }
+        if (entry.caption !== undefined && getInlineLength(entry.caption) > 0) {
+          return;
+        }
+        const previousEntry = entryIndex > 0 ? block.images[entryIndex - 1] : undefined;
+        const previousBlock = index > 0 ? blocks[index - 1] : undefined;
+        commands.removeImageGroupEntry(blockId, entryId);
+        const after = engine.getDocument().blocks.find((candidate) => candidate.id === blockId);
+        if (after?.type === "imageGroup") {
+          const target = previousEntry ?? after.images[0]!;
+          requestFocus({ kind: "imageGroupCaption", blockId, entryId: target.id }, Number.MAX_SAFE_INTEGER);
+        } else if (after?.type === "image") {
+          requestFocus({ kind: "imageCaption", blockId }, Number.MAX_SAFE_INTEGER);
+        } else if (previousBlock !== undefined && isTextLike(previousBlock)) {
+          requestFocus(blockKey(previousBlock.id), Number.MAX_SAFE_INTEGER);
         }
         return;
       }
@@ -819,7 +944,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
         return;
       }
       const offset = commands.mergeWithPrevious(blockId);
-      requestFocus(previous.id, offset);
+      requestFocus(blockKey(previous.id), offset);
     },
     [engine, commands, requestFocus],
   );
@@ -846,32 +971,50 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     const blocks = engine.getDocument().blocks;
     const last = blocks[blocks.length - 1];
     const newId = commands.insertBlockAfter(last?.id ?? null, createTextBlock({ content: [] }) as Block<TMeta>);
-    requestFocus(newId, 0);
+    requestFocus(blockKey(newId), 0);
   }, [engine, commands, requestFocus]);
 
   const moveFocus = useCallback(
-    (blockId: string, direction: -1 | 1): boolean => {
+    (blockId: string, direction: -1 | 1, entryId?: string): boolean => {
       const blocks = engine.getDocument().blocks;
       const index = blocks.findIndex((candidate) => candidate.id === blockId);
       if (index === -1) {
         return false;
       }
-      // Preserve the caret's column across the jump (like native editors).
-      const sourceElement = editorsRef.current.get(blockId)?.getElement();
+      // Preserve the caret's column across the jump (like native editors). The
+      // source may be a group caption, so address it by its full editor key.
+      const sourceKey: EditorKey =
+        entryId !== undefined ? { kind: "imageGroupCaption", blockId, entryId } : blockKey(blockId);
+      const sourceElement = editorsRef.current.get(editorKeyId(sourceKey))?.getElement();
       const caretX = sourceElement != null ? getCaretViewportX(sourceElement) : null;
+
+      const landOn = (key: EditorKey, targetElement: HTMLElement | null): void => {
+        let offset: number | null = null;
+        if (caretX !== null && targetElement !== null) {
+          offset = getOffsetNearViewportX(targetElement, caretX, direction === -1 ? "last" : "first");
+        }
+        requestFocus(key, offset ?? (direction === -1 ? Number.MAX_SAFE_INTEGER : 0));
+      };
 
       for (let cursor = index + direction; cursor >= 0 && cursor < blocks.length; cursor += direction) {
         const candidate = blocks[cursor]!;
+        // An image group has one caption editor per entry; vertical nav lands on
+        // the entry nearest the entry edge (first going down, last going up).
+        if (candidate.type === "imageGroup" && candidate.images.length > 0) {
+          const entry = direction === -1 ? candidate.images[candidate.images.length - 1]! : candidate.images[0]!;
+          const key: EditorKey = { kind: "imageGroupCaption", blockId: candidate.id, entryId: entry.id };
+          const handle = editorsRef.current.get(editorKeyId(key));
+          if (handle !== undefined) {
+            landOn(key, handle.getElement());
+            return true;
+          }
+          continue;
+        }
         const handle = editorsRef.current.get(candidate.id);
         // Image blocks have no primary editor, but their caption is editable —
         // navigation lands on it just like a text-like block.
         if ((isTextLike(candidate) || candidate.type === "image") && handle !== undefined) {
-          let offset: number | null = null;
-          const targetElement = handle.getElement();
-          if (caretX !== null && targetElement !== null) {
-            offset = getOffsetNearViewportX(targetElement, caretX, direction === -1 ? "last" : "first");
-          }
-          requestFocus(candidate.id, offset ?? (direction === -1 ? Number.MAX_SAFE_INTEGER : 0));
+          landOn(blockKey(candidate.id), handle.getElement());
           return true;
         }
       }
@@ -891,8 +1034,14 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
 
   // ---- selection: inline tracking + block multi-select ----
   const handleSelectionChange = useCallback(
-    (blockId: string, start: number, end: number) => {
-      editor.setSelection({ type: "text", blockId, anchor: start, focus: end });
+    (blockId: string, start: number, end: number, entryId?: string) => {
+      editor.setSelection({
+        type: "text",
+        blockId,
+        ...(entryId !== undefined ? { entryId } : {}),
+        anchor: start,
+        focus: end,
+      });
     },
     [editor],
   );
@@ -1035,6 +1184,10 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
 
   // ---- floating toolbar ----
   const textSelection = editor.selection?.type === "text" ? editor.selection : null;
+  // The `isTextLike` filter intentionally excludes image and image-group
+  // caption selections: captions are editable but get no formatting toolbar for
+  // now (they carry an entryId / target caption content the mark commands don't
+  // address yet). This keeps the toolbar from acting on the wrong inline target.
   const toolbarTarget =
     textSelection !== null && textSelection.anchor !== textSelection.focus
       ? document.blocks.find((candidate) => candidate.id === textSelection.blockId && isTextLike(candidate))
@@ -1307,15 +1460,15 @@ interface BlockRowProps {
   dropIndicator: "before" | "after" | null;
   headingNumber: number[] | null;
   listNumber: number | null;
-  registerEditor(blockId: string, handle: InlineEditorHandle | null): void;
+  registerEditor(key: EditorKey, handle: InlineEditorHandle | null): void;
   onContentChange(blockId: string, content: InlineNode[], caret: number | null): void;
-  onSelectionChange(blockId: string, start: number, end: number): void;
+  onSelectionChange(blockId: string, start: number, end: number, entryId?: string): void;
   onEnter(blockId: string, offset: number): void;
-  onBackspaceAtStart(blockId: string): void;
+  onBackspaceAtStart(blockId: string, entryId?: string): void;
   onTab(blockId: string, shift: boolean): void;
   onEditorFocus(blockId: string): void;
   onEditorBlur(blockId: string): void;
-  onMoveFocus(blockId: string, direction: -1 | 1): boolean;
+  onMoveFocus(blockId: string, direction: -1 | 1, entryId?: string): boolean;
   onHandleClick(blockId: string, shiftKey: boolean): void;
   onToggleCollapsed(headingId: string): void;
   onDropIndicatorChange(indicator: DropIndicator | null): void;
@@ -1444,7 +1597,7 @@ function BlockRow({
               <span className="wte-block__number">{formatHeadingNumber(headingNumber)}.</span>
             )}
             <InlineEditor
-              ref={(handle) => registerEditor(block.id, handle)}
+              ref={(handle) => registerEditor(blockKey(block.id), handle)}
               as={`h${block.level}` as "h1"}
               content={block.content}
               readOnly={readOnly}
@@ -1472,7 +1625,7 @@ function BlockRow({
               <span className="wte-block__marker">{listNumber ?? "•"}.</span>
             )}
             <InlineEditor
-              ref={(handle) => registerEditor(block.id, handle)}
+              ref={(handle) => registerEditor(blockKey(block.id), handle)}
               as="p"
               content={block.content}
               readOnly={readOnly}
@@ -1508,7 +1661,7 @@ function BlockRow({
             readOnly={readOnly}
             resolveImageSource={resolveImageSource as ((block: ImageBlock) => string | undefined) | undefined}
             onImageChange={(patch) => commandsUpdateBlock(block.id, patch)}
-            registerCaptionEditor={(handle) => registerEditor(block.id, handle)}
+            registerCaptionEditor={(handle) => registerEditor({ kind: "imageCaption", blockId: block.id }, handle)}
             onCaptionSelectionChange={(start, end) => onSelectionChange(block.id, start, end)}
             onCaptionFocus={() => onEditorFocus(block.id)}
             onCaptionBlur={() => onEditorBlur(block.id)}
@@ -1525,6 +1678,16 @@ function BlockRow({
             readOnly={readOnly}
             resolveImageContentSource={resolveImageContentSource as ((entry: ImageGroupEntry) => string | undefined) | undefined}
             onImageGroupChange={(patch) => commandsUpdateBlock(block.id, patch)}
+            registerCaptionEditor={(entryId, handle) =>
+              registerEditor({ kind: "imageGroupCaption", blockId: block.id, entryId }, handle)
+            }
+            onCaptionSelectionChange={(entryId, start, end) => onSelectionChange(block.id, start, end, entryId)}
+            onCaptionFocus={() => onEditorFocus(block.id)}
+            onCaptionBlur={() => onEditorBlur(block.id)}
+            onCaptionEnter={() => onEnter(block.id, 0)}
+            onCaptionBackspaceAtStart={(entryId) => onBackspaceAtStart(block.id, entryId)}
+            onCaptionArrowUp={(entryId) => onMoveFocus(block.id, -1, entryId)}
+            onCaptionArrowDown={(entryId) => onMoveFocus(block.id, 1, entryId)}
           />
         )}
 

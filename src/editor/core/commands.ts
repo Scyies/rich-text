@@ -4,7 +4,7 @@ import { createHistory, type HistoryEntry } from "./history";
 import { applyPatches, type DocumentPatch } from "./patches";
 import { clampSelection, selectionsEqual, type EditorSelection } from "./selection";
 import { getSection, getSectionTree, type Section, type SectionTree } from "./sections";
-import type { Block, BlockMeta, InlineNode, WealthyDocument } from "./schema";
+import type { Block, BlockMeta, ImageGroupEntry, InlineNode, WealthyDocument } from "./schema";
 import * as transforms from "./transforms";
 import type { TurnIntoTarget } from "./transforms";
 
@@ -68,6 +68,25 @@ export interface EditorCommands<TBlockMeta extends BlockMeta = BlockMeta> {
   ): void;
   /** Removes the inline node (one inline unit, e.g. a chip) at `offset`. */
   removeInlineNode(blockId: string, offset: number): void;
+  /** Inserts an image-group entry after `afterEntryId` (null = at the start). */
+  insertImageGroupEntry(
+    groupId: string,
+    afterEntryId: string | null,
+    entry: ImageGroupEntry<TBlockMeta>,
+  ): void;
+  /** Shallow-merges a patch into one image-group entry (`id` is immutable). */
+  updateImageGroupEntry(
+    groupId: string,
+    entryId: string,
+    patch: Partial<Omit<ImageGroupEntry<TBlockMeta>, "id">>,
+  ): void;
+  /**
+   * Removes an image-group entry. The last entry deletes the block; reducing
+   * the group to one entry collapses it to a plain image block (same slot).
+   */
+  removeImageGroupEntry(groupId: string, entryId: string): void;
+  /** Splits a group before `beforeEntryId`. Returns the new (second) block id. */
+  splitImageGroup(groupId: string, beforeEntryId: string): string;
   indent(blockId: string): void;
   outdent(blockId: string): void;
   moveSection(headingId: string, afterBlockId: string | null): void;
@@ -188,6 +207,38 @@ export function createEditorEngine<
       const newBlockId = generateBlockId();
       return transact("splitBlock", null, (current) => ({
         document: transforms.splitBlock(current, blockId, offset, newBlockId),
+        result: newBlockId,
+      }));
+    },
+
+    insertImageGroupEntry(groupId, afterEntryId, entry) {
+      transact("insertImageGroupEntry", null, (current) => ({
+        document: transforms.insertImageGroupEntry(current, groupId, afterEntryId, entry),
+        result: undefined,
+      }));
+    },
+
+    updateImageGroupEntry(groupId, entryId, patch) {
+      // Caption typing coalesces per entry, like primary-content edits.
+      const keys = Object.keys(patch);
+      const coalesceKey = keys.length === 1 && keys[0] === "caption" ? `caption:${groupId}:${entryId}` : null;
+      transact("updateImageGroupEntry", coalesceKey, (current) => ({
+        document: transforms.updateImageGroupEntry(current, groupId, entryId, patch),
+        result: undefined,
+      }));
+    },
+
+    removeImageGroupEntry(groupId, entryId) {
+      transact("removeImageGroupEntry", null, (current) => ({
+        document: transforms.removeImageGroupEntry(current, groupId, entryId),
+        result: undefined,
+      }));
+    },
+
+    splitImageGroup(groupId, beforeEntryId) {
+      const newBlockId = generateBlockId();
+      return transact("splitImageGroup", null, (current) => ({
+        document: transforms.splitImageGroup(current, groupId, beforeEntryId, newBlockId),
         result: newBlockId,
       }));
     },

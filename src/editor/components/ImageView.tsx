@@ -38,6 +38,18 @@ export interface ImageGroupViewProps {
   readOnly?: boolean | undefined;
   resolveImageContentSource?: ((entry: ImageGroupEntry) => string | undefined) | undefined;
   onImageGroupChange(patch: { images?: ImageGroupBlock["images"] }): void;
+  /**
+   * Caption editor wiring, addressed per entry so the host can register,
+   * focus, and navigate each group caption independently.
+   */
+  registerCaptionEditor?: ((entryId: string, handle: InlineEditorHandle | null) => void) | undefined;
+  onCaptionSelectionChange?: ((entryId: string, start: number, end: number) => void) | undefined;
+  onCaptionFocus?: ((entryId: string) => void) | undefined;
+  onCaptionBlur?: ((entryId: string) => void) | undefined;
+  onCaptionEnter?: ((entryId: string) => void) | undefined;
+  onCaptionBackspaceAtStart?: ((entryId: string) => void) | undefined;
+  onCaptionArrowUp?: ((entryId: string) => boolean) | undefined;
+  onCaptionArrowDown?: ((entryId: string) => boolean) | undefined;
 }
 
 interface DragState {
@@ -113,6 +125,14 @@ export function ImageGroupView({
   readOnly = false,
   resolveImageContentSource,
   onImageGroupChange,
+  registerCaptionEditor,
+  onCaptionSelectionChange,
+  onCaptionFocus,
+  onCaptionBlur,
+  onCaptionEnter,
+  onCaptionBackspaceAtStart,
+  onCaptionArrowUp,
+  onCaptionArrowDown,
 }: ImageGroupViewProps) {
   const widths = resolveImageGroupColumnWidths(block.images);
   const figureStyle = block.align !== undefined ? { textAlign: block.align } : undefined;
@@ -143,6 +163,24 @@ export function ImageGroupView({
                 showCaption={!readOnly || entry.caption !== undefined}
                 honorPercentSize={false}
                 onContentChange={(patch) => updateEntry(entry.id, patch)}
+                registerCaptionEditor={
+                  registerCaptionEditor !== undefined
+                    ? (handle) => registerCaptionEditor(entry.id, handle)
+                    : undefined
+                }
+                onCaptionSelectionChange={
+                  onCaptionSelectionChange !== undefined
+                    ? (start, end) => onCaptionSelectionChange(entry.id, start, end)
+                    : undefined
+                }
+                onCaptionFocus={onCaptionFocus !== undefined ? () => onCaptionFocus(entry.id) : undefined}
+                onCaptionBlur={onCaptionBlur !== undefined ? () => onCaptionBlur(entry.id) : undefined}
+                onCaptionEnter={onCaptionEnter !== undefined ? () => onCaptionEnter(entry.id) : undefined}
+                onCaptionBackspaceAtStart={
+                  onCaptionBackspaceAtStart !== undefined ? () => onCaptionBackspaceAtStart(entry.id) : undefined
+                }
+                onCaptionArrowUp={onCaptionArrowUp !== undefined ? () => onCaptionArrowUp(entry.id) : undefined}
+                onCaptionArrowDown={onCaptionArrowDown !== undefined ? () => onCaptionArrowDown(entry.id) : undefined}
               />
             </figure>
           );

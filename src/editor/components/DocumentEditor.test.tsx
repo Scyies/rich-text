@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHeadingBlock, createImageBlock, createImageGroupBlock, createTableBlock, createTextBlock } from "../core/factories";
 import { createSeparatorBlock } from "../plugins/separator-core";
 import { separatorPlugin } from "../plugins/separator";
-import { SCHEMA_VERSION, type Block, type ImageBlock, type TextBlock, type WealthyDocument } from "../core/schema";
+import { SCHEMA_VERSION, type Block, type ImageBlock, type ImageGroupBlock, type TextBlock, type WealthyDocument } from "../core/schema";
 import { setCaretOffset } from "./dom";
 import { DocumentEditor } from "./DocumentEditor";
 
@@ -481,6 +481,114 @@ describe("DocumentEditor", () => {
 
     fireEvent.keyDown(caption, { key: "ArrowUp" });
     expect(document.activeElement).toBe(above);
+  });
+
+  it("edits the targeted entry caption in an image group", () => {
+    const group = createImageGroupBlock({
+      images: [
+        { source: { type: "url", url: "https://example.com/a.png" }, caption: "A" },
+        { source: { type: "url", url: "https://example.com/b.png" }, caption: "B" },
+      ],
+    });
+    const onChange = vi.fn();
+    const { container } = render(<DocumentEditor value={docWith([group])} onChange={onChange} />);
+
+    const captions = container.querySelectorAll("figcaption.wte-inline-editor");
+    expect(captions).toHaveLength(2);
+    const second = captions[1] as HTMLElement;
+    second.textContent = "B updated";
+    fireEvent.input(second);
+
+    const images = (onChange.mock.lastCall![0] as WealthyDocument).blocks[0] as ImageGroupBlock;
+    expect(images.images[0]!.caption).toEqual([{ type: "text", text: "A" }]);
+    expect(images.images[1]!.caption).toEqual([{ type: "text", text: "B updated" }]);
+  });
+
+  it("ArrowDown/ArrowUp navigates into and out of an image group caption", () => {
+    const para = createTextBlock({ content: "above" });
+    const group = createImageGroupBlock({
+      images: [
+        { source: { type: "url", url: "https://example.com/a.png" } },
+        { source: { type: "url", url: "https://example.com/b.png" } },
+      ],
+    });
+    const { container } = render(<DocumentEditor value={docWith([para, group])} />);
+
+    const above = getBlockElement(para.id);
+    const firstCaption = container.querySelector("figcaption.wte-inline-editor") as HTMLElement;
+    above.focus();
+    setCaretOffset(above, 2);
+    fireEvent.keyDown(above, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(firstCaption);
+
+    fireEvent.keyDown(firstCaption, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(above);
+  });
+
+  it("Enter in an image group caption exits into a new paragraph below it", () => {
+    const group = createImageGroupBlock({
+      images: [
+        { source: { type: "url", url: "https://example.com/a.png" } },
+        { source: { type: "url", url: "https://example.com/b.png" } },
+      ],
+    });
+    const onChange = vi.fn();
+    const { container } = render(<DocumentEditor value={docWith([group])} onChange={onChange} />);
+
+    const caption = container.querySelector("figcaption.wte-inline-editor") as HTMLElement;
+    caption.focus();
+    setCaretOffset(caption, 0);
+    fireEvent.keyDown(caption, { key: "Enter" });
+
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect(latest.blocks.map((b) => b.type)).toEqual(["imageGroup", "text"]);
+  });
+
+  it("Backspace in an empty group caption removes the entry, collapsing to an image at one", () => {
+    const group = createImageGroupBlock({
+      images: [
+        { source: { type: "url", url: "https://example.com/a.png" } },
+        { source: { type: "url", url: "https://example.com/b.png" } },
+      ],
+    });
+    const onChange = vi.fn();
+    const { container } = render(<DocumentEditor value={docWith([group])} onChange={onChange} />);
+
+    const second = container.querySelectorAll("figcaption.wte-inline-editor")[1] as HTMLElement;
+    second.focus();
+    setCaretOffset(second, 0);
+    fireEvent.keyDown(second, { key: "Backspace" });
+
+    // 2 -> 1 collapses the group to a plain image block.
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect(latest.blocks.map((b) => b.type)).toEqual(["image"]);
+  });
+
+  it("inserts an image group via the /image row slash item", async () => {
+    const block = createTextBlock({ content: "" });
+    const onChange = vi.fn();
+    const onRequestImageGroup = vi.fn(() => ({
+      images: [
+        { source: { type: "url" as const, url: "https://example.com/a.png" } },
+        { source: { type: "url" as const, url: "https://example.com/b.png" } },
+      ],
+    }));
+    render(
+      <DocumentEditor value={docWith([block])} onChange={onChange} onRequestImageGroup={onRequestImageGroup} />,
+    );
+
+    const element = getBlockElement(block.id);
+    typeInto(element, "/", 1);
+    typeInto(element, "/image", 6);
+    const rowOption = screen.getAllByRole("option").find((option) => option.textContent?.startsWith("Image row"));
+    expect(rowOption).toBeTruthy();
+    fireEvent.mouseDown(rowOption!);
+
+    expect(onRequestImageGroup).toHaveBeenCalled();
+    await waitFor(() => {
+      const latest = onChange.mock.lastCall![0] as WealthyDocument;
+      expect(latest.blocks.some((candidate) => candidate.type === "imageGroup")).toBe(true);
+    });
   });
 
   it("shows a resize handle on editable images but not in read-only mode", () => {

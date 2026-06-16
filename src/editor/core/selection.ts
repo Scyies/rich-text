@@ -1,5 +1,5 @@
 import { getInlineLength } from "./inline";
-import type { BlockMeta, WealthyDocument } from "./schema";
+import type { Block, BlockMeta, InlineNode, WealthyDocument } from "./schema";
 
 /**
  * Selection model (D7): inline text selection lives inside a single block
@@ -10,6 +10,12 @@ import type { BlockMeta, WealthyDocument } from "./schema";
 export interface TextSelection {
   type: "text";
   blockId: string;
+  /**
+   * Addresses an editable region nested inside the block. Omitted for a
+   * block's primary content (heading/text) and for a single image's caption;
+   * set to an entry id to target one caption inside an `imageGroup`.
+   */
+  entryId?: string;
   anchor: number;
   focus: number;
 }
@@ -34,7 +40,7 @@ export function selectionsEqual(a: EditorSelection | null, b: EditorSelection | 
     return false;
   }
   if (a.type === "text" && b.type === "text") {
-    return a.blockId === b.blockId && a.anchor === b.anchor && a.focus === b.focus;
+    return a.blockId === b.blockId && a.entryId === b.entryId && a.anchor === b.anchor && a.focus === b.focus;
   }
   if (a.type === "blocks" && b.type === "blocks") {
     return a.anchorBlockId === b.anchorBlockId && a.focusBlockId === b.focusBlockId;
@@ -42,8 +48,40 @@ export function selectionsEqual(a: EditorSelection | null, b: EditorSelection | 
   return false;
 }
 
-export function caretAt(blockId: string, offset: number): TextSelection {
-  return { type: "text", blockId, anchor: offset, focus: offset };
+export function caretAt(blockId: string, offset: number, entryId?: string): TextSelection {
+  return {
+    type: "text",
+    blockId,
+    ...(entryId !== undefined ? { entryId } : {}),
+    anchor: offset,
+    focus: offset,
+  };
+}
+
+/**
+ * The inline content a text selection points at, or null when the
+ * (block, entryId) pair is not a valid editable region:
+ * - heading/text: the block's own content; invalid with an entryId.
+ * - image: the caption; invalid with an entryId.
+ * - imageGroup: the matching entry's caption; invalid without an entryId.
+ */
+function resolveSelectionContent(block: Block<BlockMeta>, entryId: string | undefined): InlineNode[] | null {
+  switch (block.type) {
+    case "heading":
+    case "text":
+      return entryId === undefined ? block.content : null;
+    case "image":
+      return entryId === undefined ? (block.caption ?? []) : null;
+    case "imageGroup": {
+      if (entryId === undefined) {
+        return null;
+      }
+      const entry = block.images.find((candidate) => candidate.id === entryId);
+      return entry === undefined ? null : (entry.caption ?? []);
+    }
+    default:
+      return null;
+  }
 }
 
 /**
@@ -60,10 +98,14 @@ export function clampSelection(
 
   if (selection.type === "text") {
     const block = document.blocks.find((candidate) => candidate.id === selection.blockId);
-    if (block === undefined || (block.type !== "heading" && block.type !== "text")) {
+    if (block === undefined) {
       return null;
     }
-    const length = getInlineLength(block.content);
+    const content = resolveSelectionContent(block, selection.entryId);
+    if (content === null) {
+      return null;
+    }
+    const length = getInlineLength(content);
     return {
       ...selection,
       anchor: Math.min(Math.max(selection.anchor, 0), length),

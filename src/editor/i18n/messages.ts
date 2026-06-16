@@ -22,6 +22,7 @@ export interface EditorMessages {
   slashNumberedList: string;
   slashTable: string;
   slashImage: string;
+  slashImageGroup: string;
   slashNoResults: string;
   slashMenuAriaLabel: string;
 
@@ -73,6 +74,7 @@ export const en: EditorMessages = {
   slashNumberedList: "Numbered list",
   slashTable: "Table",
   slashImage: "Image",
+  slashImageGroup: "Image row",
   slashNoResults: "No results",
   slashMenuAriaLabel: "Block types",
 
@@ -118,6 +120,7 @@ export const ptBR: EditorMessages = {
   slashNumberedList: "Lista numerada",
   slashTable: "Tabela",
   slashImage: "Imagem",
+  slashImageGroup: "Linha de imagens",
   slashNoResults: "Nenhum resultado",
   slashMenuAriaLabel: "Tipos de bloco",
 

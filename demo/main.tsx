@@ -4,6 +4,7 @@ import {
   SCHEMA_VERSION,
   createCustomBlock,
   createHeadingBlock,
+  createImageGroupBlock,
   createSeparatorBlock,
   createTableBlock,
   createTextBlock,
@@ -125,6 +126,22 @@ function buildSampleDocument(): WealthyDocument {
       createTextBlock({ variant: "numbered", content: "First legal ground" }),
       createTextBlock({ variant: "numbered", content: "Second legal ground" }),
       createTableBlock({ columnCount: 3, rowCount: 2 }),
+      createImageGroupBlock({
+        gap: 12,
+        images: [
+          {
+            source: { type: "url", url: new URL("/coal-badge.png", location.origin).href },
+            altText: "Coal badge",
+            caption: "Left",
+            columnWidth: { value: 40, unit: "percent" },
+          },
+          {
+            source: { type: "url", url: new URL("/coal-badge.png", location.origin).href },
+            altText: "Coal badge",
+            caption: "Right",
+          },
+        ],
+      }),
       createCustomBlock({ kind: "callout", data: { text: "Host-rendered custom block (plugin blockType)." } }),
       createTextBlock({ content: "" }),
     ],
@@ -145,6 +162,17 @@ function App() {
 
   function requestImage() {
     return { source: { type: "url" as const, url: new URL("/coal-badge.png", location.origin).href }, altText: "Coal badge" };
+  }
+
+  function requestImageGroup() {
+    const url = new URL("/coal-badge.png", location.origin).href;
+    return {
+      gap: 12,
+      images: [
+        { source: { type: "url" as const, url }, altText: "Coal badge", caption: "First" },
+        { source: { type: "url" as const, url }, altText: "Coal badge", caption: "Second" },
+      ],
+    };
   }
 
   function uploadImage(file: File) {
@@ -203,9 +231,14 @@ function App() {
             showHeadingNumbers
             locale={locale}
             onRequestImage={requestImage}
+            onRequestImageGroup={requestImageGroup}
             onUploadImage={uploadImage}
+            groupUploadedImages
             resolveImageSource={(block) =>
               block.source.type === "asset" ? assetUrls.current.get(block.source.id) : undefined
+            }
+            resolveImageContentSource={(entry) =>
+              entry.source.type === "asset" ? assetUrls.current.get(entry.source.id) : undefined
             }
           />
         </div>

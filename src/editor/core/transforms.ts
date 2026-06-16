@@ -7,6 +7,10 @@ import {
   type BlockMeta,
   type HeadingBlock,
   type HeadingLevel,
+  type ImageAlign,
+  type ImageBlock,
+  type ImageGroupBlock,
+  type ImageGroupEntry,
   type InlineNode,
   type TextBlock,
   type TextVariant,
@@ -368,6 +372,171 @@ function shiftIndent<TMeta extends BlockMeta, TDocMeta extends BlockMeta>(
 function stripIndent<TMeta extends BlockMeta>(block: TextBlock<TMeta>): TextBlock<TMeta> {
   const { indent: _indent, ...rest } = block;
   return rest;
+}
+
+// ---------------------------------------------------------------------------
+// Image group transforms
+// ---------------------------------------------------------------------------
+
+const IMAGE_GROUP_ENTRY_PATCHABLE_KEYS: ReadonlySet<string> = new Set([
+  "source",
+  "altText",
+  "caption",
+  "size",
+  "columnWidth",
+  "meta",
+]);
+
+function requireImageGroup<TMeta extends BlockMeta>(
+  document: WealthyDocument<TMeta, BlockMeta>,
+  groupId: string,
+  operation: string,
+): { index: number; group: ImageGroupBlock<TMeta> } {
+  const index = requireBlockIndex(document, groupId, operation);
+  const group = document.blocks[index]!;
+  if (group.type !== "imageGroup") {
+    throw new RangeError(`${operation}: block is not an imageGroup: ${groupId}`);
+  }
+  return { index, group };
+}
+
+function parseBlock<TMeta extends BlockMeta>(block: Block<TMeta>): Block<TMeta> {
+  return blockSchema.parse(block) as Block<TMeta>;
+}
+
+function replaceBlockAt<TMeta extends BlockMeta, TDocMeta extends BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
+  index: number,
+  ...replacement: Block<TMeta>[]
+): WealthyDocument<TMeta, TDocMeta> {
+  const blocks = [...document.blocks];
+  blocks.splice(index, 1, ...replacement);
+  return withBlocks(document, blocks);
+}
+
+/**
+ * The single image block an image-group entry collapses into when a group is
+ * reduced to one entry. The group-level `align` carries over; `columnWidth`
+ * (a group-only layout attr) is dropped. `blockId` lets the caller reuse the
+ * group's slot so block-level references survive the collapse.
+ */
+function imageBlockFromEntry<TMeta extends BlockMeta>(
+  entry: ImageGroupEntry<TMeta>,
+  align: ImageAlign | undefined,
+  blockId: string,
+): ImageBlock<TMeta> {
+  return {
+    id: blockId,
+    type: "image",
+    source: entry.source,
+    ...(entry.altText !== undefined ? { altText: entry.altText } : {}),
+    ...(entry.caption !== undefined ? { caption: entry.caption } : {}),
+    ...(entry.size !== undefined ? { size: entry.size } : {}),
+    ...(align !== undefined ? { align } : {}),
+    ...(entry.meta !== undefined ? { meta: entry.meta } : {}),
+  };
+}
+
+/** A run of entries as either an image group (≥2) or a collapsed image (1), reusing `blockId`. */
+function groupOrCollapse<TMeta extends BlockMeta>(
+  group: ImageGroupBlock<TMeta>,
+  entries: ImageGroupEntry<TMeta>[],
+  blockId: string,
+): Block<TMeta> {
+  if (entries.length === 1) {
+    return imageBlockFromEntry(entries[0]!, group.align, blockId);
+  }
+  return { ...group, id: blockId, images: entries };
+}
+
+/** Inserts an entry after `afterEntryId` (null = at the start of the group). */
+export function insertImageGroupEntry<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
+  groupId: string,
+  afterEntryId: string | null,
+  entry: ImageGroupEntry<TMeta>,
+): WealthyDocument<TMeta, TDocMeta> {
+  const { index, group } = requireImageGroup(document, groupId, "insertImageGroupEntry");
+  if (group.images.some((existing) => existing.id === entry.id)) {
+    throw new RangeError(`insertImageGroupEntry: duplicate entry id: ${entry.id}`);
+  }
+  const at =
+    afterEntryId === null ? -1 : group.images.findIndex((existing) => existing.id === afterEntryId);
+  if (afterEntryId !== null && at === -1) {
+    throw new RangeError(`insertImageGroupEntry: entry not found: ${afterEntryId}`);
+  }
+  const images = [...group.images];
+  images.splice(at + 1, 0, entry);
+  return replaceBlockAt(document, index, parseBlock({ ...group, images }));
+}
+
+/** Shallow-merges `patch` into one entry; `id` is immutable, unknown keys throw. */
+export function updateImageGroupEntry<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
+  groupId: string,
+  entryId: string,
+  patch: Partial<Omit<ImageGroupEntry<TMeta>, "id">>,
+): WealthyDocument<TMeta, TDocMeta> {
+  const { index, group } = requireImageGroup(document, groupId, "updateImageGroupEntry");
+  const entryIndex = group.images.findIndex((existing) => existing.id === entryId);
+  if (entryIndex === -1) {
+    throw new RangeError(`updateImageGroupEntry: entry not found: ${entryId}`);
+  }
+  for (const key of Object.keys(patch)) {
+    if (!IMAGE_GROUP_ENTRY_PATCHABLE_KEYS.has(key)) {
+      throw new RangeError(`updateImageGroupEntry: key "${key}" is not patchable on an image group entry`);
+    }
+  }
+  const images = [...group.images];
+  images[entryIndex] = { ...images[entryIndex]!, ...patch };
+  return replaceBlockAt(document, index, parseBlock({ ...group, images }));
+}
+
+/**
+ * Removes one entry. Removing the last remaining entry deletes the whole
+ * block; reducing the group to a single entry collapses it back to a plain
+ * image block in the same slot (the group's id is reused).
+ */
+export function removeImageGroupEntry<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
+  groupId: string,
+  entryId: string,
+): WealthyDocument<TMeta, TDocMeta> {
+  const { index, group } = requireImageGroup(document, groupId, "removeImageGroupEntry");
+  if (!group.images.some((existing) => existing.id === entryId)) {
+    throw new RangeError(`removeImageGroupEntry: entry not found: ${entryId}`);
+  }
+  const images = group.images.filter((existing) => existing.id !== entryId);
+  if (images.length === 0) {
+    return deleteBlock(document, groupId);
+  }
+  return replaceBlockAt(document, index, parseBlock(groupOrCollapse(group, images, group.id)));
+}
+
+/**
+ * Splits a group before `beforeEntryId` into two blocks: entries before it stay
+ * in the original slot, entries from it onward move into a new following block
+ * with id `newBlockId`. Either side that ends up with a single entry collapses
+ * to a plain image block. Throws when splitting before the first entry (that
+ * would leave an empty left side).
+ */
+export function splitImageGroup<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
+  groupId: string,
+  beforeEntryId: string,
+  newBlockId: string = generateBlockId(),
+): WealthyDocument<TMeta, TDocMeta> {
+  const { index, group } = requireImageGroup(document, groupId, "splitImageGroup");
+  const at = group.images.findIndex((existing) => existing.id === beforeEntryId);
+  if (at === -1) {
+    throw new RangeError(`splitImageGroup: entry not found: ${beforeEntryId}`);
+  }
+  if (at === 0) {
+    throw new RangeError("splitImageGroup: cannot split before the first entry");
+  }
+  const left = groupOrCollapse(group, group.images.slice(0, at), group.id);
+  const right = groupOrCollapse(group, group.images.slice(at), newBlockId);
+  return replaceBlockAt(document, index, parseBlock(left), parseBlock(right));
 }
 
 // ---------------------------------------------------------------------------

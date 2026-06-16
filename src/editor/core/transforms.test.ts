@@ -1,21 +1,39 @@
 import { describe, expect, it } from "vitest";
-import { createCustomBlock, createHeadingBlock, createImageBlock, createTableBlock, createTextBlock } from "./factories";
-import { SCHEMA_VERSION, type Block, type HeadingBlock, type WealthyDocument } from "./schema";
+import {
+  createCustomBlock,
+  createHeadingBlock,
+  createImageBlock,
+  createImageGroupBlock,
+  createTableBlock,
+  createTextBlock,
+} from "./factories";
+import {
+  SCHEMA_VERSION,
+  type Block,
+  type HeadingBlock,
+  type ImageBlock,
+  type ImageGroupBlock,
+  type WealthyDocument,
+} from "./schema";
 import {
   deleteBlock,
   deleteSection,
   duplicateSection,
   indentBlock,
   insertBlockAfter,
+  insertImageGroupEntry,
   insertInlineNode,
   mergeWithPrevious,
   moveBlock,
   moveSection,
   outdentBlock,
+  removeImageGroupEntry,
   removeInlineNodeAt,
   splitBlock,
+  splitImageGroup,
   turnInto,
   updateBlock,
+  updateImageGroupEntry,
   updateInlineObjectAt,
 } from "./transforms";
 
@@ -375,5 +393,100 @@ describe("section transforms (D4)", () => {
     expect(() => deleteSection(doc, paragraph.id)).toThrow(RangeError);
     expect(() => moveSection(doc, custom.id, null)).toThrow(RangeError);
     expect(() => duplicateSection(doc, paragraph.id)).toThrow(RangeError);
+  });
+});
+
+describe("image group transforms", () => {
+  function group3() {
+    return createImageGroupBlock({
+      images: [
+        { source: { type: "url", url: "https://example.com/a.png" }, caption: "A" },
+        { source: { type: "url", url: "https://example.com/b.png" }, caption: "B" },
+        { source: { type: "url", url: "https://example.com/c.png" }, caption: "C" },
+      ],
+    });
+  }
+
+  it("inserts an entry after a given entry (null = at the start)", () => {
+    const group = group3();
+    const doc = docWith([group]);
+    const entry = { id: "11111111-1111-4111-8111-111111111111", source: { type: "url" as const, url: "https://example.com/x.png" } };
+
+    const next = insertImageGroupEntry(doc, group.id, group.images[0]!.id, entry);
+    const images = (next.blocks[0] as ImageGroupBlock).images;
+    expect(images.map((e) => e.id)).toEqual([group.images[0]!.id, entry.id, group.images[1]!.id, group.images[2]!.id]);
+
+    const atStart = insertImageGroupEntry(doc, group.id, null, entry);
+    expect((atStart.blocks[0] as ImageGroupBlock).images[0]!.id).toBe(entry.id);
+  });
+
+  it("rejects duplicate or unknown entry ids on insert", () => {
+    const group = group3();
+    const doc = docWith([group]);
+    const dup = { id: group.images[0]!.id, source: { type: "url" as const, url: "https://example.com/x.png" } };
+    expect(() => insertImageGroupEntry(doc, group.id, null, dup)).toThrow(RangeError);
+    const entry = { id: "22222222-2222-4222-8222-222222222222", source: { type: "url" as const, url: "https://example.com/x.png" } };
+    expect(() => insertImageGroupEntry(doc, group.id, "nope", entry)).toThrow(RangeError);
+  });
+
+  it("updates an entry and rejects non-patchable keys", () => {
+    const group = group3();
+    const doc = docWith([group]);
+    const next = updateImageGroupEntry(doc, group.id, group.images[1]!.id, {
+      columnWidth: { value: 40, unit: "percent" },
+      caption: [{ type: "text", text: "B2" }],
+    });
+    const entry = (next.blocks[0] as ImageGroupBlock).images[1]!;
+    expect(entry.columnWidth).toEqual({ value: 40, unit: "percent" });
+    expect(entry.caption).toEqual([{ type: "text", text: "B2" }]);
+    expect(() => updateImageGroupEntry(doc, group.id, group.images[0]!.id, { id: "x" } as never)).toThrow(RangeError);
+  });
+
+  it("removes an entry, collapses to an image at one, and deletes at zero", () => {
+    const group = group3();
+    const doc = docWith([group]);
+
+    // 3 -> 2 stays a group.
+    const two = removeImageGroupEntry(doc, group.id, group.images[1]!.id);
+    expect((two.blocks[0] as ImageGroupBlock).images.map((e) => e.id)).toEqual([
+      group.images[0]!.id,
+      group.images[2]!.id,
+    ]);
+
+    // 2 -> 1 collapses to a plain image reusing the group's slot id.
+    const collapsed = removeImageGroupEntry(two, group.id, group.images[0]!.id);
+    const block = collapsed.blocks[0] as ImageBlock;
+    expect(block.type).toBe("image");
+    expect(block.id).toBe(group.id);
+    expect(block.caption).toEqual([{ type: "text", text: "C" }]);
+
+    // Removing the only entry deletes the block.
+    const one = createImageGroupBlock({ images: [{ source: { type: "url", url: "https://example.com/a.png" } }] });
+    const after = removeImageGroupEntry(docWith([one]), one.id, one.images[0]!.id);
+    expect(after.blocks).toHaveLength(0);
+  });
+
+  it("splits a group into two, collapsing one-entry sides", () => {
+    const group = group3();
+    const doc = docWith([group]);
+
+    // Split before the middle entry: left collapses to an image (1), right is a group (2).
+    const next = splitImageGroup(doc, group.id, group.images[1]!.id);
+    expect(next.blocks).toHaveLength(2);
+    const left = next.blocks[0] as ImageBlock;
+    const right = next.blocks[1] as ImageGroupBlock;
+    expect(left.type).toBe("image");
+    expect(left.id).toBe(group.id);
+    expect(right.type).toBe("imageGroup");
+    expect(right.images.map((e) => e.caption)).toEqual([[{ type: "text", text: "B" }], [{ type: "text", text: "C" }]]);
+
+    expect(() => splitImageGroup(doc, group.id, group.images[0]!.id)).toThrow(RangeError);
+  });
+
+  it("rejects image-group transforms on non-group blocks", () => {
+    const image = createImageBlock({ source: { type: "url", url: "https://example.com/a.png" } });
+    const doc = docWith([image]);
+    expect(() => removeImageGroupEntry(doc, image.id, "x")).toThrow(RangeError);
+    expect(() => splitImageGroup(doc, image.id, "x")).toThrow(RangeError);
   });
 });
