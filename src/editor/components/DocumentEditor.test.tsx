@@ -601,6 +601,38 @@ describe("DocumentEditor", () => {
     expect(readonly.container.querySelector(".wte-image__resize-handle")).toBeNull();
   });
 
+  it("resizes image group entries inside their own columns", () => {
+    const group = createImageGroupBlock({
+      images: [
+        {
+          source: { type: "url", url: "https://example.com/a.png" },
+          size: { width: 50, unit: "percent" },
+        },
+        { source: { type: "url", url: "https://example.com/b.png" } },
+      ],
+    });
+    const onChange = vi.fn();
+    const { container } = render(<DocumentEditor value={docWith([group])} onChange={onChange} />);
+
+    const items = container.querySelectorAll(".wte-image-group__item");
+    const firstItem = items[0] as HTMLElement;
+    const firstFrame = firstItem.querySelector(".wte-image__frame") as HTMLElement;
+    const firstHandle = firstItem.querySelector(".wte-image__resize-handle") as HTMLButtonElement;
+    expect(firstFrame.style.width).toBe("50%");
+    expect(items[1]!.querySelector(".wte-image__frame")?.getAttribute("style") ?? "").not.toContain("width");
+
+    Object.defineProperty(firstItem, "clientWidth", { configurable: true, value: 200 });
+    firstFrame.getBoundingClientRect = () => ({ width: 100 }) as DOMRect;
+
+    fireEvent.pointerDown(firstHandle, { clientX: 0, pointerId: 1 });
+    fireEvent.pointerMove(firstHandle, { clientX: 40, pointerId: 1 });
+    fireEvent.pointerUp(firstHandle, { clientX: 40, pointerId: 1 });
+
+    const latest = (onChange.mock.lastCall![0] as WealthyDocument).blocks[0] as ImageGroupBlock;
+    expect(latest.images[0]!.size).toEqual({ width: 70, unit: "percent" });
+    expect(latest.images[1]!.size).toBeUndefined();
+  });
+
   it("block selection via handle click; Delete removes the range in one undo step", () => {
     const a = createTextBlock({ content: "a" });
     const b = createTextBlock({ content: "b" });

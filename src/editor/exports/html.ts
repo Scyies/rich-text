@@ -244,10 +244,12 @@ function renderImage(block: ImageBlock, options: HtmlExportOptions): string {
 function renderImageGroup(block: ImageGroupBlock, options: HtmlExportOptions): string {
   const widths = resolveImageGroupColumnWidths(block.images);
   const rowStyle = styleAttribute([block.gap !== undefined ? `gap:${block.gap}px` : null]);
+  const itemAlign = block.align ?? "center";
   const items = block.images
     .map((entry, index) => {
       const width = widths[index] ?? 100 / block.images.length;
-      return `<figure class="wte-image" style="width:${width}%">${renderImageContent(entry, imageGroupEntryUrl(entry, options), options, false)}</figure>`;
+      const itemStyle = styleAttribute([`width:${width}%`, `text-align:${itemAlign}`]);
+      return `<figure class="wte-image"${itemStyle}>${renderImageContent(entry, imageGroupEntryUrl(entry, options), options)}</figure>`;
     })
     .join("");
   return `<figure class="wte-image-group"${alignStyle(block.align)}><div class="wte-image-group__row"${rowStyle}>${items}</div></figure>`;

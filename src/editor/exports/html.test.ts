@@ -132,7 +132,22 @@ describe("exportHtml", () => {
           image.source.type === "asset" ? "https://cdn.example/asset-1.png" : undefined,
       }),
     ).toBe(
-      '<figure class="wte-image-group" style="text-align:center"><div class="wte-image-group__row" style="gap:10px"><figure class="wte-image" style="width:30%"><img src="https://example.com/a.png" alt="A"><figcaption>Cap A</figcaption></figure><figure class="wte-image" style="width:70%"><img src="https://cdn.example/asset-1.png" alt="B" style="width:120px"></figure></div></figure>',
+      '<figure class="wte-image-group" style="text-align:center"><div class="wte-image-group__row" style="gap:10px"><figure class="wte-image" style="width:30%;text-align:center"><img src="https://example.com/a.png" alt="A" style="width:50%"><figcaption>Cap A</figcaption></figure><figure class="wte-image" style="width:70%;text-align:center"><img src="https://cdn.example/asset-1.png" alt="B" style="width:120px"></figure></div></figure>',
+    );
+  });
+
+  it("centers resized image group entries by default", () => {
+    const group = createImageGroupBlock({
+      images: [
+        {
+          source: { type: "url", url: "https://example.com/a.png" },
+          size: { width: 50, unit: "percent" },
+        },
+        { source: { type: "url", url: "https://example.com/b.png" } },
+      ],
+    });
+    expect(exportHtml(docWith([group]))).toBe(
+      '<figure class="wte-image-group"><div class="wte-image-group__row"><figure class="wte-image" style="width:50%;text-align:center"><img src="https://example.com/a.png" alt="" style="width:50%"></figure><figure class="wte-image" style="width:50%;text-align:center"><img src="https://example.com/b.png" alt=""></figure></div></figure>',
     );
   });
 

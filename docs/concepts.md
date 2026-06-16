@@ -93,10 +93,11 @@ object URLs, or base64 image data. Hosts that use `{ type: "asset" }` provide a 
 the React components and exporters. Clipboard/drop image files go through host upload callbacks;
 URL-backed pasted/dropped images become ordinary image blocks.
 
-`imageGroup` uses the same image content shape for each entry, but `columnWidth` controls row
-layout. Percent `size` values are ignored inside a group; pixel `size` values are still honored.
-Missing `columnWidth` values split the remaining width, and fully explicit rows below 100% are
-normalized to fill the row at render/export time without mutating the model.
+`imageGroup` uses the same image content shape for each entry, but it has two percent-based
+layout controls: `columnWidth` is the entry's share of the row, while `size.width` with
+`unit: "percent"` is the image's share of its own column. Pixel `size` values are still
+honored. Missing `columnWidth` values split the remaining width, and fully explicit rows below
+100% are normalized to fill the row at render/export time without mutating the model.
 The optional default stylesheet applies an 8px visual gap when `gap` is unset; set `gap: 0` to
 explicitly remove that spacing in the built-in UI/HTML output.
 

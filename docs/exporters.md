@@ -53,7 +53,9 @@ list by `indent`, and tables. Tables emit a `<colgroup>` that honors `column.wid
 (`percent`/`px`). Marks map to semantic tags; `color`/`highlight` emit
 `wte-color-*` / `wte-highlight-*` classes. Images emit `<figure class="wte-image"><img …>` and
 an optional `<figcaption>`. Image groups emit `<figure class="wte-image-group">` containing one
-row of child `.wte-image` figures with resolved column widths.
+row of child `.wte-image` figures with resolved column widths. For grouped images, `columnWidth`
+sets the child figure's share of the row, and percent `size.width` sets the `<img>` width inside
+that child figure.
 
 ## Markdown
 
@@ -119,6 +121,8 @@ Notes:
 - Image groups export as a one-row borderless `docx.Table`. Use `renderImageContent` for content
   that can safely live inside each table cell. For single image blocks, `renderImageBlock` still
   takes precedence over `renderImageContent`.
+- Grouped-image sizing in docx is host-owned: `columnWidth` controls the table cell width, but
+  `size` only affects real embedded images if your `renderImageContent` implementation applies it.
 
 ### Template-grade Word output
 

@@ -77,6 +77,23 @@ interface ImageContentViewProps {
   onCaptionArrowDown?: (() => boolean) | undefined;
 }
 
+interface ImageGroupItemViewProps {
+  entry: ImageGroupEntry;
+  width: number;
+  align: CSSProperties["textAlign"] | undefined;
+  src: string | undefined;
+  readOnly: boolean;
+  onEntryChange(patch: { caption?: InlineNode[]; size?: ImageSize }): void;
+  registerCaptionEditor?: ((handle: InlineEditorHandle | null) => void) | undefined;
+  onCaptionSelectionChange?: ((start: number, end: number) => void) | undefined;
+  onCaptionFocus?: (() => void) | undefined;
+  onCaptionBlur?: (() => void) | undefined;
+  onCaptionEnter?: (() => void) | undefined;
+  onCaptionBackspaceAtStart?: (() => void) | undefined;
+  onCaptionArrowUp?: (() => boolean) | undefined;
+  onCaptionArrowDown?: (() => boolean) | undefined;
+}
+
 export function ImageView({
   block,
   readOnly = false,
@@ -150,42 +167,81 @@ export function ImageGroupView({
         {block.images.map((entry, index) => {
           const src = entry.source.type === "url" ? entry.source.url : resolveImageContentSource?.(entry);
           const width = widths[index] ?? 100 / block.images.length;
-          const itemStyle: CSSProperties = {
-            flexBasis: `${width}%`,
-            width: `${width}%`,
-          };
           return (
-            <figure className="wte-image wte-image-group__item" key={entry.id} style={itemStyle}>
-              <ImageContentView
-                content={entry}
-                src={src}
-                readOnly={readOnly}
-                showCaption={!readOnly || entry.caption !== undefined}
-                honorPercentSize={false}
-                onContentChange={(patch) => updateEntry(entry.id, patch)}
-                registerCaptionEditor={
-                  registerCaptionEditor !== undefined
-                    ? (handle) => registerCaptionEditor(entry.id, handle)
-                    : undefined
-                }
-                onCaptionSelectionChange={
-                  onCaptionSelectionChange !== undefined
-                    ? (start, end) => onCaptionSelectionChange(entry.id, start, end)
-                    : undefined
-                }
-                onCaptionFocus={onCaptionFocus !== undefined ? () => onCaptionFocus(entry.id) : undefined}
-                onCaptionBlur={onCaptionBlur !== undefined ? () => onCaptionBlur(entry.id) : undefined}
-                onCaptionEnter={onCaptionEnter !== undefined ? () => onCaptionEnter(entry.id) : undefined}
-                onCaptionBackspaceAtStart={
-                  onCaptionBackspaceAtStart !== undefined ? () => onCaptionBackspaceAtStart(entry.id) : undefined
-                }
-                onCaptionArrowUp={onCaptionArrowUp !== undefined ? () => onCaptionArrowUp(entry.id) : undefined}
-                onCaptionArrowDown={onCaptionArrowDown !== undefined ? () => onCaptionArrowDown(entry.id) : undefined}
-              />
-            </figure>
+            <ImageGroupItemView
+              key={entry.id}
+              entry={entry}
+              width={width}
+              align={block.align ?? "center"}
+              src={src}
+              readOnly={readOnly}
+              onEntryChange={(patch) => updateEntry(entry.id, patch)}
+              registerCaptionEditor={
+                registerCaptionEditor !== undefined ? (handle) => registerCaptionEditor(entry.id, handle) : undefined
+              }
+              onCaptionSelectionChange={
+                onCaptionSelectionChange !== undefined
+                  ? (start, end) => onCaptionSelectionChange(entry.id, start, end)
+                  : undefined
+              }
+              onCaptionFocus={onCaptionFocus !== undefined ? () => onCaptionFocus(entry.id) : undefined}
+              onCaptionBlur={onCaptionBlur !== undefined ? () => onCaptionBlur(entry.id) : undefined}
+              onCaptionEnter={onCaptionEnter !== undefined ? () => onCaptionEnter(entry.id) : undefined}
+              onCaptionBackspaceAtStart={
+                onCaptionBackspaceAtStart !== undefined ? () => onCaptionBackspaceAtStart(entry.id) : undefined
+              }
+              onCaptionArrowUp={onCaptionArrowUp !== undefined ? () => onCaptionArrowUp(entry.id) : undefined}
+              onCaptionArrowDown={onCaptionArrowDown !== undefined ? () => onCaptionArrowDown(entry.id) : undefined}
+            />
           );
         })}
       </div>
+    </figure>
+  );
+}
+
+function ImageGroupItemView({
+  entry,
+  width,
+  align,
+  src,
+  readOnly,
+  onEntryChange,
+  registerCaptionEditor,
+  onCaptionSelectionChange,
+  onCaptionFocus,
+  onCaptionBlur,
+  onCaptionEnter,
+  onCaptionBackspaceAtStart,
+  onCaptionArrowUp,
+  onCaptionArrowDown,
+}: ImageGroupItemViewProps) {
+  const itemRef = useRef<HTMLElement | null>(null);
+  const itemStyle: CSSProperties = {
+    flexBasis: `${width}%`,
+    textAlign: align,
+    width: `${width}%`,
+  };
+
+  return (
+    <figure className="wte-image wte-image-group__item" style={itemStyle} ref={itemRef}>
+      <ImageContentView
+        content={entry}
+        src={src}
+        readOnly={readOnly}
+        showCaption={!readOnly || entry.caption !== undefined}
+        honorPercentSize
+        resizeContainerRef={itemRef}
+        onContentChange={onEntryChange}
+        registerCaptionEditor={registerCaptionEditor}
+        onCaptionSelectionChange={onCaptionSelectionChange}
+        onCaptionFocus={onCaptionFocus}
+        onCaptionBlur={onCaptionBlur}
+        onCaptionEnter={onCaptionEnter}
+        onCaptionBackspaceAtStart={onCaptionBackspaceAtStart}
+        onCaptionArrowUp={onCaptionArrowUp}
+        onCaptionArrowDown={onCaptionArrowDown}
+      />
     </figure>
   );
 }
@@ -236,7 +292,7 @@ function ImageContentView({
       percent: clampPercent((startWidthPx / containerWidth) * 100),
     };
     setDraftWidthPercent(dragRef.current.percent);
-    event.currentTarget.setPointerCapture(event.pointerId);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
   }, [resizeContainerRef]);
 
   const handleResizePointerMove = useCallback((event: ReactPointerEvent) => {
@@ -253,7 +309,7 @@ function ImageContentView({
     (event: ReactPointerEvent) => {
       const drag = dragRef.current;
       dragRef.current = null;
-      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
       if (drag !== null) {

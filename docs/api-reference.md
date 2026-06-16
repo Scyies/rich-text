@@ -350,7 +350,8 @@ import { exportHtml } from "wealthy-text-editor/export-html";
 `exportHtml(document, options?: HtmlExportOptions): string`. `HtmlExportOptions`:
 `{ renderCustomBlock?, renderInlineObject?, resolveImageSource?, resolveImageContentSource?, headingNumbers? }`.
 Emits semantic HTML; nested lists are grouped by `indent`; tables emit a `<colgroup>` honoring
-`column.width`; URL images emit `<figure><img>`; image groups emit a `.wte-image-group` row. See
+`column.width`; URL images emit `<figure><img>`; image groups emit a `.wte-image-group` row
+where `columnWidth` sizes the child figure and percent `size.width` sizes the image within it. See
 [Exporters](./exporters.md).
 
 ## export-markdown
