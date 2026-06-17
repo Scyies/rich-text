@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   createCustomBlock,
+  createEmptyImageGroupBlock,
   createHeadingBlock,
   createImageBlock,
   createImageGroupBlock,
   createTableBlock,
   createTextBlock,
+  generateBlockId,
 } from "./factories";
 import {
   SCHEMA_VERSION,
@@ -27,6 +29,7 @@ import {
   moveBlock,
   moveSection,
   outdentBlock,
+  pruneEmptyImageSlots,
   removeImageGroupEntry,
   removeInlineNodeAt,
   splitBlock,
@@ -488,5 +491,61 @@ describe("image group transforms", () => {
     const doc = docWith([image]);
     expect(() => removeImageGroupEntry(doc, image.id, "x")).toThrow(RangeError);
     expect(() => splitImageGroup(doc, image.id, "x")).toThrow(RangeError);
+  });
+});
+
+describe("pruneEmptyImageSlots", () => {
+  const filled = (url: string) => ({ id: generateBlockId(), source: { type: "url" as const, url } });
+  const empty = () => ({ id: generateBlockId(), source: { type: "empty" as const } });
+
+  it("drops empty slots but keeps the filled images in a partial group", () => {
+    const group = createImageGroupBlock({
+      images: [filled("https://example.com/a.png"), empty(), filled("https://example.com/b.png")],
+    });
+    const next = pruneEmptyImageSlots(docWith([group]));
+    const result = next.blocks[0] as ImageGroupBlock;
+    expect(result.type).toBe("imageGroup");
+    expect(result.id).toBe(group.id);
+    expect(result.images.map((e) => e.source)).toEqual([
+      { type: "url", url: "https://example.com/a.png" },
+      { type: "url", url: "https://example.com/b.png" },
+    ]);
+  });
+
+  it("collapses a group left with one filled image to an image block", () => {
+    const group = createImageGroupBlock({
+      images: [filled("https://example.com/a.png"), empty()],
+      align: "center",
+    });
+    const next = pruneEmptyImageSlots(docWith([group]));
+    const block = next.blocks[0] as ImageBlock;
+    expect(block.type).toBe("image");
+    expect(block.id).toBe(group.id);
+    expect(block.source).toEqual({ type: "url", url: "https://example.com/a.png" });
+    expect(block.align).toBe("center");
+  });
+
+  it("deletes a fully empty group and leaves other blocks intact", () => {
+    const before = createTextBlock({ content: "above" });
+    const group = createEmptyImageGroupBlock({ columns: 2 });
+    const after = createTextBlock({ content: "below" });
+    const next = pruneEmptyImageSlots(docWith([before, group, after]));
+    expect(next.blocks.map((b) => b.id)).toEqual([before.id, after.id]);
+  });
+
+  it("returns the same document reference when there is nothing to prune", () => {
+    const doc = docWith([
+      createTextBlock({ content: "x" }),
+      createImageGroupBlock({ images: [filled("https://example.com/a.png"), filled("https://example.com/b.png")] }),
+    ]);
+    expect(pruneEmptyImageSlots(doc)).toBe(doc);
+  });
+
+  it("spares the excepted block's empty slots", () => {
+    const keep = createEmptyImageGroupBlock({ columns: 2 });
+    const drop = createEmptyImageGroupBlock({ columns: 2 });
+    const next = pruneEmptyImageSlots(docWith([keep, drop]), { exceptBlockId: keep.id });
+    expect(next.blocks.map((b) => b.id)).toEqual([keep.id]);
+    expect((next.blocks[0] as ImageGroupBlock).images).toHaveLength(2);
   });
 });

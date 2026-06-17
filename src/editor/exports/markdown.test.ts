@@ -89,6 +89,19 @@ describe("exportMarkdown", () => {
     ).toBe("![A](https://example.com/a%20photo.png)\n\nCap A\n\n![B](https://cdn.example/asset-1.png)");
   });
 
+  it("omits empty draft slots and skips an all-empty group", () => {
+    const partial = createImageGroupBlock({
+      images: [
+        { source: { type: "empty" } },
+        { source: { type: "url", url: "https://example.com/a.png" }, altText: "A" },
+      ],
+    });
+    expect(exportMarkdown(docWith([partial]))).toBe("![A](https://example.com/a.png)");
+
+    const allEmpty = createImageGroupBlock({ images: [{ source: { type: "empty" } }, { source: { type: "empty" } }] });
+    expect(exportMarkdown(docWith([createTextBlock({ content: "x" }), allEmpty]))).toBe("x");
+  });
+
   it("uses per-kind serializers and falls back otherwise", () => {
     const doc = docWith([
       createTextBlock({

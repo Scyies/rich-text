@@ -6,7 +6,7 @@ import type {
   BlockMeta,
   CustomBlock,
   ImageBlock,
-  ImageContent,
+  ImageContentBase,
   ImageGroupBlock,
   ImageGroupEntry,
   InlineMark,
@@ -126,7 +126,7 @@ function imageGroupEntryUrl(entry: ImageGroupEntry, options: HtmlExportOptions):
   return entry.source.type === "url" ? entry.source.url : options.resolveImageContentSource?.(entry);
 }
 
-function imageSizeStyle(image: ImageContent, honorPercentSize = true): string {
+function imageSizeStyle(image: ImageContentBase, honorPercentSize = true): string {
   if (image.size === undefined) {
     return "";
   }
@@ -222,7 +222,7 @@ function renderTable(block: TableBlock, options: HtmlExportOptions): string {
 }
 
 function renderImageContent(
-  image: ImageContent,
+  image: ImageContentBase,
   url: string | undefined,
   options: HtmlExportOptions,
   honorPercentSize = true,
@@ -241,13 +241,18 @@ function renderImage(block: ImageBlock, options: HtmlExportOptions): string {
   return `<figure class="wte-image"${alignStyle(block.align)}>${renderImageContent(block, imageBlockUrl(block, options), options)}</figure>`;
 }
 
-function renderImageGroup(block: ImageGroupBlock, options: HtmlExportOptions): string {
-  const widths = resolveImageGroupColumnWidths(block.images);
+// Empty draft slots are layout-only state — they never reach the exported output.
+function renderImageGroup(block: ImageGroupBlock, options: HtmlExportOptions): string | null {
+  const entries = block.images.filter((entry) => entry.source.type !== "empty");
+  if (entries.length === 0) {
+    return null;
+  }
+  const widths = resolveImageGroupColumnWidths(entries);
   const rowStyle = styleAttribute([block.gap !== undefined ? `gap:${block.gap}px` : null]);
   const itemAlign = block.align ?? "center";
-  const items = block.images
+  const items = entries
     .map((entry, index) => {
-      const width = widths[index] ?? 100 / block.images.length;
+      const width = widths[index] ?? 100 / entries.length;
       const itemStyle = styleAttribute([`width:${width}%`, `text-align:${itemAlign}`]);
       return `<figure class="wte-image"${itemStyle}>${renderImageContent(entry, imageGroupEntryUrl(entry, options), options)}</figure>`;
     })
@@ -290,9 +295,13 @@ export function exportHtml(document: WealthyDocument<BlockMeta>, options: HtmlEx
       case "image":
         parts.push(renderImage(block, options));
         break;
-      case "imageGroup":
-        parts.push(renderImageGroup(block, options));
+      case "imageGroup": {
+        const groupHtml = renderImageGroup(block, options);
+        if (groupHtml !== null) {
+          parts.push(groupHtml);
+        }
         break;
+      }
       case "custom":
         parts.push(
           options.renderCustomBlock?.(block) ??

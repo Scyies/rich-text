@@ -151,6 +151,23 @@ describe("exportHtml", () => {
     );
   });
 
+  it("omits empty draft slots and skips an all-empty group", () => {
+    const partial = createImageGroupBlock({
+      images: [
+        { source: { type: "empty" } },
+        { source: { type: "url", url: "https://example.com/a.png" } },
+        { source: { type: "empty" } },
+      ],
+    });
+    // The single filled entry fills the row (width recomputed over kept entries).
+    expect(exportHtml(docWith([partial]))).toBe(
+      '<figure class="wte-image-group"><div class="wte-image-group__row"><figure class="wte-image" style="width:100%;text-align:center"><img src="https://example.com/a.png" alt=""></figure></div></figure>',
+    );
+
+    const allEmpty = createImageGroupBlock({ images: [{ source: { type: "empty" } }, { source: { type: "empty" } }] });
+    expect(exportHtml(docWith([createTextBlock({ content: "x" }), allEmpty]))).toBe("<p>x</p>");
+  });
+
   it("uses per-kind serializers for custom blocks and inline objects", () => {
     const doc = docWith([
       createTextBlock({

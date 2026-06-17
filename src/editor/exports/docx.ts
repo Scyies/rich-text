@@ -15,6 +15,7 @@ import {
   type IRunOptions,
 } from "docx";
 import { resolveImageGroupColumnWidths } from "../core/image-layout";
+import { isFilledImageGroupEntry } from "../core/schema";
 import { SEPARATOR_BLOCK_KIND } from "../plugins/separator-core";
 import type {
   Align,
@@ -224,15 +225,20 @@ function imageToDocx(block: ImageBlock, options: DocxExportOptions): FileChild |
   return imageContentToParagraphs(block, options, block.align);
 }
 
-function imageGroupToDocx(block: ImageGroupBlock, options: DocxExportOptions): Table {
-  const widths = resolveImageGroupColumnWidths(block.images);
+// Empty draft slots never reach the document; an all-empty group emits nothing.
+function imageGroupToDocx(block: ImageGroupBlock, options: DocxExportOptions): Table | [] {
+  const entries = block.images.filter(isFilledImageGroupEntry);
+  if (entries.length === 0) {
+    return [];
+  }
+  const widths = resolveImageGroupColumnWidths(entries);
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
     borders: NO_BORDERS,
     rows: [
       new TableRow({
-        children: block.images.map((image, index) => {
-          const width = widths[index] ?? 100 / block.images.length;
+        children: entries.map((image, index) => {
+          const width = widths[index] ?? 100 / entries.length;
           return new TableCell({
             width: { size: width, type: WidthType.PERCENTAGE },
             borders: NO_BORDERS,

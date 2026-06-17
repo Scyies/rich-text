@@ -87,6 +87,12 @@ export interface EditorCommands<TBlockMeta extends BlockMeta = BlockMeta> {
   removeImageGroupEntry(groupId: string, entryId: string): void;
   /** Splits a group before `beforeEntryId`. Returns the new (second) block id. */
   splitImageGroup(groupId: string, beforeEntryId: string): string;
+  /**
+   * Removes empty draft slots from image groups as one undoable change (no-op
+   * when there are none). Pass `exceptBlockId` to spare the row currently being
+   * edited so its unfilled slots survive while the user fills it.
+   */
+  pruneEmptyImageSlots(exceptBlockId?: string): void;
   indent(blockId: string): void;
   outdent(blockId: string): void;
   moveSection(headingId: string, afterBlockId: string | null): void;
@@ -240,6 +246,17 @@ export function createEditorEngine<
       return transact("splitImageGroup", null, (current) => ({
         document: transforms.splitImageGroup(current, groupId, beforeEntryId, newBlockId),
         result: newBlockId,
+      }));
+    },
+
+    pruneEmptyImageSlots(exceptBlockId) {
+      // Skip the transaction (and its history entry) when there is nothing to prune.
+      if (transforms.pruneEmptyImageSlots(document, { exceptBlockId }) === document) {
+        return;
+      }
+      transact("pruneEmptyImageSlots", null, (current) => ({
+        document: transforms.pruneEmptyImageSlots(current, { exceptBlockId }),
+        result: undefined,
       }));
     },
 

@@ -11,6 +11,7 @@ import {
   type ImageGroupBlock,
   type ImageGroupColumnWidth,
   type ImageGroupEntry,
+  type ImageGroupEntrySource,
   type ImageSize,
   type ImageSource,
   type InlineNode,
@@ -142,7 +143,7 @@ export function createImageBlock<TMeta extends BlockMeta = BlockMeta>(
 
 export interface CreateImageGroupEntryInput<TMeta extends BlockMeta = BlockMeta> {
   id?: string;
-  source: ImageSource;
+  source: ImageGroupEntrySource;
   altText?: string;
   caption?: InlineNode[] | string;
   size?: ImageSize;
@@ -186,6 +187,33 @@ export function createImageGroupBlock<TMeta extends BlockMeta = BlockMeta>(
     ...(input.gap !== undefined ? { gap: input.gap } : {}),
     ...(input.meta !== undefined ? { meta: input.meta } : {}),
   };
+}
+
+export interface CreateEmptyImageGroupBlockInput<TMeta extends BlockMeta = BlockMeta> {
+  /** Number of empty drop slots to lay out (>= 1). Defaults to 2. */
+  columns?: number;
+  gap?: number;
+  meta?: TMeta;
+}
+
+/**
+ * Builds an `imageGroup` of empty drop slots — the "image row" layout the user
+ * fills by dropping/pasting images into each column. Empty slots are real,
+ * persistable draft state ([[image-empty-slots]]); they render as drop targets
+ * while editing and are pruned on blur / omitted from exports.
+ */
+export function createEmptyImageGroupBlock<TMeta extends BlockMeta = BlockMeta>(
+  input: CreateEmptyImageGroupBlockInput<TMeta> = {},
+): ImageGroupBlock<TMeta> {
+  const columns = input.columns ?? 2;
+  if (!Number.isInteger(columns) || columns < 1) {
+    throw new RangeError("createEmptyImageGroupBlock: columns must be an integer >= 1");
+  }
+  return createImageGroupBlock<TMeta>({
+    images: Array.from({ length: columns }, () => ({ source: { type: "empty" as const } })),
+    ...(input.gap !== undefined ? { gap: input.gap } : {}),
+    ...(input.meta !== undefined ? { meta: input.meta } : {}),
+  });
 }
 
 export interface CreateCustomBlockInput<TMeta extends BlockMeta = BlockMeta> {

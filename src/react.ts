@@ -16,11 +16,8 @@ export { DocumentEditor, defaultInlineTagToNode } from "./editor/components/Docu
 export type {
   CustomSlashItem,
   DocumentEditorProps,
-  ImageGroupInsertionInput,
-  ImageGroupInsertionResult,
   ImageInsertionInput,
   ImageInsertionResult,
-  ImageRequestContext,
   RenderBlockProps,
   SlashItemContext,
 } from "./editor/components/DocumentEditor";

@@ -32,7 +32,9 @@ Image blocks with `{ type: "url" }` export directly to HTML/Markdown. Image bloc
 `{ type: "asset" }` are host-owned; pass `resolveImageSource` to HTML/Markdown exporters, or
 `renderImageBlock` to the docx exporter after resolving the asset bytes yourself.
 For asset-backed `imageGroup` entries, HTML/Markdown use `resolveImageContentSource`, and docx
-can use `renderImageContent` to return paragraph-safe content for each table cell.
+can use `renderImageContent` to return paragraph-safe content for each table cell. Empty draft
+slots (`source.type === "empty"`) are skipped by every exporter — they never appear in the output,
+and an `imageGroup` whose slots are all empty emits nothing.
 
 ## HTML
 

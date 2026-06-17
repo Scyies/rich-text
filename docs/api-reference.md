@@ -125,14 +125,16 @@ engine wraps these as undoable transactions; call them directly only for off-eng
 `insertBlockAfter`, `updateBlock`, `deleteBlock`, `moveBlock`, `turnInto`, `splitBlock`,
 `mergeWithPrevious`, `indentBlock`, `outdentBlock`, `insertInlineNode`, `updateInlineObjectAt`,
 `removeInlineNodeAt`, `insertImageGroupEntry`, `updateImageGroupEntry`, `removeImageGroupEntry`,
-`splitImageGroup`, `moveSection`, `deleteSection`, `duplicateSection`, `getInlineNodeLength`,
-and the constant `MAX_INDENT`. **Type:** `TurnIntoTarget` (`{ type: "heading"; level }` |
-`{ type: "text"; variant }`).
+`splitImageGroup`, `pruneEmptyImageSlots`, `moveSection`, `deleteSection`, `duplicateSection`,
+`getInlineNodeLength`, and the constant `MAX_INDENT`. **Type:** `TurnIntoTarget`
+(`{ type: "heading"; level }` | `{ type: "text"; variant }`).
 
 The image-group transforms operate on entries within an `imageGroup`: `removeImageGroupEntry`
 collapses a group reduced to one entry back into a plain `image` block (reusing the block id), and
 `splitImageGroup` splits a group before an entry, collapsing either resulting one-entry side the
-same way.
+same way. `pruneEmptyImageSlots` drops empty draft slots across the document (collapsing a
+one-image group to an `image`, deleting an all-empty group); the engine also exposes it as the
+`pruneEmptyImageSlots()` command, applied as one undoable change when focus leaves the editor.
 
 ### Patches (D10)
 
@@ -273,9 +275,8 @@ The primary multi-block editor. Props (`DocumentEditorProps<TMeta>`):
 | `renderBlock?` | `(props: RenderBlockProps<TMeta>) => ReactNode` |
 | `resolveImageSource?` | `(block: ImageBlock<TMeta>) => string \| undefined` |
 | `resolveImageContentSource?` | `(entry: ImageGroupEntry<TMeta>) => string \| undefined` |
-| `onRequestImage?` | `(context: ImageRequestContext) => ImageInsertionResult<TMeta> \| Promise<ImageInsertionResult<TMeta>>` |
-| `onRequestImageGroup?` | `(context: ImageRequestContext) => ImageGroupInsertionResult<TMeta> \| Promise<ImageGroupInsertionResult<TMeta>>` |
 | `onUploadImage?` | `(file: File) => ImageInsertionResult<TMeta> \| Promise<ImageInsertionResult<TMeta>>` |
+| `allowDroppedImageUrls?` | `boolean` |
 | `groupUploadedImages?` | `boolean` |
 | `slashItems?` | `CustomSlashItem<TMeta>[]` |
 | `inlineTagToNode?` | `(text: string) => InlineNode \| null` \| `false` |
@@ -285,14 +286,22 @@ The primary multi-block editor. Props (`DocumentEditorProps<TMeta>`):
 `onCommit` fires when focus leaves the editor, after an idle pause (`commitIdleMs`), or when
 `commit()` is called through the ref/headless API.
 
-`onRequestImage` enables the built-in `/image` slash item. `onUploadImage` handles pasted/dropped
-image files. Both callbacks keep upload/storage host-owned and return an image-block creation
-payload, or `null` / `undefined` to cancel.
+Images are user-supplied through drop/paste rather than pre-seeded by the host. `onUploadImage`
+handles pasted/dropped image *files* (including into an image-row slot): it keeps upload/storage
+host-owned and returns an image-block creation payload, or `null` / `undefined` to cancel.
 
-`onRequestImageGroup` enables the built-in `/image row` slash item and returns an image-group
-creation payload (one or more entries). When `groupUploadedImages` is `true`, pasting/dropping two
-or more image files at once inserts a single side-by-side `imageGroup` instead of separate image
-blocks; it defaults to `false` for back-compat, and a single file is always a plain image.
+The built-in `/image row` slash item inserts an empty `imageGroup` of drop slots (see
+`createEmptyImageGroupBlock`); each slot is filled by dropping or pasting an image onto it. The item
+is shown when `onUploadImage` is set or `allowDroppedImageUrls` is `true`. Dropping multiple images
+onto one slot fills it with the first and appends the rest as new columns. Empty slots are pruned
+when focus leaves the editor (a one-image group collapses to an `image`, an all-empty group is
+removed) and are omitted from read-only rendering and all exports.
+
+`allowDroppedImageUrls` (default `false`) lets dropped/pasted image **URLs** (http(s) links and
+dragged web images) become images, at both block level and into row slots; file uploads via
+`onUploadImage` are independent of it. When `groupUploadedImages` is `true`, pasting/dropping two or
+more image files at once inserts a single side-by-side `imageGroup` instead of separate image blocks
+(defaults to `false`; a single file is always a plain image).
 
 #### `BlockEditor`
 

@@ -3,11 +3,22 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type DragEvent as ReactDragEvent,
+  type ClipboardEvent as ReactClipboardEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from "react";
 import { resolveImageGroupColumnWidths } from "../core/image-layout";
-import type { ImageBlock, ImageContent, ImageGroupBlock, ImageGroupEntry, ImageSize, InlineNode } from "../core/schema";
+import {
+  isFilledImageGroupEntry,
+  type ImageBlock,
+  type ImageContentBase,
+  type ImageGroupBlock,
+  type ImageGroupEntry,
+  type ImageSize,
+  type InlineNode,
+} from "../core/schema";
 import { useMessages } from "../i18n";
 import { InlineEditor, type InlineEditorHandle } from "./InlineEditor";
 
@@ -33,6 +44,9 @@ export interface ImageViewProps {
   onCaptionArrowDown?: (() => boolean) | undefined;
 }
 
+/** Direction an image-row item's arrow key moves focus toward. */
+export type ImageItemArrow = "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown";
+
 export interface ImageGroupViewProps {
   block: ImageGroupBlock;
   readOnly?: boolean | undefined;
@@ -50,6 +64,23 @@ export interface ImageGroupViewProps {
   onCaptionBackspaceAtStart?: ((entryId: string) => void) | undefined;
   onCaptionArrowUp?: ((entryId: string) => boolean) | undefined;
   onCaptionArrowDown?: ((entryId: string) => boolean) | undefined;
+  /** Registers each item's focusable surface so the host can navigate to it. */
+  registerItemElement?: ((entryId: string, element: HTMLElement | null) => void) | undefined;
+  /** An image was dropped onto the entry's slot/frame (fill or replace). */
+  onEntryDrop?: ((entryId: string, dataTransfer: DataTransfer) => void) | undefined;
+  /** An image was pasted while the entry's surface held focus. */
+  onEntryPaste?: ((entryId: string, dataTransfer: DataTransfer) => void) | undefined;
+  /** The entry's surface received focus (not its caption). */
+  onItemFocus?: ((entryId: string) => void) | undefined;
+  /** Arrow key on a focused item; return true when focus moved away. */
+  onItemArrow?: ((entryId: string, key: ImageItemArrow) => boolean) | undefined;
+  /** Appends a new empty column to the row. */
+  onAddColumn?: (() => void) | undefined;
+  /** Removes the entry's column (deleting the block when it was the last). */
+  onRemoveColumn?: ((entryId: string) => void) | undefined;
+  /** Transient feedback (e.g. an upload error) shown on a single entry. */
+  feedbackEntryId?: string | undefined;
+  feedbackMessage?: string | undefined;
 }
 
 interface DragState {
@@ -60,7 +91,7 @@ interface DragState {
 }
 
 interface ImageContentViewProps {
-  content: ImageContent;
+  content: ImageContentBase;
   src: string | undefined;
   readOnly: boolean;
   showCaption: boolean;
@@ -83,7 +114,14 @@ interface ImageGroupItemViewProps {
   align: CSSProperties["textAlign"] | undefined;
   src: string | undefined;
   readOnly: boolean;
+  feedback: string | undefined;
   onEntryChange(patch: { caption?: InlineNode[]; size?: ImageSize }): void;
+  registerItemElement?: ((element: HTMLElement | null) => void) | undefined;
+  onEntryDrop?: ((dataTransfer: DataTransfer) => void) | undefined;
+  onEntryPaste?: ((dataTransfer: DataTransfer) => void) | undefined;
+  onItemFocus?: (() => void) | undefined;
+  onItemArrow?: ((key: ImageItemArrow) => boolean) | undefined;
+  onRemoveColumn?: (() => void) | undefined;
   registerCaptionEditor?: ((handle: InlineEditorHandle | null) => void) | undefined;
   onCaptionSelectionChange?: ((start: number, end: number) => void) | undefined;
   onCaptionFocus?: (() => void) | undefined;
@@ -150,8 +188,26 @@ export function ImageGroupView({
   onCaptionBackspaceAtStart,
   onCaptionArrowUp,
   onCaptionArrowDown,
+  registerItemElement,
+  onEntryDrop,
+  onEntryPaste,
+  onItemFocus,
+  onItemArrow,
+  onAddColumn,
+  onRemoveColumn,
+  feedbackEntryId,
+  feedbackMessage,
 }: ImageGroupViewProps) {
-  const widths = resolveImageGroupColumnWidths(block.images);
+  const messages = useMessages();
+  // Empty draft slots are layout-only: while editing they render as drop
+  // targets, but read-only consumers see only the filled images (and nothing
+  // at all when every slot is still empty).
+  const entries = readOnly ? block.images.filter(isFilledImageGroupEntry) : block.images;
+  if (entries.length === 0) {
+    return null;
+  }
+
+  const widths = resolveImageGroupColumnWidths(entries);
   const figureStyle = block.align !== undefined ? { textAlign: block.align } : undefined;
   const rowStyle: CSSProperties | undefined = block.gap !== undefined ? { gap: `${block.gap}px` } : undefined;
 
@@ -164,9 +220,9 @@ export function ImageGroupView({
   return (
     <figure className="wte-image-group" style={figureStyle}>
       <div className="wte-image-group__row" style={rowStyle}>
-        {block.images.map((entry, index) => {
+        {entries.map((entry, index) => {
           const src = entry.source.type === "url" ? entry.source.url : resolveImageContentSource?.(entry);
-          const width = widths[index] ?? 100 / block.images.length;
+          const width = widths[index] ?? 100 / entries.length;
           return (
             <ImageGroupItemView
               key={entry.id}
@@ -175,7 +231,18 @@ export function ImageGroupView({
               align={block.align ?? "center"}
               src={src}
               readOnly={readOnly}
+              feedback={feedbackEntryId === entry.id ? feedbackMessage : undefined}
               onEntryChange={(patch) => updateEntry(entry.id, patch)}
+              registerItemElement={
+                registerItemElement !== undefined ? (element) => registerItemElement(entry.id, element) : undefined
+              }
+              onEntryDrop={onEntryDrop !== undefined ? (dataTransfer) => onEntryDrop(entry.id, dataTransfer) : undefined}
+              onEntryPaste={
+                onEntryPaste !== undefined ? (dataTransfer) => onEntryPaste(entry.id, dataTransfer) : undefined
+              }
+              onItemFocus={onItemFocus !== undefined ? () => onItemFocus(entry.id) : undefined}
+              onItemArrow={onItemArrow !== undefined ? (key) => onItemArrow(entry.id, key) : undefined}
+              onRemoveColumn={onRemoveColumn !== undefined ? () => onRemoveColumn(entry.id) : undefined}
               registerCaptionEditor={
                 registerCaptionEditor !== undefined ? (handle) => registerCaptionEditor(entry.id, handle) : undefined
               }
@@ -196,6 +263,20 @@ export function ImageGroupView({
           );
         })}
       </div>
+      {!readOnly && onAddColumn !== undefined && (
+        <div className="wte-image-group__controls" contentEditable={false}>
+          <button
+            type="button"
+            className="wte-image-group__add"
+            aria-label={messages.imageGroupAddColumnAriaLabel}
+            // Keep the editor's focus/caret while clicking the control.
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={onAddColumn}
+          >
+            + {messages.imageGroupAddColumnAriaLabel}
+          </button>
+        </div>
+      )}
     </figure>
   );
 }
@@ -206,7 +287,14 @@ function ImageGroupItemView({
   align,
   src,
   readOnly,
+  feedback,
   onEntryChange,
+  registerItemElement,
+  onEntryDrop,
+  onEntryPaste,
+  onItemFocus,
+  onItemArrow,
+  onRemoveColumn,
   registerCaptionEditor,
   onCaptionSelectionChange,
   onCaptionFocus,
@@ -216,32 +304,173 @@ function ImageGroupItemView({
   onCaptionArrowUp,
   onCaptionArrowDown,
 }: ImageGroupItemViewProps) {
+  const messages = useMessages();
   const itemRef = useRef<HTMLElement | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const isEmpty = entry.source.type === "empty";
   const itemStyle: CSSProperties = {
     flexBasis: `${width}%`,
     textAlign: align,
     width: `${width}%`,
   };
 
+  const setItemRef = useCallback(
+    (element: HTMLElement | null) => {
+      itemRef.current = element;
+      registerItemElement?.(element);
+    },
+    [registerItemElement],
+  );
+
+  const interactive = !readOnly && (onEntryDrop !== undefined || onEntryPaste !== undefined);
+
+  const handleDragOver = useCallback(
+    (event: ReactDragEvent) => {
+      if (onEntryDrop === undefined || readOnly) {
+        return;
+      }
+      // Claim the drop so it fills this slot instead of reordering blocks.
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = "copy";
+      setDragOver(true);
+    },
+    [onEntryDrop, readOnly],
+  );
+
+  const handleDragLeave = useCallback((event: ReactDragEvent) => {
+    // Ignore bubbling from descendants leaving toward children.
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      return;
+    }
+    setDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    (event: ReactDragEvent) => {
+      if (onEntryDrop === undefined || readOnly) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      setDragOver(false);
+      onEntryDrop(event.dataTransfer);
+    },
+    [onEntryDrop, readOnly],
+  );
+
+  const handlePaste = useCallback(
+    (event: ReactClipboardEvent) => {
+      if (onEntryPaste === undefined || readOnly) {
+        return;
+      }
+      // Only act when the item surface itself holds focus — paste inside the
+      // caption is a normal text paste handled by its InlineEditor.
+      if (event.currentTarget.ownerDocument.activeElement !== itemRef.current) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      onEntryPaste(event.clipboardData);
+    },
+    [onEntryPaste, readOnly],
+  );
+
+  const handleKeyDown = useCallback(
+    (event: ReactKeyboardEvent) => {
+      if (readOnly || event.currentTarget !== event.target) {
+        return; // let caption keys flow through their own editor
+      }
+      if ((event.key === "Backspace" || event.key === "Delete") && onRemoveColumn !== undefined) {
+        event.preventDefault();
+        onRemoveColumn();
+        return;
+      }
+      if (
+        onItemArrow !== undefined &&
+        (event.key === "ArrowLeft" ||
+          event.key === "ArrowRight" ||
+          event.key === "ArrowUp" ||
+          event.key === "ArrowDown")
+      ) {
+        if (onItemArrow(event.key)) {
+          event.preventDefault();
+        }
+      }
+    },
+    [readOnly, onRemoveColumn, onItemArrow],
+  );
+
+  const showCaption = !isEmpty && (!readOnly || entry.caption !== undefined);
+
   return (
-    <figure className="wte-image wte-image-group__item" style={itemStyle} ref={itemRef}>
-      <ImageContentView
-        content={entry}
-        src={src}
-        readOnly={readOnly}
-        showCaption={!readOnly || entry.caption !== undefined}
-        honorPercentSize
-        resizeContainerRef={itemRef}
-        onContentChange={onEntryChange}
-        registerCaptionEditor={registerCaptionEditor}
-        onCaptionSelectionChange={onCaptionSelectionChange}
-        onCaptionFocus={onCaptionFocus}
-        onCaptionBlur={onCaptionBlur}
-        onCaptionEnter={onCaptionEnter}
-        onCaptionBackspaceAtStart={onCaptionBackspaceAtStart}
-        onCaptionArrowUp={onCaptionArrowUp}
-        onCaptionArrowDown={onCaptionArrowDown}
-      />
+    <figure
+      className={dragOver ? "wte-image wte-image-group__item wte-image-group__item--drag-over" : "wte-image wte-image-group__item"}
+      style={itemStyle}
+      ref={setItemRef}
+      tabIndex={interactive ? 0 : undefined}
+      role={interactive ? "group" : undefined}
+      aria-label={
+        isEmpty
+          ? messages.imageGroupSlotLabel
+          : entry.altText !== undefined && entry.altText.length > 0
+            ? entry.altText
+            : messages.imageCaptionAriaLabel
+      }
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      onPaste={handlePaste}
+      onKeyDown={handleKeyDown}
+      onFocus={(event) => {
+        if (event.target === event.currentTarget) {
+          onItemFocus?.();
+        }
+      }}
+    >
+      {!readOnly && onRemoveColumn !== undefined && (
+        <button
+          type="button"
+          className="wte-image-group__remove"
+          aria-label={messages.imageGroupRemoveColumnAriaLabel}
+          contentEditable={false}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={(event) => {
+            event.stopPropagation();
+            onRemoveColumn();
+          }}
+        >
+          ×
+        </button>
+      )}
+      {isEmpty ? (
+        <div className={dragOver ? "wte-image-slot wte-image-slot--drag-over" : "wte-image-slot"} contentEditable={false}>
+          {messages.imageGroupSlotLabel}
+        </div>
+      ) : (
+        <ImageContentView
+          content={entry}
+          src={src}
+          readOnly={readOnly}
+          showCaption={showCaption}
+          honorPercentSize
+          resizeContainerRef={itemRef}
+          onContentChange={onEntryChange}
+          registerCaptionEditor={registerCaptionEditor}
+          onCaptionSelectionChange={onCaptionSelectionChange}
+          onCaptionFocus={onCaptionFocus}
+          onCaptionBlur={onCaptionBlur}
+          onCaptionEnter={onCaptionEnter}
+          onCaptionBackspaceAtStart={onCaptionBackspaceAtStart}
+          onCaptionArrowUp={onCaptionArrowUp}
+          onCaptionArrowDown={onCaptionArrowDown}
+        />
+      )}
+      {feedback !== undefined && (
+        <span className="wte-image__feedback" role="status" contentEditable={false}>
+          {feedback}
+        </span>
+      )}
     </figure>
   );
 }
@@ -375,7 +604,7 @@ function clampPercent(value: number): number {
  * feedback before it commits to the model on pointer-up.
  */
 function sizingStyles(
-  content: ImageContent,
+  content: ImageContentBase,
   draftWidthPercent: number | null,
   honorPercentSize: boolean,
 ): { frameStyle: CSSProperties | undefined; mediaStyle: CSSProperties | undefined } {

@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createHeadingBlock, createImageBlock, createImageGroupBlock, createTableBlock, createTextBlock } from "../core/factories";
+import { createEmptyImageGroupBlock, createHeadingBlock, createImageBlock, createImageGroupBlock, createTableBlock, createTextBlock } from "../core/factories";
 import { createSeparatorBlock } from "../plugins/separator-core";
 import { separatorPlugin } from "../plugins/separator";
 import { SCHEMA_VERSION, type Block, type ImageBlock, type ImageGroupBlock, type TextBlock, type WealthyDocument } from "../core/schema";
@@ -564,18 +564,11 @@ describe("DocumentEditor", () => {
     expect(latest.blocks.map((b) => b.type)).toEqual(["image"]);
   });
 
-  it("inserts an image group via the /image row slash item", async () => {
+  it("inserts an empty image-row grid via the /image row slash item", async () => {
     const block = createTextBlock({ content: "" });
     const onChange = vi.fn();
-    const onRequestImageGroup = vi.fn(() => ({
-      images: [
-        { source: { type: "url" as const, url: "https://example.com/a.png" } },
-        { source: { type: "url" as const, url: "https://example.com/b.png" } },
-      ],
-    }));
-    render(
-      <DocumentEditor value={docWith([block])} onChange={onChange} onRequestImageGroup={onRequestImageGroup} />,
-    );
+    const onUploadImage = vi.fn();
+    render(<DocumentEditor value={docWith([block])} onChange={onChange} onUploadImage={onUploadImage} />);
 
     const element = getBlockElement(block.id);
     typeInto(element, "/", 1);
@@ -584,11 +577,23 @@ describe("DocumentEditor", () => {
     expect(rowOption).toBeTruthy();
     fireEvent.mouseDown(rowOption!);
 
-    expect(onRequestImageGroup).toHaveBeenCalled();
     await waitFor(() => {
       const latest = onChange.mock.lastCall![0] as WealthyDocument;
-      expect(latest.blocks.some((candidate) => candidate.type === "imageGroup")).toBe(true);
+      const group = latest.blocks.find((candidate) => candidate.type === "imageGroup");
+      expect(group).toBeTruthy();
+      // Two empty drop slots, no predetermined image.
+      expect(group?.type === "imageGroup" && group.images.length).toBe(2);
+      expect(group?.type === "imageGroup" && group.images.every((e) => e.source.type === "empty")).toBe(true);
     });
+  });
+
+  it("hides the /image row slash item without an uploader or URL opt-in", () => {
+    const block = createTextBlock({ content: "" });
+    render(<DocumentEditor value={docWith([block])} />);
+    const element = getBlockElement(block.id);
+    typeInto(element, "/", 1);
+    typeInto(element, "/image", 6);
+    expect(screen.queryAllByRole("option").some((o) => o.textContent?.startsWith("Image row"))).toBe(false);
   });
 
   it("shows a resize handle on editable images but not in read-only mode", () => {
@@ -819,31 +824,15 @@ describe("DocumentEditor", () => {
     ]);
   });
 
-  it("slash image requests an image payload and inserts the returned block", async () => {
+  it("no longer offers a single /image slash item (images come from drop/paste)", () => {
     const block = createTextBlock({ content: "" });
-    const onChange = vi.fn();
-    const onRequestImage = vi.fn(() => ({
-      source: { type: "url" as const, url: "https://example.com/slash.png" },
-      altText: "Slash image",
-    }));
-    render(<DocumentEditor value={docWith([block])} onChange={onChange} onRequestImage={onRequestImage} />);
+    render(<DocumentEditor value={docWith([block])} onUploadImage={vi.fn()} />);
 
     const element = getBlockElement(block.id);
     typeInto(element, "/", 1);
     typeInto(element, "/img", 4);
-    const option = screen.getAllByRole("option").find((candidate) => candidate.textContent === "Imageimg");
-    expect(option).toBeTruthy();
-    fireEvent.mouseDown(option!);
-
-    await waitFor(() => {
-      const latest = onChange.mock.lastCall?.[0] as WealthyDocument | undefined;
-      expect(latest?.blocks[1]).toMatchObject({
-        type: "image",
-        source: { type: "url", url: "https://example.com/slash.png" },
-        altText: "Slash image",
-      });
-    });
-    expect(onRequestImage).toHaveBeenCalledWith({ blockId: block.id, query: "img" });
+    // The "Image row" item still matches "img", but the single "Image" does not.
+    expect(screen.queryAllByRole("option").some((o) => o.textContent === "Imageimg")).toBe(false);
   });
 
   it("readOnly renders non-editable blocks without handles", () => {
@@ -1161,9 +1150,9 @@ describe("DocumentEditor — paste (D11)", () => {
     expect(summary(onChange.mock.lastCall![0] as WealthyDocument)).toEqual(["a", "[separator]", "b"]);
   });
 
-  it("pastes HTML image blocks at the caret", () => {
+  it("pastes HTML image blocks at the caret when allowDroppedImageUrls is set", () => {
     const block = createTextBlock({ content: "abc" });
-    const { onChange, getApi } = setup([block]);
+    const { onChange, getApi } = setup([block], { allowDroppedImageUrls: true });
     paste(getApi(), block.id, 3, { html: '<figure><img src="/pasted.png" alt="P"><figcaption>Caption</figcaption></figure>' });
 
     const latest = onChange.mock.lastCall![0] as WealthyDocument;
@@ -1174,6 +1163,16 @@ describe("DocumentEditor — paste (D11)", () => {
       altText: "P",
       caption: [{ type: "text", text: "Caption" }],
     });
+  });
+
+  it("strips pasted HTML images by default but keeps surrounding text", () => {
+    const block = createTextBlock({ content: "" });
+    const { onChange, getApi } = setup([block]);
+    paste(getApi(), block.id, 0, { html: '<p>before</p><figure><img src="/pasted.png" alt="P"></figure><p>after</p>' });
+
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect(latest.blocks.some((b) => b.type === "image")).toBe(false);
+    expect(summary(latest)).toEqual(["before", "after"]);
   });
 
   it("uploads pasted image files through the host callback", async () => {
@@ -1242,10 +1241,12 @@ describe("DocumentEditor — paste (D11)", () => {
     });
   });
 
-  it("drops URI-list image URLs as URL image blocks", () => {
+  it("drops URI-list image URLs as URL image blocks when allowDroppedImageUrls is set", () => {
     const block = createTextBlock({ content: "target" });
     const onChange = vi.fn();
-    const { container } = render(<DocumentEditor value={docWith([block])} onChange={onChange} />);
+    const { container } = render(
+      <DocumentEditor value={docWith([block])} onChange={onChange} allowDroppedImageUrls />,
+    );
 
     fireEvent.drop(container.querySelector(`[data-block-id="${block.id}"]`)!, {
       clientY: 1,
@@ -1264,10 +1265,29 @@ describe("DocumentEditor — paste (D11)", () => {
     });
   });
 
-  it("ignores non-http(s) dropped URLs instead of creating doomed image blocks", () => {
+  it("ignores dropped image URLs by default (allowDroppedImageUrls off)", () => {
     const block = createTextBlock({ content: "target" });
     const onChange = vi.fn();
     const { container } = render(<DocumentEditor value={docWith([block])} onChange={onChange} />);
+
+    fireEvent.drop(container.querySelector(`[data-block-id="${block.id}"]`)!, {
+      clientY: 1,
+      dataTransfer: {
+        getData: (type: string) => (type === "text/uri-list" ? "https://example.com/drop.png" : ""),
+        files: [],
+        items: [],
+      },
+    });
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("ignores non-http(s) dropped URLs instead of creating doomed image blocks", () => {
+    const block = createTextBlock({ content: "target" });
+    const onChange = vi.fn();
+    const { container } = render(
+      <DocumentEditor value={docWith([block])} onChange={onChange} allowDroppedImageUrls />,
+    );
 
     fireEvent.drop(container.querySelector(`[data-block-id="${block.id}"]`)!, {
       clientY: 1,
@@ -1361,6 +1381,240 @@ describe("DocumentEditor — trailing non-editable block", () => {
     fireEvent.keyDown(element, { key: "ArrowDown" });
 
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("DocumentEditor — image rows", () => {
+  const pngUpload = (file: File) => ({
+    source: { type: "url" as const, url: `https://cdn.example/${file.name}` },
+    altText: file.name,
+  });
+  const items = (container: HTMLElement, blockId: string) =>
+    Array.from(container.querySelectorAll(`[data-block-id="${blockId}"] .wte-image-group__item`));
+
+  it("fills an empty slot from a dropped file and appends extra files as columns", async () => {
+    const group = createEmptyImageGroupBlock({ columns: 2 });
+    const onChange = vi.fn();
+    const onUploadImage = vi.fn(async (file: File) => pngUpload(file));
+    const { container } = render(
+      <DocumentEditor value={docWith([group])} onChange={onChange} onUploadImage={onUploadImage} />,
+    );
+
+    const fileA = new File(["a"], "a.png", { type: "image/png" });
+    const fileB = new File(["b"], "b.png", { type: "image/png" });
+    fireEvent.drop(items(container, group.id)[0]!, {
+      dataTransfer: { getData: () => "", files: [fileA, fileB], items: [] },
+    });
+
+    await waitFor(() => {
+      const latest = onChange.mock.lastCall?.[0] as WealthyDocument | undefined;
+      const result = latest?.blocks[0] as ImageGroupBlock | undefined;
+      // slot[0] filled with a.png, b.png appended as a new column, slot[1] still empty.
+      expect(result?.images.map((e) => e.source.type)).toEqual(["url", "url", "empty"]);
+      expect(result?.images[0]).toMatchObject({ source: { url: "https://cdn.example/a.png" } });
+      expect(result?.images[1]).toMatchObject({ source: { url: "https://cdn.example/b.png" } });
+    });
+  });
+
+  it("replaces a filled slot when an image is dropped onto it", async () => {
+    const group = createImageGroupBlock({
+      images: [
+        { source: { type: "url", url: "https://example.com/old.png" } },
+        { source: { type: "url", url: "https://example.com/keep.png" } },
+      ],
+    });
+    const onChange = vi.fn();
+    const onUploadImage = vi.fn(async (file: File) => pngUpload(file));
+    const { container } = render(
+      <DocumentEditor value={docWith([group])} onChange={onChange} onUploadImage={onUploadImage} />,
+    );
+
+    fireEvent.drop(items(container, group.id)[0]!, {
+      dataTransfer: { getData: () => "", files: [new File(["n"], "new.png", { type: "image/png" })], items: [] },
+    });
+
+    await waitFor(() => {
+      const result = onChange.mock.lastCall?.[0] as WealthyDocument | undefined;
+      const images = (result?.blocks[0] as ImageGroupBlock | undefined)?.images;
+      expect(images?.[0]).toMatchObject({ source: { url: "https://cdn.example/new.png" } });
+      expect(images?.[1]).toMatchObject({ source: { url: "https://example.com/keep.png" } });
+    });
+  });
+
+  it("adds and removes columns", () => {
+    const group = createEmptyImageGroupBlock({ columns: 2 });
+    const onChange = vi.fn();
+    const { container } = render(
+      <DocumentEditor value={docWith([group])} onChange={onChange} onUploadImage={vi.fn()} />,
+    );
+
+    fireEvent.mouseDown(container.querySelector(".wte-image-group__add")!);
+    fireEvent.click(container.querySelector(".wte-image-group__add")!);
+    let result = onChange.mock.lastCall![0] as WealthyDocument;
+    expect((result.blocks[0] as ImageGroupBlock).images).toHaveLength(3);
+
+    fireEvent.click(container.querySelectorAll(".wte-image-group__remove")[0]!);
+    result = onChange.mock.lastCall![0] as WealthyDocument;
+    expect((result.blocks[0] as ImageGroupBlock).images).toHaveLength(2);
+  });
+
+  it("rejects dropped image URLs into a slot without the opt-in, with feedback", () => {
+    const group = createEmptyImageGroupBlock({ columns: 2 });
+    const onChange = vi.fn();
+    const { container } = render(
+      <DocumentEditor value={docWith([group])} onChange={onChange} onUploadImage={vi.fn()} />,
+    );
+
+    fireEvent.drop(items(container, group.id)[0]!, {
+      dataTransfer: {
+        getData: (type: string) => (type === "text/uri-list" ? "https://example.com/x.png" : ""),
+        files: [],
+        items: [],
+      },
+    });
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(container.querySelector(".wte-image__feedback")?.textContent).toBe("Image links aren't allowed here");
+  });
+
+  it("prunes a moved-on empty row on blur, collapsing a one-image row to an image", () => {
+    const para = createTextBlock({ content: "after" });
+    const filledGroup = createImageGroupBlock({
+      images: [{ source: { type: "url", url: "https://example.com/a.png" } }, { source: { type: "empty" } }],
+    });
+    const onChange = vi.fn();
+    const { container } = render(
+      <DocumentEditor value={docWith([filledGroup, para])} onChange={onChange} onUploadImage={vi.fn()} />,
+    );
+
+    // Last touched the paragraph, then leave the editor: the row is not spared.
+    getBlockElement(para.id).focus();
+    fireEvent.blur(container.querySelector(".wte-editor")!, { relatedTarget: document.body });
+
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect(latest.blocks[0]).toMatchObject({ type: "image", source: { url: "https://example.com/a.png" } });
+  });
+
+  it("spares the last-touched row on blur (user stepping out to grab a file)", () => {
+    const group = createEmptyImageGroupBlock({ columns: 2 });
+    const onChange = vi.fn();
+    const { container } = render(
+      <DocumentEditor value={docWith([group])} onChange={onChange} onUploadImage={vi.fn()} />,
+    );
+
+    // Focus a slot (as after creating the row), then leave to pick a file.
+    (items(container, group.id)[0] as HTMLElement).focus();
+    fireEvent.blur(container.querySelector(".wte-editor")!, { relatedTarget: document.body });
+
+    // The row survives so the user can come back and drop into it.
+    expect(items(container, group.id)).toHaveLength(2);
+    expect(container.querySelectorAll(".wte-image-slot")).toHaveLength(2);
+  });
+
+  it("on blur prunes other rows but keeps the last-focused one", () => {
+    const rowA = createEmptyImageGroupBlock({ columns: 2 });
+    const rowB = createEmptyImageGroupBlock({ columns: 2 });
+    const onChange = vi.fn();
+    const { container } = render(
+      <DocumentEditor value={docWith([rowA, rowB])} onChange={onChange} onUploadImage={vi.fn()} />,
+    );
+
+    (items(container, rowB.id)[0] as HTMLElement).focus();
+    fireEvent.blur(container.querySelector(".wte-editor")!, { relatedTarget: document.body });
+
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect(latest.blocks.map((b) => b.id)).toEqual([rowB.id]);
+  });
+
+  it("shows feedback on the target block when a dropped image URL is disabled", () => {
+    const block = createTextBlock({ content: "target" });
+    const onChange = vi.fn();
+    const { container } = render(<DocumentEditor value={docWith([block])} onChange={onChange} onUploadImage={vi.fn()} />);
+
+    fireEvent.drop(container.querySelector(`[data-block-id="${block.id}"]`)!, {
+      clientY: 1,
+      dataTransfer: {
+        getData: (type: string) => (type === "text/uri-list" ? "https://example.com/x.png" : ""),
+        files: [],
+        items: [],
+      },
+    });
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(container.querySelector(".wte-image__feedback")?.textContent).toBe("Image links aren't allowed here");
+  });
+
+  it("ArrowDown from a paragraph lands on an empty row instead of skipping it", () => {
+    const para = createTextBlock({ content: "above" });
+    const group = createEmptyImageGroupBlock({ columns: 2 });
+    const { container } = render(<DocumentEditor value={docWith([para, group])} onUploadImage={vi.fn()} />);
+
+    const above = getBlockElement(para.id);
+    above.focus();
+    setCaretOffset(above, 2);
+    fireEvent.keyDown(above, { key: "ArrowDown" });
+
+    expect(document.activeElement).toBe(items(container, group.id)[0]);
+  });
+
+  it("preserves the column when moving between empty rows with ArrowDown", () => {
+    const rowA = createEmptyImageGroupBlock({ columns: 3 });
+    const rowB = createEmptyImageGroupBlock({ columns: 3 });
+    const { container } = render(<DocumentEditor value={docWith([rowA, rowB])} onUploadImage={vi.fn()} />);
+
+    const secondOfA = items(container, rowA.id)[1] as HTMLElement;
+    secondOfA.focus();
+    fireEvent.keyDown(secondOfA, { key: "ArrowDown" });
+
+    expect(document.activeElement).toBe(items(container, rowB.id)[1]);
+  });
+
+  it("ArrowDown between rows keeps item-surface focus even when the target column is filled", () => {
+    const rowA = createEmptyImageGroupBlock({ columns: 2 });
+    const rowB = createImageGroupBlock({
+      images: [
+        { source: { type: "url", url: "https://example.com/a.png" }, caption: "A" },
+        { source: { type: "url", url: "https://example.com/b.png" }, caption: "B" },
+      ],
+    });
+    const { container } = render(<DocumentEditor value={docWith([rowA, rowB])} onUploadImage={vi.fn()} />);
+
+    const secondOfA = items(container, rowA.id)[1] as HTMLElement;
+    secondOfA.focus();
+    fireEvent.keyDown(secondOfA, { key: "ArrowDown" });
+
+    expect(document.activeElement).toBe(items(container, rowB.id)[1]);
+    expect(document.activeElement).not.toBe(container.querySelectorAll("figcaption.wte-inline-editor")[1]);
+  });
+
+  it("labels item surfaces with role=group and an accessible name", () => {
+    const group = createEmptyImageGroupBlock({ columns: 1 });
+    const { container } = render(<DocumentEditor value={docWith([group])} onUploadImage={vi.fn()} />);
+    const item = items(container, group.id)[0] as HTMLElement;
+    expect(item.getAttribute("role")).toBe("group");
+    expect(item.getAttribute("aria-label")).toBe("Drag or paste an image here");
+  });
+
+  it("read-only rendering omits empty slots and renders only filled images", () => {
+    const group = createImageGroupBlock({
+      images: [{ source: { type: "url", url: "https://example.com/a.png" } }, { source: { type: "empty" } }],
+    });
+    const { container } = render(<DocumentEditor value={docWith([group])} readOnly />);
+    expect(items(container, group.id)).toHaveLength(1);
+    expect(container.querySelector(".wte-image-slot")).toBeNull();
+  });
+
+  it("moves focus between row items with Left/Right arrows", () => {
+    const group = createEmptyImageGroupBlock({ columns: 2 });
+    const { container } = render(<DocumentEditor value={docWith([group])} onUploadImage={vi.fn()} />);
+    const [first, second] = items(container, group.id) as HTMLElement[];
+
+    first!.focus();
+    expect(document.activeElement).toBe(first);
+    fireEvent.keyDown(first!, { key: "ArrowRight" });
+    expect(document.activeElement).toBe(second);
+    fireEvent.keyDown(second!, { key: "ArrowRight" });
+    expect(document.activeElement).toBe(first); // wraps
   });
 });
 

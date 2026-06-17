@@ -11,6 +11,7 @@ import {
   type ImageBlock,
   type ImageGroupBlock,
   type ImageGroupEntry,
+  type ImageSource,
   type InlineNode,
   type TextBlock,
   type TextVariant,
@@ -422,13 +423,14 @@ function replaceBlockAt<TMeta extends BlockMeta, TDocMeta extends BlockMeta>(
  */
 function imageBlockFromEntry<TMeta extends BlockMeta>(
   entry: ImageGroupEntry<TMeta>,
+  source: ImageSource,
   align: ImageAlign | undefined,
   blockId: string,
 ): ImageBlock<TMeta> {
   return {
     id: blockId,
     type: "image",
-    source: entry.source,
+    source,
     ...(entry.altText !== undefined ? { altText: entry.altText } : {}),
     ...(entry.caption !== undefined ? { caption: entry.caption } : {}),
     ...(entry.size !== undefined ? { size: entry.size } : {}),
@@ -437,14 +439,20 @@ function imageBlockFromEntry<TMeta extends BlockMeta>(
   };
 }
 
-/** A run of entries as either an image group (≥2) or a collapsed image (1), reusing `blockId`. */
+/**
+ * A run of entries as either an image group (≥2) or a collapsed image (1),
+ * reusing `blockId`. A lone *empty* entry can't become an `ImageBlock` (those
+ * always carry a real source), so it stays a single-entry group — valid draft
+ * state that the blur prune later removes.
+ */
 function groupOrCollapse<TMeta extends BlockMeta>(
   group: ImageGroupBlock<TMeta>,
   entries: ImageGroupEntry<TMeta>[],
   blockId: string,
 ): Block<TMeta> {
-  if (entries.length === 1) {
-    return imageBlockFromEntry(entries[0]!, group.align, blockId);
+  const only = entries.length === 1 ? entries[0]! : undefined;
+  if (only !== undefined && only.source.type !== "empty") {
+    return imageBlockFromEntry(only, only.source, group.align, blockId);
   }
   return { ...group, id: blockId, images: entries };
 }
@@ -537,6 +545,41 @@ export function splitImageGroup<TMeta extends BlockMeta, TDocMeta extends BlockM
   const left = groupOrCollapse(group, group.images.slice(0, at), group.id);
   const right = groupOrCollapse(group, group.images.slice(at), newBlockId);
   return replaceBlockAt(document, index, parseBlock(left), parseBlock(right));
+}
+
+/**
+ * Removes every empty draft slot from image groups across the document. Empty
+ * slots are interim state while filling an image row; once the user navigates
+ * away they should not persist. For each group: empty entries are dropped; a
+ * group left with one filled entry collapses to a plain `image` block (reusing
+ * its slot); a group left fully empty is deleted. Returns the same document
+ * reference when nothing changed so callers can skip a no-op transaction.
+ */
+export function pruneEmptyImageSlots<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
+  options: { exceptBlockId?: string | undefined } = {},
+): WealthyDocument<TMeta, TDocMeta> {
+  let changed = false;
+  const blocks: Block<TMeta>[] = [];
+  for (const block of document.blocks) {
+    // Leave the actively-edited row alone so its still-empty slots survive while
+    // the user fills it (e.g. after stepping away to pick a file).
+    if (block.type !== "imageGroup" || block.id === options.exceptBlockId) {
+      blocks.push(block);
+      continue;
+    }
+    const kept = block.images.filter((entry) => entry.source.type !== "empty");
+    if (kept.length === block.images.length) {
+      blocks.push(block);
+      continue;
+    }
+    changed = true;
+    if (kept.length === 0) {
+      continue; // fully empty group — drop it entirely
+    }
+    blocks.push(parseBlock(groupOrCollapse(block, kept, block.id)));
+  }
+  return changed ? withBlocks(document, blocks) : document;
 }
 
 // ---------------------------------------------------------------------------

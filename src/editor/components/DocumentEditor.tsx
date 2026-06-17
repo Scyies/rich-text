@@ -19,12 +19,13 @@ import { getActiveMarks, toggleMark } from "../core/marks";
 import { getHeadingNumbers, getListItemNumbers, formatHeadingNumber } from "../core/numbering";
 import { getSelectedBlockRange } from "../core/selection";
 import {
+  createEmptyImageGroupBlock,
   createImageBlock,
   createImageGroupBlock,
   createTableBlock,
   createTextBlock,
+  generateBlockId,
   type CreateImageBlockInput,
-  type CreateImageGroupBlockInput,
   type CreateImageGroupEntryInput,
 } from "../core/factories";
 import { isDurableImageUrl } from "../core/schema";
@@ -56,7 +57,7 @@ import { parseClipboardToBlocks, parseHtmlToBlocks } from "./paste";
 import { resolveMessages, MessagesProvider, useMessages, type EditorMessages, type Locale } from "../i18n";
 import { ChipPopover } from "./ChipPopover";
 import { FloatingToolbar, type FloatingToolbarExtraItem } from "./FloatingToolbar";
-import { ImageGroupView, ImageView } from "./ImageView";
+import { ImageGroupView, ImageView, type ImageItemArrow } from "./ImageView";
 import { InlineEditor, type InlineEditorHandle } from "./InlineEditor";
 import { buildCoreSlashItems, filterSlashItems, SlashMenu, type SlashMenuItem } from "./SlashMenu";
 import { TableView } from "./TableView";
@@ -90,23 +91,10 @@ export function defaultInlineTagToNode(label: string): InlineNode {
   return { type: "object", kind: "placeholder", data: { key: key.length > 0 ? key : "campo", label } };
 }
 
-export interface ImageRequestContext {
-  blockId: string;
-  /** The text typed after "/" when the image command was applied. */
-  query: string;
-}
-
 export type ImageInsertionInput<TMeta extends BlockMeta = BlockMeta> = CreateImageBlockInput<TMeta>;
 
 export type ImageInsertionResult<TMeta extends BlockMeta = BlockMeta> =
   | ImageInsertionInput<TMeta>
-  | null
-  | undefined;
-
-export type ImageGroupInsertionInput<TMeta extends BlockMeta = BlockMeta> = CreateImageGroupBlockInput<TMeta>;
-
-export type ImageGroupInsertionResult<TMeta extends BlockMeta = BlockMeta> =
-  | ImageGroupInsertionInput<TMeta>
   | null
   | undefined;
 
@@ -136,27 +124,18 @@ export interface DocumentEditorProps<TMeta extends BlockMeta = BlockMeta> {
   /** Resolve host-owned image group entries to renderable URLs. URL entries do not call this. */
   resolveImageContentSource?: ((entry: ImageGroupEntry<TMeta>) => string | undefined) | undefined;
   /**
-   * Called by the built-in `/image` slash item. The host should return a URL
-   * or asset-backed image payload, or null to cancel.
-   */
-  onRequestImage?:
-    | ((context: ImageRequestContext) => ImageInsertionResult<TMeta> | Promise<ImageInsertionResult<TMeta>>)
-    | undefined;
-  /**
-   * Called by the built-in `/image row` slash item. The host should return an
-   * image-group payload (one or more entries), or null to cancel. The item is
-   * only shown when this is provided.
-   */
-  onRequestImageGroup?:
-    | ((context: ImageRequestContext) => ImageGroupInsertionResult<TMeta> | Promise<ImageGroupInsertionResult<TMeta>>)
-    | undefined;
-  /**
-   * Called for pasted/dropped image files. Upload/storage stays host-owned;
-   * the returned payload is inserted as an image block.
+   * Called for pasted/dropped image files (including into an image-row slot).
+   * Upload/storage stays host-owned; the returned payload becomes the image.
    */
   onUploadImage?:
     | ((file: File) => ImageInsertionResult<TMeta> | Promise<ImageInsertionResult<TMeta>>)
     | undefined;
+  /**
+   * Allow dropped/pasted image *URLs* (http(s) links and dragged web images) to
+   * become images, both at block level and into image-row slots. File uploads
+   * via `onUploadImage` are independent of this. Defaults to false.
+   */
+  allowDroppedImageUrls?: boolean | undefined;
   /**
    * When true, pasting/dropping two or more image files at once inserts a
    * single side-by-side `imageGroup` instead of separate image blocks. A single
@@ -292,9 +271,8 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     renderBlock,
     resolveImageSource,
     resolveImageContentSource,
-    onRequestImage,
-    onRequestImageGroup,
     onUploadImage,
+    allowDroppedImageUrls = false,
     groupUploadedImages = false,
   } = props;
 
@@ -373,6 +351,41 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     }
   }, []);
 
+  // ---- image-row item surfaces (focusable, non-editable drop/paste targets) ----
+  const itemElementsRef = useRef(new Map<string, HTMLElement>());
+  const [itemFocusRequest, setItemFocusRequest] = useState<{ id: string; token: number } | null>(null);
+  const appliedItemFocusTokenRef = useRef(0);
+
+  const itemKey = useCallback((blockId: string, entryId: string): string => `${blockId}::${entryId}`, []);
+
+  const registerItemElement = useCallback(
+    (blockId: string, entryId: string, element: HTMLElement | null) => {
+      const id = `${blockId}::${entryId}`;
+      if (element === null) {
+        itemElementsRef.current.delete(id);
+      } else {
+        itemElementsRef.current.set(id, element);
+      }
+    },
+    [],
+  );
+
+  const requestItemFocus = useCallback(
+    (blockId: string, entryId: string) => {
+      focusTokenRef.current += 1;
+      setItemFocusRequest({ id: itemKey(blockId, entryId), token: focusTokenRef.current });
+    },
+    [itemKey],
+  );
+
+  useLayoutEffect(() => {
+    if (itemFocusRequest === null || itemFocusRequest.token === appliedItemFocusTokenRef.current) {
+      return;
+    }
+    appliedItemFocusTokenRef.current = itemFocusRequest.token;
+    itemElementsRef.current.get(itemFocusRequest.id)?.focus();
+  }, [itemFocusRequest]);
+
   // ---- slash menu ----
   const getSlashAnchor = useCallback((blockId: string): { x: number; top: number; bottom: number } => {
     const root = editorsRef.current.get(blockId)?.getElement();
@@ -394,13 +407,12 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
   const allSlashItems = useMemo(
     () => [
       ...buildCoreSlashItems(messages, {
-        includeImage: onRequestImage !== undefined,
-        includeImageGroup: onRequestImageGroup !== undefined,
+        includeImageGroup: onUploadImage !== undefined || allowDroppedImageUrls,
       }),
       ...(props.slashItems ?? []),
       ...registry.slashItems,
     ],
-    [messages, onRequestImage, onRequestImageGroup, props.slashItems, registry],
+    [messages, onUploadImage, allowDroppedImageUrls, props.slashItems, registry],
   );
   const slashItems = useMemo(
     () => (slash === null ? [] : filterSlashItems(allSlashItems, slash.query)),
@@ -431,13 +443,6 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
   const insertImageAfter = useCallback(
     (afterBlockId: string | null, input: ImageInsertionInput<TMeta>) => {
       insertBlocksAfter(afterBlockId, [createImageBlock<TMeta>(input)]);
-    },
-    [insertBlocksAfter],
-  );
-
-  const insertImageGroupAfter = useCallback(
-    (afterBlockId: string | null, input: ImageGroupInsertionInput<TMeta>) => {
-      insertBlocksAfter(afterBlockId, [createImageGroupBlock<TMeta>(input)]);
     },
     [insertBlocksAfter],
   );
@@ -531,6 +536,41 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     [onUploadImage, groupUploadedImages],
   );
 
+  // Resolves dropped/pasted files to image payloads (for filling a row slot),
+  // dropping any the host rejected and preserving order.
+  const uploadImageInputs = useCallback(
+    async (files: File[]): Promise<ImageInsertionInput<TMeta>[]> => {
+      if (onUploadImage === undefined || files.length === 0) {
+        return [];
+      }
+      const inputs = await Promise.all(files.map((file) => onUploadImage(file)));
+      return inputs.filter((input): input is ImageInsertionInput<TMeta> => input !== null && input !== undefined);
+    },
+    [onUploadImage],
+  );
+
+  // Transient drop feedback (e.g. an upload failure), keyed by block — and by
+  // entry when it targets a single image-row slot. Auto-clears.
+  const [dropFeedback, setDropFeedback] = useState<
+    { blockId: string; entryId?: string | undefined; message: string } | null
+  >(null);
+  const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showDropFeedback = useCallback((blockId: string, entryId: string | undefined, message: string) => {
+    if (feedbackTimerRef.current !== null) {
+      clearTimeout(feedbackTimerRef.current);
+    }
+    setDropFeedback({ blockId, ...(entryId !== undefined ? { entryId } : {}), message });
+    feedbackTimerRef.current = setTimeout(() => setDropFeedback(null), 3000);
+  }, []);
+  useEffect(
+    () => () => {
+      if (feedbackTimerRef.current !== null) {
+        clearTimeout(feedbackTimerRef.current);
+      }
+    },
+    [],
+  );
+
   const applySlashItem = useCallback(
     (item: SlashMenuItem) => {
       if (slash === null) {
@@ -584,42 +624,19 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
         case "table":
           commands.insertBlockAfter(current.id, createTableBlock({ columnCount: 3, rowCount: 3 }) as Block<TMeta>);
           break;
-        case "image":
-          if (onRequestImage !== undefined) {
-            void Promise.resolve(onRequestImage({ blockId: current.id, query: slash.query })).then((input) => {
-              if (input !== null && input !== undefined) {
-                insertImageAfter(current.id, input);
-              }
-            }).catch(() => undefined);
-          }
-          break;
-        case "image-group":
-          if (onRequestImageGroup !== undefined) {
-            void Promise.resolve(onRequestImageGroup({ blockId: current.id, query: slash.query })).then((input) => {
-              if (input !== null && input !== undefined && input.images.length > 0) {
-                insertImageGroupAfter(current.id, input);
-              }
-            }).catch(() => undefined);
-          }
-          break;
+        case "image-group": {
+          // Insert an empty 2-slot row; the user fills each slot by drop/paste.
+          const group = createEmptyImageGroupBlock<TMeta>();
+          commands.insertBlockAfter(current.id, group as Block<TMeta>);
+          requestItemFocus(group.id, group.images[0]!.id);
+          return;
+        }
         default:
           break;
       }
       requestFocus(blockKey(current.id), slash.slashOffset);
     },
-    [
-      slash,
-      engine,
-      commands,
-      closeSlash,
-      requestFocus,
-      props.slashItems,
-      registry,
-      onRequestImage,
-      insertImageAfter,
-      onRequestImageGroup,
-      insertImageGroupAfter,
-    ],
+    [slash, engine, commands, closeSlash, requestFocus, requestItemFocus, props.slashItems, registry],
   );
 
   // ---- content change pipeline (input rules + slash detection) ----
@@ -683,9 +700,13 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
 
   // ---- focused-block tracking (placeholder display, slash lifetime) ----
   const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
+  // The block last focused, retained across blur so a leave-the-editor prune can
+  // spare the row the user is actively filling (e.g. while picking a file).
+  const lastFocusedBlockIdRef = useRef<string | null>(null);
 
   const handleEditorFocus = useCallback((blockId: string) => {
     setFocusedBlockId(blockId);
+    lastFocusedBlockIdRef.current = blockId;
   }, []);
 
   /** Closes the slash menu when its block loses focus (outside click, tabbing away). */
@@ -815,7 +836,12 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
 
       const pasteSelection = { blockId: selection.blockId, anchor: selection.anchor, focus: selection.focus };
       const insertParsedClipboard = () => {
-        const pasted = parseClipboardToBlocks({ html, text }) as Block<TMeta>[];
+        let pasted = parseClipboardToBlocks({ html, text }) as Block<TMeta>[];
+        // URL-backed images from pasted HTML follow the same opt-in as dropped
+        // URLs: drop them (but keep the surrounding text) unless allowed.
+        if (!allowDroppedImageUrls) {
+          pasted = pasted.filter((candidate) => candidate.type !== "image" && candidate.type !== "imageGroup");
+        }
         insertBlocksAtTextSelection(pasteSelection, pasted, true);
       };
 
@@ -834,7 +860,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
         insertParsedClipboard();
       }
     },
-    [readOnly, engine, closeSlash, insertBlocksAtTextSelection, onUploadImage, uploadImageFiles],
+    [readOnly, engine, closeSlash, insertBlocksAtTextSelection, onUploadImage, uploadImageFiles, allowDroppedImageUrls],
   );
 
   // ---- keyboard structure ----
@@ -975,7 +1001,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
   }, [engine, commands, requestFocus]);
 
   const moveFocus = useCallback(
-    (blockId: string, direction: -1 | 1, entryId?: string): boolean => {
+    (blockId: string, direction: -1 | 1, entryId?: string, preferredItemIndex?: number): boolean => {
       const blocks = engine.getDocument().blocks;
       const index = blocks.findIndex((candidate) => candidate.id === blockId);
       if (index === -1) {
@@ -988,6 +1014,15 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
       const sourceElement = editorsRef.current.get(editorKeyId(sourceKey))?.getElement();
       const caretX = sourceElement != null ? getCaretViewportX(sourceElement) : null;
 
+      // The column to keep when moving between image rows: an explicit preferred
+      // index wins; otherwise carry over the source caption's entry position.
+      const sourceBlock = blocks[index]!;
+      const carryIndex =
+        preferredItemIndex ??
+        (entryId !== undefined && sourceBlock.type === "imageGroup"
+          ? sourceBlock.images.findIndex((candidate) => candidate.id === entryId)
+          : -1);
+
       const landOn = (key: EditorKey, targetElement: HTMLElement | null): void => {
         let offset: number | null = null;
         if (caretX !== null && targetElement !== null) {
@@ -998,14 +1033,31 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
 
       for (let cursor = index + direction; cursor >= 0 && cursor < blocks.length; cursor += direction) {
         const candidate = blocks[cursor]!;
-        // An image group has one caption editor per entry; vertical nav lands on
-        // the entry nearest the entry edge (first going down, last going up).
+        // Land on an image row's item: keep the column when one is known, else
+        // the entry nearest the edge (first going down, last going up). Filled
+        // entries land on their caption editor; empty slots land on the focusable
+        // item surface so an all-empty row is reachable, not skipped.
         if (candidate.type === "imageGroup" && candidate.images.length > 0) {
-          const entry = direction === -1 ? candidate.images[candidate.images.length - 1]! : candidate.images[0]!;
-          const key: EditorKey = { kind: "imageGroupCaption", blockId: candidate.id, entryId: entry.id };
-          const handle = editorsRef.current.get(editorKeyId(key));
-          if (handle !== undefined) {
-            landOn(key, handle.getElement());
+          const target =
+            carryIndex >= 0
+              ? Math.min(carryIndex, candidate.images.length - 1)
+              : direction === -1
+                ? candidate.images.length - 1
+                : 0;
+          const entry = candidate.images[target]!;
+          const targetItemKey = itemKey(candidate.id, entry.id);
+          if (preferredItemIndex !== undefined && itemElementsRef.current.has(targetItemKey)) {
+            requestItemFocus(candidate.id, entry.id);
+            return true;
+          }
+          const captionKey: EditorKey = { kind: "imageGroupCaption", blockId: candidate.id, entryId: entry.id };
+          const captionHandle = editorsRef.current.get(editorKeyId(captionKey));
+          if (captionHandle !== undefined) {
+            landOn(captionKey, captionHandle.getElement());
+            return true;
+          }
+          if (itemElementsRef.current.has(targetItemKey)) {
+            requestItemFocus(candidate.id, entry.id);
             return true;
           }
           continue;
@@ -1029,7 +1081,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
       }
       return false;
     },
-    [engine, editor.hiddenBlockIds, requestFocus, addTrailingParagraph],
+    [engine, editor.hiddenBlockIds, requestFocus, requestItemFocus, itemKey, addTrailingParagraph],
   );
 
   // ---- selection: inline tracking + block multi-select ----
@@ -1161,25 +1213,176 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
         position === "after" ? targetBlockId : targetIndex === 0 ? null : blocks[targetIndex - 1]!.id;
 
       const imageFiles = getImageFiles(dataTransfer);
-      if (imageFiles.length > 0 && onUploadImage !== undefined) {
+      if (imageFiles.length > 0) {
+        if (onUploadImage === undefined) {
+          showDropFeedback(targetBlockId, undefined, messages.imageDropFailed);
+          return;
+        }
         void uploadImageFiles(imageFiles)
-          .then((imageBlocks) => insertBlocksAfter(afterBlockId, imageBlocks))
-          .catch(() => undefined);
+          .then((imageBlocks) => {
+            if (imageBlocks.length === 0) {
+              showDropFeedback(targetBlockId, undefined, messages.imageDropFailed);
+            } else {
+              insertBlocksAfter(afterBlockId, imageBlocks);
+            }
+          })
+          .catch(() => showDropFeedback(targetBlockId, undefined, messages.imageDropFailed));
         return;
       }
 
+      // Dropped image *URLs* (dragged web images / link text) only become images
+      // when the host opts in — they are not host-uploaded bytes.
       const htmlImageBlocks = imageBlocksFromHtml(dataTransfer.getData("text/html")) as Block<TMeta>[];
+      const url = durableUrlFromDataTransfer(dataTransfer);
+      const hasUrlImage = htmlImageBlocks.length > 0 || url !== null;
+      if (!allowDroppedImageUrls) {
+        if (hasUrlImage) {
+          showDropFeedback(targetBlockId, undefined, messages.imageDropUrlDisabled);
+        }
+        return;
+      }
       if (htmlImageBlocks.length > 0) {
         insertBlocksAfter(afterBlockId, htmlImageBlocks);
         return;
       }
-
-      const url = durableUrlFromDataTransfer(dataTransfer);
       if (url !== null) {
         insertImageAfter(afterBlockId, { source: { type: "url", url } });
       }
     },
-    [readOnly, engine, onUploadImage, uploadImageFiles, insertBlocksAfter, insertImageAfter],
+    [readOnly, engine, onUploadImage, allowDroppedImageUrls, uploadImageFiles, insertBlocksAfter, insertImageAfter, showDropFeedback, messages],
+  );
+
+  // Fills/replaces one image-row slot. The first upload lands in the target
+  // slot (keeping its id so focus stays put); any extras append as new filled
+  // columns after it. Used by both drop and paste onto a slot.
+  const applyEntryFill = useCallback(
+    (blockId: string, entryId: string, inputs: ImageInsertionInput<TMeta>[]) => {
+      const block = engine.getDocument().blocks.find((candidate) => candidate.id === blockId);
+      if (block === undefined || block.type !== "imageGroup" || inputs.length === 0) {
+        return;
+      }
+      const index = block.images.findIndex((candidate) => candidate.id === entryId);
+      if (index === -1) {
+        return;
+      }
+      // Normalize through the factory so ids are generated and captions coerced.
+      const normalized = createImageGroupBlock<TMeta>({ images: inputs.map(imageInputToGroupEntry) }).images;
+      const images = [...block.images];
+      images[index] = { ...normalized[0]!, id: entryId };
+      images.splice(index + 1, 0, ...normalized.slice(1));
+      commands.updateBlock(blockId, { images });
+      requestItemFocus(blockId, entryId);
+    },
+    [engine, commands, requestItemFocus],
+  );
+
+  const fillEntryFromTransfer = useCallback(
+    (blockId: string, entryId: string, dataTransfer: DataTransfer) => {
+      if (readOnly) {
+        return;
+      }
+      const block = engine.getDocument().blocks.find((candidate) => candidate.id === blockId);
+      if (block === undefined || block.type !== "imageGroup") {
+        return;
+      }
+      const imageFiles = getImageFiles(dataTransfer);
+      if (imageFiles.length > 0) {
+        if (onUploadImage === undefined) {
+          showDropFeedback(blockId, entryId, messages.imageDropFailed);
+          return;
+        }
+        void uploadImageInputs(imageFiles)
+          .then((inputs) => {
+            if (inputs.length === 0) {
+              showDropFeedback(blockId, entryId, messages.imageDropFailed);
+            } else {
+              applyEntryFill(blockId, entryId, inputs);
+            }
+          })
+          .catch(() => showDropFeedback(blockId, entryId, messages.imageDropFailed));
+        return;
+      }
+      const url = durableUrlFromDataTransfer(dataTransfer);
+      if (url !== null) {
+        if (!allowDroppedImageUrls) {
+          showDropFeedback(blockId, entryId, messages.imageDropUrlDisabled);
+          return;
+        }
+        applyEntryFill(blockId, entryId, [{ source: { type: "url", url } }]);
+        return;
+      }
+      showDropFeedback(blockId, entryId, messages.imageDropUnsupported);
+    },
+    [readOnly, engine, onUploadImage, allowDroppedImageUrls, uploadImageInputs, applyEntryFill, showDropFeedback, messages],
+  );
+
+  const addColumn = useCallback(
+    (blockId: string) => {
+      const block = engine.getDocument().blocks.find((candidate) => candidate.id === blockId);
+      if (block === undefined || block.type !== "imageGroup") {
+        return;
+      }
+      const entry: ImageGroupEntry<TMeta> = { id: generateBlockId(), source: { type: "empty" } };
+      const lastEntryId = block.images[block.images.length - 1]?.id ?? null;
+      commands.insertImageGroupEntry(blockId, lastEntryId, entry);
+      requestItemFocus(blockId, entry.id);
+    },
+    [engine, commands, requestItemFocus],
+  );
+
+  const removeColumn = useCallback(
+    (blockId: string, entryId: string) => {
+      const block = engine.getDocument().blocks.find((candidate) => candidate.id === blockId);
+      if (block === undefined || block.type !== "imageGroup") {
+        return;
+      }
+      const index = block.images.findIndex((candidate) => candidate.id === entryId);
+      commands.removeImageGroupEntry(blockId, entryId);
+      const after = engine.getDocument().blocks.find((candidate) => candidate.id === blockId);
+      if (after?.type === "imageGroup") {
+        const target = after.images[Math.max(0, index - 1)] ?? after.images[0];
+        if (target !== undefined) {
+          requestItemFocus(blockId, target.id);
+        }
+      }
+    },
+    [engine, commands, requestItemFocus],
+  );
+
+  const handleItemArrow = useCallback(
+    (blockId: string, entryId: string, key: ImageItemArrow): boolean => {
+      const block = engine.getDocument().blocks.find((candidate) => candidate.id === blockId);
+      if (block === undefined || block.type !== "imageGroup") {
+        return false;
+      }
+      const index = block.images.findIndex((candidate) => candidate.id === entryId);
+      if (index === -1) {
+        return false;
+      }
+      if (key === "ArrowLeft" || key === "ArrowRight") {
+        if (block.images.length < 2) {
+          return false;
+        }
+        const dir = key === "ArrowLeft" ? -1 : 1;
+        const nextIndex = (index + dir + block.images.length) % block.images.length;
+        requestItemFocus(blockId, block.images[nextIndex]!.id);
+        return true;
+      }
+      // Up/Down leave the row toward the adjacent block, keeping this column.
+      return moveFocus(blockId, key === "ArrowUp" ? -1 : 1, undefined, index);
+    },
+    [engine, requestItemFocus, moveFocus],
+  );
+
+  const handleItemFocus = useCallback(
+    (blockId: string) => {
+      // An item surface is focused, not a caption — clear any text selection so
+      // the formatting toolbar doesn't linger over the now-unfocused text.
+      setFocusedBlockId(blockId);
+      lastFocusedBlockIdRef.current = blockId;
+      editor.setSelection(null);
+    },
+    [editor],
   );
 
   // ---- floating toolbar ----
@@ -1324,8 +1527,15 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
         return;
       }
       editor.commit();
+      // Clean up unfilled image-row slots when the user leaves the editor — but
+      // spare the row they last touched. Leaving is exactly when someone steps
+      // out to pick/drag a file, so the in-progress row must survive the round
+      // trip; only rows they had already moved on from get pruned.
+      if (!readOnly) {
+        commands.pruneEmptyImageSlots(lastFocusedBlockIdRef.current ?? undefined);
+      }
     },
-    [editor],
+    [editor, readOnly, commands],
   );
 
   // A non-editable block at the end of the document has no caret position after
@@ -1386,6 +1596,20 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
           resolveImageSource={resolveImageSource as DocumentEditorProps["resolveImageSource"]}
           resolveImageContentSource={resolveImageContentSource as DocumentEditorProps["resolveImageContentSource"]}
           commandsUpdateBlock={commands.updateBlock}
+          registerItemElement={registerItemElement}
+          onEntryFill={fillEntryFromTransfer}
+          onItemFocus={handleItemFocus}
+          onItemArrow={handleItemArrow}
+          onAddColumn={addColumn}
+          onRemoveColumn={removeColumn}
+          imageGroupFeedback={
+            dropFeedback?.blockId === block.id && dropFeedback.entryId !== undefined
+              ? { entryId: dropFeedback.entryId, message: dropFeedback.message }
+              : null
+          }
+          blockFeedback={
+            dropFeedback?.blockId === block.id && dropFeedback.entryId === undefined ? dropFeedback.message : null
+          }
         />
       ))}
 
@@ -1481,6 +1705,14 @@ interface BlockRowProps {
   resolveImageSource: DocumentEditorProps["resolveImageSource"];
   resolveImageContentSource: DocumentEditorProps["resolveImageContentSource"];
   commandsUpdateBlock(blockId: string, patch: Record<string, unknown>): void;
+  registerItemElement(blockId: string, entryId: string, element: HTMLElement | null): void;
+  onEntryFill(blockId: string, entryId: string, dataTransfer: DataTransfer): void;
+  onItemFocus(blockId: string, entryId: string): void;
+  onItemArrow(blockId: string, entryId: string, key: ImageItemArrow): boolean;
+  onAddColumn(blockId: string): void;
+  onRemoveColumn(blockId: string, entryId: string): void;
+  imageGroupFeedback: { entryId: string; message: string } | null;
+  blockFeedback: string | null;
 }
 
 function BlockRow({
@@ -1513,6 +1745,14 @@ function BlockRow({
   resolveImageSource,
   resolveImageContentSource,
   commandsUpdateBlock,
+  registerItemElement,
+  onEntryFill,
+  onItemFocus,
+  onItemArrow,
+  onAddColumn,
+  onRemoveColumn,
+  imageGroupFeedback,
+  blockFeedback,
 }: BlockRowProps) {
   const messages = useMessages();
   const customRenderer =
@@ -1688,6 +1928,16 @@ function BlockRow({
             onCaptionBackspaceAtStart={(entryId) => onBackspaceAtStart(block.id, entryId)}
             onCaptionArrowUp={(entryId) => onMoveFocus(block.id, -1, entryId)}
             onCaptionArrowDown={(entryId) => onMoveFocus(block.id, 1, entryId)}
+            registerItemElement={(entryId, element) => registerItemElement(block.id, entryId, element)}
+            onEntryDrop={(entryId, dataTransfer) => onEntryFill(block.id, entryId, dataTransfer)}
+            onEntryPaste={(entryId, dataTransfer) => onEntryFill(block.id, entryId, dataTransfer)}
+            onItemFocus={(entryId) => onItemFocus(block.id, entryId)}
+            onItemArrow={(entryId, key) => onItemArrow(block.id, entryId, key)}
+            onAddColumn={() => onAddColumn(block.id)}
+            onRemoveColumn={(entryId) => onRemoveColumn(block.id, entryId)}
+            {...(imageGroupFeedback !== null
+              ? { feedbackEntryId: imageGroupFeedback.entryId, feedbackMessage: imageGroupFeedback.message }
+              : {})}
           />
         )}
 
@@ -1703,6 +1953,12 @@ function BlockRow({
               <span className="wte-block__custom-kind">{block.kind}</span>
             </div>
           ))}
+
+        {blockFeedback !== null && (
+          <span className="wte-image__feedback" role="status" contentEditable={false}>
+            {blockFeedback}
+          </span>
+        )}
       </div>
     </div>
   );

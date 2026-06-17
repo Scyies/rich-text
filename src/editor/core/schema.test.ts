@@ -3,6 +3,7 @@ import {
   createBlock,
   createCustomBlock,
   createEmptyDocument,
+  createEmptyImageGroupBlock,
   createHeadingBlock,
   createImageBlock,
   createImageGroupBlock,
@@ -18,6 +19,7 @@ import {
   inlineNodeSchema,
   imageBlockSchema,
   imageGroupBlockSchema,
+  isFilledImageGroupEntry,
   safeValidateDocument,
   tableBlockSchema,
   validateDocument,
@@ -147,6 +149,18 @@ describe("block schemas", () => {
       ],
     });
     expect(imageGroupBlockSchema.safeParse(duplicate).success).toBe(false);
+  });
+
+  it("accepts empty draft slots in group entries but not in single image blocks", () => {
+    const group = createEmptyImageGroupBlock({ columns: 3 });
+    expect(imageGroupBlockSchema.parse(group)).toEqual(group);
+    expect(group.images).toHaveLength(3);
+    expect(group.images.every((entry) => entry.source.type === "empty")).toBe(true);
+    expect(group.images.every((entry) => !isFilledImageGroupEntry(entry))).toBe(true);
+
+    // A single image block must carry a real, durable source.
+    const image = createImageBlock({ source: { type: "url", url: "https://example.com/a.png" } });
+    expect(imageBlockSchema.safeParse({ ...image, source: { type: "empty" } }).success).toBe(false);
   });
 
   it("scales fully explicit image group widths below 100 to fill the row", () => {

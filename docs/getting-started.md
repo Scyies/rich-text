@@ -66,8 +66,8 @@ function Editor() {
 | `showHeadingNumbers` | `boolean` | Prefix headings with `1.`, `1.1`, … |
 | `plugins` | `EditorPlugin<TMeta>[]` | Custom blocks/inline objects, slash/toolbar items. |
 | `slashItems` | `CustomSlashItem<TMeta>[]` | Extra slash items (host-level). |
-| `onRequestImage` | `(context) => ImageInsertionInput \| null \| Promise<...>` | Enables the built-in `/image` item. |
-| `onUploadImage` | `(file) => ImageInsertionInput \| null \| Promise<...>` | Handles pasted/dropped image files. |
+| `onUploadImage` | `(file) => ImageInsertionInput \| null \| Promise<...>` | Handles pasted/dropped image files; enables the `/image row` slash item. |
+| `allowDroppedImageUrls` | `boolean` | Allow dropped/pasted image URLs (default `false`). |
 | `inlineTagToNode` | `(text) => InlineNode \| null` \| `false` | `{{…}}` rule; `false` disables it. |
 | `locale` | `"en" \| "pt-BR"` | UI language of the built-in chrome (default `en`). |
 | `messages` | `Partial<EditorMessages>` | Per-string overrides. |
@@ -120,11 +120,14 @@ import { BlockEditor } from "wealthy-text-editor/react";
 `DocumentEditor` intercepts paste automatically: rich HTML (Word, Google Docs, web) is converted
 to schema blocks, falling back to plain text. A single pasted paragraph splices inline into the
 current block; multiple blocks insert as one atomic (single-undo) transaction. `<hr>` round-trips
-with the separator block, and URL-backed `<img>` / `<figure>` HTML becomes image blocks.
+with the separator block, and (when `allowDroppedImageUrls` is on) URL-backed `<img>` / `<figure>`
+HTML becomes image blocks.
 
-Image files from paste/drop are not stored directly. Pass `onUploadImage` to upload the file and
-return a URL or asset-backed image payload. Pass `onRequestImage` to enable the built-in `/image`
-slash item and open your own picker/upload flow.
+Images are user-supplied through drop/paste. Image files from paste/drop are not stored directly:
+pass `onUploadImage` to upload the file and return a URL or asset-backed image payload. The
+`/image row` slash item inserts an empty grid of drop slots (`createEmptyImageGroupBlock`) that you
+fill by dropping or pasting images into each column; unfilled slots are pruned when focus leaves the
+editor. Set `allowDroppedImageUrls` to also accept dropped/pasted image links.
 
 The parsers are also exported for custom use:
 

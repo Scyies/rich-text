@@ -117,6 +117,28 @@ describe("exportDocx", () => {
     expect(xml).not.toContain("[image:");
   });
 
+  it("omits empty draft slots and skips an all-empty image group", async () => {
+    const partial = createImageGroupBlock({
+      images: [
+        { source: { type: "empty" } },
+        { source: { type: "asset", id: "kept" } },
+        { source: { type: "empty" } },
+      ],
+    });
+    const allEmpty = createImageGroupBlock({ images: [{ source: { type: "empty" } }, { source: { type: "empty" } }] });
+    const { xml } = await documentXml(docWith([partial, allEmpty, createTextBlock({ content: "marker" })]), {
+      renderImageContent: (content) => [
+        new Paragraph({
+          children: [new TextRun({ text: `CONTENT:${content.source.type === "asset" ? content.source.id : "url"}` })],
+        }),
+      ],
+    });
+    expect(xml).toContain("CONTENT:kept");
+    expect(xml).toContain("marker");
+    // Exactly one table (the partial group); the all-empty group emits nothing.
+    expect(xml.match(/<w:tbl>/g) ?? []).toHaveLength(1);
+  });
+
   it("keeps renderImageBlock precedence for single image blocks", async () => {
     const doc = docWith([createImageBlock({ source: { type: "asset", id: "asset-1" } })]);
     const { xml } = await documentXml(doc, {

@@ -60,6 +60,12 @@ export interface EditorMessages {
   imageCaptionPlaceholder: string;
   imageCaptionAriaLabel: string;
   imageResizeAriaLabel: string;
+  imageGroupSlotLabel: string;
+  imageGroupAddColumnAriaLabel: string;
+  imageGroupRemoveColumnAriaLabel: string;
+  imageDropFailed: string;
+  imageDropUrlDisabled: string;
+  imageDropUnsupported: string;
 
   // Inline-object chip popover
   chipEditAriaLabel: string;
@@ -107,6 +113,12 @@ export const en: EditorMessages = {
   imageCaptionPlaceholder: "Add caption",
   imageCaptionAriaLabel: "Image caption",
   imageResizeAriaLabel: "Resize image",
+  imageGroupSlotLabel: "Drag or paste an image here",
+  imageGroupAddColumnAriaLabel: "Add column",
+  imageGroupRemoveColumnAriaLabel: "Remove column",
+  imageDropFailed: "Couldn't add the image",
+  imageDropUrlDisabled: "Image links aren't allowed here",
+  imageDropUnsupported: "That isn't a supported image",
 
   chipEditAriaLabel: "Edit field",
 };
@@ -153,6 +165,12 @@ export const ptBR: EditorMessages = {
   imageCaptionPlaceholder: "Adicionar legenda",
   imageCaptionAriaLabel: "Legenda da imagem",
   imageResizeAriaLabel: "Redimensionar imagem",
+  imageGroupSlotLabel: "Arraste ou cole uma imagem aqui",
+  imageGroupAddColumnAriaLabel: "Adicionar coluna",
+  imageGroupRemoveColumnAriaLabel: "Remover coluna",
+  imageDropFailed: "Não foi possível adicionar a imagem",
+  imageDropUrlDisabled: "Links de imagem não são permitidos aqui",
+  imageDropUnsupported: "Esse arquivo não é uma imagem compatível",
 
   chipEditAriaLabel: "Editar campo",
 };

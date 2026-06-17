@@ -227,16 +227,36 @@ export function isDurableImageUrl(value: string): boolean {
   }
 }
 
-export const imageSourceSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("url"),
-    url: z.string().refine(isDurableImageUrl, {
-      message: "Image url must be an http(s) URL (no data:, blob:, or javascript: sources)",
-    }),
+export const urlImageSourceSchema = z.object({
+  type: z.literal("url"),
+  url: z.string().refine(isDurableImageUrl, {
+    message: "Image url must be an http(s) URL (no data:, blob:, or javascript: sources)",
   }),
-  z.object({ type: z.literal("asset"), id: z.string().min(1) }),
-]);
+});
+export type UrlImageSource = z.infer<typeof urlImageSourceSchema>;
+
+export const assetImageSourceSchema = z.object({ type: z.literal("asset"), id: z.string().min(1) });
+export type AssetImageSource = z.infer<typeof assetImageSourceSchema>;
+
+/**
+ * A group slot that has no image yet (D-image): real, persistable draft state
+ * that renders as a drop target while editing. Only `imageGroup` entries may be
+ * empty — a single `ImageBlock` always carries a real, durable source. Empty
+ * slots are pruned on blur and omitted from read-only rendering and all exports.
+ */
+export const emptyImageSourceSchema = z.object({ type: z.literal("empty") });
+export type EmptyImageSource = z.infer<typeof emptyImageSourceSchema>;
+
+export const imageSourceSchema = z.discriminatedUnion("type", [urlImageSourceSchema, assetImageSourceSchema]);
 export type ImageSource = z.infer<typeof imageSourceSchema>;
+
+/** Group-entry sources widen `ImageSource` with the empty draft slot. */
+export const imageGroupEntrySourceSchema = z.discriminatedUnion("type", [
+  urlImageSourceSchema,
+  assetImageSourceSchema,
+  emptyImageSourceSchema,
+]);
+export type ImageGroupEntrySource = z.infer<typeof imageGroupEntrySourceSchema>;
 
 export const imageSizeSchema = z.object({
   width: z.number().positive().optional(),
@@ -255,11 +275,15 @@ export const imageContentSchema = z.object({
   size: imageSizeSchema.optional(),
 });
 
-export interface ImageContent {
-  source: ImageSource;
+/** Source-less image metadata shared by single images and group entries. */
+export interface ImageContentBase {
   altText?: string | undefined;
   caption?: InlineNode[] | undefined;
   size?: ImageSize | undefined;
+}
+
+export interface ImageContent extends ImageContentBase {
+  source: ImageSource;
 }
 
 export const imageBlockSchema = imageContentSchema.extend({
@@ -281,14 +305,24 @@ export type ImageGroupColumnWidth = z.infer<typeof imageGroupColumnWidthSchema>;
 
 export const imageGroupEntrySchema = imageContentSchema.extend({
   id: blockIdSchema,
+  // Group entries widen the source to allow an empty draft slot.
+  source: imageGroupEntrySourceSchema,
   columnWidth: imageGroupColumnWidthSchema.optional(),
   meta: metaSchema.optional(),
 });
 
-export interface ImageGroupEntry<TMeta extends BlockMeta = BlockMeta> extends ImageContent {
+export interface ImageGroupEntry<TMeta extends BlockMeta = BlockMeta> extends ImageContentBase {
   id: string;
+  source: ImageGroupEntrySource;
   columnWidth?: ImageGroupColumnWidth | undefined;
   meta?: TMeta | undefined;
+}
+
+/** True when a group entry carries a real image (not an empty draft slot). */
+export function isFilledImageGroupEntry<TMeta extends BlockMeta = BlockMeta>(
+  entry: ImageGroupEntry<TMeta>,
+): entry is ImageGroupEntry<TMeta> & { source: ImageSource } {
+  return entry.source.type !== "empty";
 }
 
 export const imageGroupBlockSchema = z

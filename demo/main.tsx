@@ -3,8 +3,8 @@ import { createRoot } from "react-dom/client";
 import {
   SCHEMA_VERSION,
   createCustomBlock,
+  createEmptyImageGroupBlock,
   createHeadingBlock,
-  createImageGroupBlock,
   createSeparatorBlock,
   createTableBlock,
   createTextBlock,
@@ -126,22 +126,8 @@ function buildSampleDocument(): WealthyDocument {
       createTextBlock({ variant: "numbered", content: "First legal ground" }),
       createTextBlock({ variant: "numbered", content: "Second legal ground" }),
       createTableBlock({ columnCount: 3, rowCount: 2 }),
-      createImageGroupBlock({
-        gap: 12,
-        images: [
-          {
-            source: { type: "url", url: new URL("/coal-badge.png", location.origin).href },
-            altText: "Coal badge",
-            caption: "Left",
-            columnWidth: { value: 40, unit: "percent" },
-          },
-          {
-            source: { type: "url", url: new URL("/coal-badge.png", location.origin).href },
-            altText: "Coal badge",
-            caption: "Right",
-          },
-        ],
-      }),
+      // An empty image row: drag or paste an image into each slot to fill it.
+      createEmptyImageGroupBlock({ columns: 2, gap: 12 }),
       createCustomBlock({ kind: "callout", data: { text: "Host-rendered custom block (plugin blockType)." } }),
       createTextBlock({ content: "" }),
     ],
@@ -155,25 +141,10 @@ function App() {
   const [locale, setLocale] = useState<Locale>("en");
   const editorRef = useRef<DocumentEditorApi | null>(null);
 
-  // Image dogfooding. The `/image` slash returns a durable http(s) URL (the
-  // only kind the schema stores). Pasted/dropped files are host-owned: we keep
+  // Image dogfooding. Images are user-supplied via drag/paste: the `/image row`
+  // slash inserts empty slots, and dropped/pasted files are host-owned — we keep
   // the bytes as object URLs behind opaque asset ids and resolve them at render.
   const assetUrls = useRef(new Map<string, string>());
-
-  function requestImage() {
-    return { source: { type: "url" as const, url: new URL("/coal-badge.png", location.origin).href }, altText: "Coal badge" };
-  }
-
-  function requestImageGroup() {
-    const url = new URL("/coal-badge.png", location.origin).href;
-    return {
-      gap: 12,
-      images: [
-        { source: { type: "url" as const, url }, altText: "Coal badge", caption: "First" },
-        { source: { type: "url" as const, url }, altText: "Coal badge", caption: "Second" },
-      ],
-    };
-  }
 
   function uploadImage(file: File) {
     const id = `asset-${crypto.randomUUID()}`;
@@ -230,9 +201,8 @@ function App() {
             commitIdleMs={1500}
             showHeadingNumbers
             locale={locale}
-            onRequestImage={requestImage}
-            onRequestImageGroup={requestImageGroup}
             onUploadImage={uploadImage}
+            allowDroppedImageUrls
             groupUploadedImages
             resolveImageSource={(block) =>
               block.source.type === "asset" ? assetUrls.current.get(block.source.id) : undefined

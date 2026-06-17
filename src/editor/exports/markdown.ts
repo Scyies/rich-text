@@ -5,7 +5,7 @@ import type {
   BlockMeta,
   CustomBlock,
   ImageBlock,
-  ImageContent,
+  ImageContentBase,
   ImageGroupBlock,
   ImageGroupEntry,
   InlineMark,
@@ -169,7 +169,7 @@ function renderTable(block: TableBlock, options: MarkdownExportOptions): string 
 }
 
 function renderImageContent(
-  image: ImageContent,
+  image: ImageContentBase,
   url: string | undefined,
   options: MarkdownExportOptions,
 ): string {
@@ -187,7 +187,10 @@ function renderImage(block: ImageBlock, options: MarkdownExportOptions): string 
 }
 
 function renderImageGroup(block: ImageGroupBlock, options: MarkdownExportOptions): string {
+  // Empty draft slots are dropped; an all-empty group renders nothing and the
+  // exporter's blank-part filter removes it.
   return block.images
+    .filter((entry) => entry.source.type !== "empty")
     .map((entry) => renderImageContent(entry, imageGroupEntryUrl(entry, options), options))
     .join("\n\n");
 }

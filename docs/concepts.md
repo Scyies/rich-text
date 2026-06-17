@@ -60,10 +60,12 @@ it in v1.0.
 
 ```ts
 type ImageSource = { type: "url"; url: string } | { type: "asset"; id: string };
+// Group entries widen the source with an empty draft slot:
+type ImageGroupEntrySource = ImageSource | { type: "empty" };
 
 interface ImageBlock {
   type: "image";
-  source: ImageSource;
+  source: ImageSource; // never "empty" — a single image always has a real source
   altText?: string;
   caption?: InlineNode[];
   size?: { width?: number; height?: number; unit: "px" | "percent" };
@@ -79,7 +81,7 @@ interface ImageGroupBlock {
 
 interface ImageGroupEntry {
   id: string;
-  source: ImageSource;
+  source: ImageGroupEntrySource; // may be an empty slot while the row is being filled
   altText?: string;
   caption?: InlineNode[];
   size?: { width?: number; height?: number; unit: "px" | "percent" };
@@ -91,7 +93,14 @@ interface ImageGroupEntry {
 The core stores only a URL or a host asset id. It does **not** store `File`, `Blob`,
 object URLs, or base64 image data. Hosts that use `{ type: "asset" }` provide a resolver to
 the React components and exporters. Clipboard/drop image files go through host upload callbacks;
-URL-backed pasted/dropped images become ordinary image blocks.
+URL-backed pasted/dropped images become ordinary image blocks when `allowDroppedImageUrls` is set.
+
+Only **group entries** can carry `{ type: "empty" }` — the persistable draft state behind the
+"image row" layout. `createEmptyImageGroupBlock({ columns })` builds a row of empty slots; the
+editor renders each as a drop/paste target and prunes any still empty when focus leaves the editor
+(`pruneEmptyImageSlots`): a one-image group collapses to a plain `image`, an all-empty group is
+deleted. Empty slots are omitted from read-only rendering and every exporter. A single `ImageBlock`
+is never empty, so consumers handling `ImageBlock.source` need no empty case.
 
 `imageGroup` uses the same image content shape for each entry, but it has two percent-based
 layout controls: `columnWidth` is the entry's share of the row, while `size.width` with

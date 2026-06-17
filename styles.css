@@ -332,6 +332,94 @@ h6.wte-inline-editor { font-size: 1.05em; }
   width: 100%;
 }
 
+/* ---- image drop slots & row controls ---- */
+
+.wte-image-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 5rem;
+  box-sizing: border-box;
+  border: 1px dashed var(--wte-border);
+  border-radius: var(--wte-radius);
+  padding: 0.75em 1em;
+  color: var(--wte-muted);
+  background: rgba(0, 0, 0, 0.02);
+  text-align: center;
+  font-size: 0.9em;
+  cursor: default;
+  transition: border-color 0.1s ease-in-out, background 0.1s ease-in-out;
+}
+
+.wte-image-group__item:focus-visible .wte-image-slot,
+.wte-image-group__item:focus-visible .wte-image__frame {
+  border-color: var(--wte-accent, #3b82f6);
+  box-shadow: 0 0 0 2px var(--wte-accent, #3b82f6);
+}
+
+.wte-image-slot--drag-over,
+.wte-image-group__item--drag-over .wte-image__frame {
+  border-color: var(--wte-accent, #3b82f6);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+/* Filled items get an accent ring while a replacement image hovers over them. */
+.wte-image-group__item--drag-over .wte-image__frame {
+  border: 1px solid var(--wte-accent, #3b82f6);
+  border-radius: var(--wte-radius);
+}
+
+.wte-image-group__controls {
+  display: flex;
+  gap: 0.5em;
+  margin-top: 0.35em;
+}
+
+.wte-image-group__add,
+.wte-image-group__remove {
+  border: 1px solid var(--wte-border);
+  border-radius: var(--wte-radius);
+  background: var(--wte-bg, #fff);
+  color: var(--wte-muted);
+  font-size: 0.85em;
+  line-height: 1;
+  padding: 0.25em 0.5em;
+  cursor: pointer;
+}
+
+.wte-image-group__add:hover,
+.wte-image-group__remove:hover {
+  color: var(--wte-fg);
+  border-color: var(--wte-accent, #3b82f6);
+}
+
+.wte-image-group__remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  opacity: 0;
+  transition: opacity 0.1s ease-in-out;
+}
+
+.wte-image-group__item {
+  position: relative;
+  outline: none;
+}
+
+.wte-image-group__item:hover .wte-image-group__remove,
+.wte-image-group__remove:focus-visible {
+  opacity: 1;
+}
+
+.wte-image__feedback {
+  display: block;
+  margin-top: 0.25em;
+  color: var(--wte-danger, #dc2626);
+  font-size: 0.85em;
+  line-height: 1.3;
+}
+
 /* ---- slash menu ---- */
 
 .wte-slash-menu {
