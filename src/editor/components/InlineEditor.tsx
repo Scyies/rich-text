@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  useCallback,
   useImperativeHandle,
   useLayoutEffect,
   useRef,
@@ -92,6 +93,29 @@ export const InlineEditor = forwardRef<InlineEditorHandle, InlineEditorProps>(fu
   /** Last content emitted by this editor — its echo must not touch the DOM. */
   const lastEmittedRef = useRef<InlineNode[] | null>(null);
   const composingRef = useRef(false);
+
+  // Latest content/renderers for the element callback ref below, which fires
+  // outside the render-driven content effect.
+  const contentRef = useRef(content);
+  contentRef.current = content;
+  const inlineRenderersRef = useRef(inlineRenderers);
+  inlineRenderersRef.current = inlineRenderers;
+
+  // React swaps the host DOM node when the tag changes (e.g. a heading
+  // re-leveled h2->h3 on drag) while keeping this component — and the same
+  // `content` reference — mounted. The content effect below is keyed on
+  // `content`/`inlineRenderers`, so it does not re-run for that swap and the
+  // fresh, empty node would keep its blank text. Populate every newly attached
+  // node here and reset the echo baseline so the effect's identity guards
+  // (which assume a stable element) don't leave it blank.
+  const attachElement = useCallback((node: HTMLElement | null) => {
+    elementRef.current = node;
+    if (node === null) {
+      return;
+    }
+    node.innerHTML = inlineNodesToHtml(contentRef.current, inlineRenderersRef.current);
+    lastEmittedRef.current = null;
+  }, []);
 
   useLayoutEffect(() => {
     const element = elementRef.current;
@@ -206,7 +230,7 @@ export const InlineEditor = forwardRef<InlineEditorHandle, InlineEditorProps>(fu
 
   return (
     <Tag
-      ref={elementRef}
+      ref={attachElement}
       className={["wte-inline-editor", className].filter(Boolean).join(" ")}
       style={style}
       contentEditable={!readOnly}
