@@ -177,7 +177,18 @@ export function useDocumentEditor<TMeta extends BlockMeta = BlockMeta>(
     setLastCommitted(value);
   }, [value, engine, clearIdleTimer, setLastCommitted]);
 
-  useEffect(() => clearIdleTimer, [clearIdleTimer]);
+  useEffect(
+    () => () => {
+      clearIdleTimer();
+      const document = engine.getDocument();
+      if (document === lastCommittedRef.current) {
+        return;
+      }
+      lastCommittedRef.current = document;
+      onCommitRef.current?.(document);
+    },
+    [clearIdleTimer, engine],
+  );
 
   const document = engine.getDocument();
 

@@ -160,6 +160,65 @@ describe("useDocumentEditor", () => {
     expect(result.current.isDirty).toBe(false);
   });
 
+  it("flushes a dirty document on unmount", () => {
+    const block = createTextBlock({ content: "a" });
+    const onCommit = vi.fn();
+    const { result, unmount } = renderHook(() => useDocumentEditor({ value: docWith([block]), onCommit }));
+
+    act(() => {
+      result.current.commands.updateBlock(block.id, { content: textContent("b") });
+    });
+
+    unmount();
+
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect((onCommit.mock.lastCall![0] as WealthyDocument).blocks[0]).toMatchObject({
+      content: textContent("b"),
+    });
+  });
+
+  it("flushes a pending idle commit once on unmount", () => {
+    vi.useFakeTimers();
+    const block = createTextBlock({ content: "a" });
+    const onCommit = vi.fn();
+    const { result, unmount } = renderHook(() =>
+      useDocumentEditor({ value: docWith([block]), onCommit, commitIdleMs: 500 }),
+    );
+
+    act(() => {
+      result.current.commands.updateBlock(block.id, { content: textContent("b") });
+    });
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(onCommit).not.toHaveBeenCalled();
+
+    unmount();
+    expect(onCommit).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(onCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not commit again on unmount after a dirty document was already committed", () => {
+    const block = createTextBlock({ content: "a" });
+    const onCommit = vi.fn();
+    const { result, unmount } = renderHook(() => useDocumentEditor({ value: docWith([block]), onCommit }));
+
+    act(() => {
+      result.current.commands.updateBlock(block.id, { content: textContent("b") });
+    });
+    act(() => {
+      result.current.commit();
+    });
+
+    unmount();
+
+    expect(onCommit).toHaveBeenCalledTimes(1);
+  });
+
   it("exposes a memoized section tree that follows edits", () => {
     const h1 = createHeadingBlock({ level: 1, content: "A" });
     const p = createTextBlock({ content: "body" });

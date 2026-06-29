@@ -52,7 +52,7 @@ export function TableView({ block, readOnly = false, onTableChange }: TableViewP
   }
 
   function removeRow(): void {
-    if (block.rows.length === 0) {
+    if (block.rows.length <= 1) {
       return;
     }
     onTableChange({ rows: block.rows.slice(0, -1) });
@@ -143,7 +143,7 @@ export function TableView({ block, readOnly = false, onTableChange }: TableViewP
             type="button"
             aria-label={messages.tableRemoveRow}
             onClick={removeRow}
-            disabled={block.rows.length === 0}
+            disabled={block.rows.length <= 1}
           >
             − {messages.tableRowLabel}
           </button>
