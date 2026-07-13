@@ -51,3 +51,48 @@ test("typing at the end of a block keeps the caret after each character", async 
 
   await expect(source).toHaveText("Second supporting factabc");
 });
+
+test("a stale document caret does not steal focus from a plugin input", async ({ page }) => {
+  await page.goto("/");
+  const source = page.locator(".wte-inline-editor").filter({ hasText: "Dos Fatos" });
+  await source.click();
+  await page.keyboard.press("End");
+
+  const input = page.getByLabel("Callout text");
+  const initialValue = await input.inputValue();
+  await input.click();
+  await page.keyboard.press("End");
+  await page.keyboard.type("abc");
+
+  await expect(input).toBeFocused();
+  await expect(input).toHaveValue(`${initialValue}abc`);
+});
+
+test("a stale document caret does not steal focus from a table cell", async ({ page }) => {
+  await page.goto("/");
+  const source = page.locator(".wte-inline-editor").filter({ hasText: "Dos Fatos" });
+  await source.click();
+  await page.keyboard.press("End");
+
+  const cell = page.locator(".wte-table .wte-inline-editor").first();
+  await cell.evaluate((element) => element.setAttribute("contenteditable", "plaintext-only"));
+  await cell.click();
+  await page.keyboard.type("abc");
+
+  await expect(cell).toBeFocused();
+  await expect(cell).toHaveText("abc");
+});
+
+test("a stale document caret does not steal focus from an embedded control", async ({ page }) => {
+  await page.goto("/");
+  const source = page.locator(".wte-inline-editor").filter({ hasText: "Dos Fatos" });
+  await source.click();
+  await page.keyboard.press("End");
+
+  const addRow = page.getByRole("button", { name: "Add row" });
+  await addRow.focus();
+  await addRow.press("Enter");
+
+  await expect(addRow).toBeFocused();
+  await expect(page.locator(".wte-table tbody tr")).toHaveCount(2);
+});

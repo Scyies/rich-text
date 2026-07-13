@@ -144,7 +144,26 @@ export function orderTextSelection<TMeta extends BlockMeta, TDocMeta extends Blo
   if (comparison === null) return null;
   return comparison <= 0
     ? { start: selection.anchor, end: selection.focus, backward: false }
-    : { start: selection.focus, end: selection.anchor, backward: true };
+      : { start: selection.focus, end: selection.anchor, backward: true };
+}
+
+/** The contiguous top-level block range covered by a supported text selection. */
+export function getSelectedTextBlockRange<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
+  selection: TextSelection,
+): { start: number; end: number } | null {
+  const ordered = orderTextSelection(document, selection);
+  if (ordered === null || ordered.start.entryId !== undefined || ordered.end.entryId !== undefined) return null;
+  const start = document.blocks.findIndex((block) => block.id === ordered.start.blockId);
+  const end = document.blocks.findIndex((block) => block.id === ordered.end.blockId);
+  const startBlock = document.blocks[start];
+  const endBlock = document.blocks[end];
+  if (
+    startBlock === undefined || endBlock === undefined ||
+    (startBlock.type !== "heading" && startBlock.type !== "text") ||
+    (endBlock.type !== "heading" && endBlock.type !== "text")
+  ) return null;
+  return { start, end };
 }
 
 /**
@@ -156,16 +175,9 @@ export function getSelectedTextSlices<TMeta extends BlockMeta, TDocMeta extends 
   selection: TextSelection,
 ): SelectedTextSlice<TMeta>[] | null {
   const ordered = orderTextSelection(document, selection);
-  if (ordered === null || ordered.start.entryId !== undefined || ordered.end.entryId !== undefined) return null;
-  const startIndex = document.blocks.findIndex((block) => block.id === ordered.start.blockId);
-  const endIndex = document.blocks.findIndex((block) => block.id === ordered.end.blockId);
-  const startBlock = document.blocks[startIndex];
-  const endBlock = document.blocks[endIndex];
-  if (
-    startBlock === undefined || endBlock === undefined ||
-    (startBlock.type !== "heading" && startBlock.type !== "text") ||
-    (endBlock.type !== "heading" && endBlock.type !== "text")
-  ) return null;
+  const range = getSelectedTextBlockRange(document, selection);
+  if (ordered === null || range === null) return null;
+  const { start: startIndex, end: endIndex } = range;
 
   const slices: SelectedTextSlice<TMeta>[] = [];
   for (let index = startIndex; index <= endIndex; index += 1) {

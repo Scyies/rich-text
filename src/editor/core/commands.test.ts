@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createEditorEngine } from "./commands";
 import { createHeadingBlock, createTextBlock } from "./factories";
+import { getInlineText } from "./inline";
 import { SCHEMA_VERSION, type Block, type TextBlock, type WealthyDocument } from "./schema";
 
 function docWith(blocks: Block[]): WealthyDocument {
@@ -83,6 +84,32 @@ describe("createEditorEngine", () => {
     const caret = engine.commands.mergeWithPrevious(newId);
     expect(caret).toBe(5);
     expect(engine.getDocument().blocks).toHaveLength(1);
+  });
+
+  it("splitTextRange consumes the range and splits it in one undoable transaction", () => {
+    const first = createTextBlock({ content: "first" });
+    const last = createTextBlock({ content: "last" });
+    const engine = createEditorEngine({ value: docWith([first, last]) });
+    const selection = {
+      type: "text" as const,
+      anchor: { blockId: first.id, offset: 2 },
+      focus: { blockId: last.id, offset: 2 },
+    };
+    engine.setSelection(selection);
+
+    const newId = engine.commands.splitTextRange(selection);
+
+    expect(engine.getDocument().blocks.map((block) =>
+      block.type === "heading" || block.type === "text" ? getInlineText(block.content) : "",
+    )).toEqual(["fi", "st"]);
+    expect(engine.getSelection()).toEqual({
+      type: "text",
+      anchor: { blockId: newId, offset: 0 },
+      focus: { blockId: newId, offset: 0 },
+    });
+    expect(engine.commands.undo()).toBe(true);
+    expect(engine.getDocument().blocks).toEqual([first, last]);
+    expect(engine.getSelection()).toEqual(selection);
   });
 
   it("insertInlineNode returns the caret offset after the inserted node", () => {

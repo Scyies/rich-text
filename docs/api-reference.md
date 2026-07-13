@@ -122,7 +122,7 @@ Operate on `InlineNode[]` in inline-unit offsets (an object counts as 1).
 Pure `(document, …) => document` functions. They throw on invalid input and never mutate. The
 engine wraps these as undoable transactions; call them directly only for off-engine work.
 
-`insertBlockAfter`, `updateBlock`, `deleteBlock`, `moveBlock`, `turnInto`, `splitBlock`,
+`insertBlockAfter`, `updateBlock`, `deleteBlock`, `moveBlock`, `turnInto`, `splitBlock`, `splitTextRange`,
 `mergeWithPrevious`, `indentBlock`, `outdentBlock`, `insertInlineNode`, `updateInlineObjectAt`,
 `removeInlineNodeAt`, `insertImageGroupEntry`, `updateImageGroupEntry`, `removeImageGroupEntry`,
 `splitImageGroup`, `pruneEmptyImageSlots`, `moveSection`, `deleteSection`, `duplicateSection`,
@@ -210,6 +210,7 @@ Every command runs as one undoable transaction and throws on invalid input.
 | `moveBlock(id, afterId \| null)` | `void` | |
 | `turnInto(id, target)` | `void` | Heading ⇄ text variants. |
 | `splitBlock(id, offset)` | `string` | Id of the new (second) block. |
+| `splitTextRange(selection)` | `string` | Deletes a document text range and splits at its start in one undoable transaction; returns the new block id. |
 | `mergeWithPrevious(id)` | `number` | Caret offset in the merged block. |
 | `insertInlineNode(id, offset, node)` | `number` | Caret offset after the node. |
 | `updateInlineObject(id, offset, { data?, meta? })` | `void` | Edits a chip in place. |

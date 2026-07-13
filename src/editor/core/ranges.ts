@@ -96,6 +96,13 @@ export function replaceTextRangeWithBlocks<TMeta extends BlockMeta, TDocMeta ext
     ...(rightBlock === null ? [] : [rightBlock]),
   ];
   const blocks = [...deleted.document.blocks.slice(0, index), ...replacement, ...deleted.document.blocks.slice(index + 1)];
+  const blockIds = new Set<string>();
+  for (const candidate of blocks) {
+    if (blockIds.has(candidate.id)) {
+      throw new RangeError(`replaceTextRangeWithBlocks: duplicate block id: ${candidate.id}`);
+    }
+    blockIds.add(candidate.id);
+  }
   const lastText = [...inserted].reverse().find(isTopLevelTextBlock);
   const nextSelection = rightBlock !== null
     ? caretAt(rightBlock.id, 0)

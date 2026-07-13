@@ -9,7 +9,6 @@ import {
   type ClipboardEvent as ReactClipboardEvent,
   type CSSProperties,
   type FocusEvent as ReactFocusEvent,
-  type FormEvent as ReactFormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -24,9 +23,11 @@ import { applyMark, getActiveMarks, removeMark } from "../core/marks";
 import { getHeadingNumbers, getListItemNumbers, formatHeadingNumber } from "../core/numbering";
 import {
   getSelectedBlockRange,
+  getSelectedTextBlockRange,
   getSelectedTextSlices,
   isCollapsed,
   selectionPointsEqual,
+  type EditorSelection,
   type SelectionPoint,
   type TextSelection,
 } from "../core/selection";
@@ -375,6 +376,7 @@ export function DocumentEditor<
   }, [props.ref, editor]);
 
   // ---- per-block InlineEditor handles + focus requests ----
+  const editorRootRef = useRef<HTMLDivElement>(null);
   const editorsRef = useRef(new Map<string, InlineEditorHandle>());
   const editorKeysRef = useRef(new Map<string, EditorKey>());
   const dragSelectionRef = useRef<{ anchor: SelectionPoint; editorId: string; pointerId: number | null } | null>(null);
@@ -414,6 +416,37 @@ export function DocumentEditor<
       editorKeysRef.current.set(id, key);
     }
   }, []);
+
+  const isIndependentEditingTarget = useCallback((target: EventTarget | null): boolean => {
+    if (!(target instanceof Element)) return false;
+    const editingSurface = target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false'])");
+    if (editingSurface === null || editorRootRef.current?.contains(editingSurface) !== true) return false;
+    for (const handle of editorsRef.current.values()) {
+      const root = handle.getElement();
+      if (root === editingSurface || root?.contains(editingSurface)) return false;
+    }
+    return true;
+  }, []);
+
+  const eventTargetOwnsSelection = useCallback(
+    (target: EventTarget | null, selection: EditorSelection): boolean => {
+      const targetElement = target instanceof Element ? target : null;
+      const root = editorRootRef.current;
+      if (targetElement === null || root === null || !root.contains(targetElement)) return false;
+      if (targetElement === root) return true;
+      if (selection.type === "blocks") return targetElement.closest(".wte-block__handle") !== null;
+      const anchorEditorId = editorIdForSelectionPoint(selection.anchor);
+      const focusEditorId = editorIdForSelectionPoint(selection.focus);
+      for (const [id, handle] of editorsRef.current) {
+        const editorElement = handle.getElement();
+        if (editorElement === targetElement || editorElement?.contains(targetElement)) {
+          return id === anchorEditorId || id === focusEditorId;
+        }
+      }
+      return false;
+    },
+    [],
+  );
 
   const resolveDomSelectionPoint = useCallback((node: Node, offset: number): SelectionPoint | null => {
     for (const [id, handle] of editorsRef.current) {
@@ -538,6 +571,7 @@ export function DocumentEditor<
     const focus = offsetToDomPosition(focusRoot, selection.focus.offset);
     const nativeSelection = anchorRoot.ownerDocument.defaultView?.getSelection();
     if (anchor === null || focus === null || nativeSelection == null) return;
+    if (isIndependentEditingTarget(anchorRoot.ownerDocument.activeElement)) return;
     if (nativeSelection.anchorNode && nativeSelection.focusNode) {
       const liveAnchor = resolveDomSelectionPoint(nativeSelection.anchorNode, nativeSelection.anchorOffset);
       const liveFocus = resolveDomSelectionPoint(nativeSelection.focusNode, nativeSelection.focusOffset);
@@ -552,7 +586,7 @@ export function DocumentEditor<
     range.setEnd(focus.node, focus.offset);
     nativeSelection.removeAllRanges();
     nativeSelection.addRange(range);
-  }, [editor.selection, resolveDomSelectionPoint]);
+  }, [editor.selection, resolveDomSelectionPoint, isIndependentEditingTarget]);
 
   // ---- image-row item surfaces (focusable, non-editable drop/paste targets) ----
   const itemElementsRef = useRef(new Map<string, HTMLElement>());
@@ -1087,6 +1121,16 @@ export function DocumentEditor<
   // ---- keyboard structure ----
   const handleEnter = useCallback(
     (blockId: string, offset: number) => {
+      const selection = engine.getSelection();
+      if (
+        selection?.type === "text" &&
+        !isCollapsed(selection) &&
+        isSupportedTopLevelTextRange(engine.getDocument(), selection)
+      ) {
+        const newBlockId = commands.splitTextRange(selection);
+        requestFocus(blockKey(newBlockId), 0);
+        return;
+      }
       const block = engine.getDocument().blocks.find((candidate) => candidate.id === blockId);
       // Captions are single-line: Enter exits the image (or image group) into a
       // fresh paragraph below it rather than splitting the caption.
@@ -1344,6 +1388,7 @@ export function DocumentEditor<
 
   const handleContainerKeyDown = useCallback(
     (event: ReactKeyboardEvent) => {
+      if (isIndependentEditingTarget(event.target)) return;
       if ((event.key === "Enter" || event.key === " ") && event.target instanceof HTMLElement) {
         const chip = event.target.closest("[data-wte-object]");
         if (chip instanceof HTMLElement && openChipEditor(chip)) {
@@ -1370,6 +1415,7 @@ export function DocumentEditor<
       const selection = engine.getSelection();
       if (selection?.type === "text" && !isCollapsed(selection) && (event.key === "Delete" || event.key === "Backspace")) {
         if (!isSupportedTopLevelTextRange(engine.getDocument(), selection)) return;
+        if (!eventTargetOwnsSelection(event.target, selection)) return;
         event.preventDefault();
         commands.deleteTextRange(selection);
         const caret = engine.getSelection();
@@ -1398,21 +1444,23 @@ export function DocumentEditor<
         event.preventDefault();
       }
     },
-    [engine, commands, requestFocus, openChipEditor],
+    [engine, commands, requestFocus, openChipEditor, isIndependentEditingTarget, eventTargetOwnsSelection],
   );
 
-  const handleBeforeInput = useCallback((event: ReactFormEvent<HTMLDivElement>) => {
+  const handleBeforeInput = useCallback((event: InputEvent) => {
     const selection = engine.getSelection();
     if (readOnly || selection?.type !== "text" || isCollapsed(selection)) return;
     if (!isSupportedTopLevelTextRange(engine.getDocument(), selection)) return;
+    if (!eventTargetOwnsSelection(event.target, selection)) return;
     const spansRegions =
       selection.anchor.blockId !== selection.focus.blockId || selection.anchor.entryId !== selection.focus.entryId;
     if (!spansRegions) return;
-    const input = event.nativeEvent as InputEvent;
-    if (input.inputType === "insertText" && input.data !== null) {
+    const inputType = typeof event.inputType === "string" ? event.inputType : undefined;
+    const data = event.data ?? null;
+    if ((inputType?.startsWith("insert") || inputType === undefined) && data !== null) {
       event.preventDefault();
-      commands.replaceTextRange(selection, [{ type: "text", text: input.data }]);
-    } else if (input.inputType.startsWith("delete")) {
+      commands.replaceTextRange(selection, [{ type: "text", text: data }]);
+    } else if (inputType?.startsWith("delete")) {
       event.preventDefault();
       commands.deleteTextRange(selection);
     } else {
@@ -1420,7 +1468,14 @@ export function DocumentEditor<
     }
     const caret = engine.getSelection();
     if (caret?.type === "text") requestFocus(blockKey(caret.focus.blockId), caret.focus.offset);
-  }, [readOnly, engine, commands, requestFocus]);
+  }, [readOnly, engine, commands, requestFocus, eventTargetOwnsSelection]);
+
+  useEffect(() => {
+    const root = editorRootRef.current;
+    if (root === null) return;
+    root.addEventListener("beforeinput", handleBeforeInput);
+    return () => root.removeEventListener("beforeinput", handleBeforeInput);
+  }, [handleBeforeInput]);
 
   const writeSelectionToClipboard = useCallback((clipboardData: DataTransfer): boolean => {
     const selection = engine.getSelection();
@@ -1451,10 +1506,14 @@ export function DocumentEditor<
   }, [engine]);
 
   const handleCopy = useCallback((event: ReactClipboardEvent) => {
+    const selection = engine.getSelection();
+    if (selection !== null && !eventTargetOwnsSelection(event.target, selection)) return;
     if (writeSelectionToClipboard(event.clipboardData)) event.preventDefault();
-  }, [writeSelectionToClipboard]);
+  }, [engine, eventTargetOwnsSelection, writeSelectionToClipboard]);
 
   const handleCut = useCallback((event: ReactClipboardEvent) => {
+    const ownedSelection = engine.getSelection();
+    if (ownedSelection !== null && !eventTargetOwnsSelection(event.target, ownedSelection)) return;
     if (readOnly || !writeSelectionToClipboard(event.clipboardData)) return;
     event.preventDefault();
     const selection = engine.getSelection();
@@ -1468,7 +1527,7 @@ export function DocumentEditor<
         engine.setSelection(null);
       }
     }
-  }, [readOnly, writeSelectionToClipboard, engine, commands]);
+  }, [readOnly, writeSelectionToClipboard, engine, commands, eventTargetOwnsSelection]);
 
   // ---- drag and drop (blocks and sections, D4) ----
   const [dropIndicator, setDropIndicator] = useState<DropIndicator | null>(null);
@@ -1696,12 +1755,16 @@ export function DocumentEditor<
     () => (textSelection === null ? null : getSelectedTextSlices(document, textSelection)),
     [document, textSelection],
   );
+  const selectedTextBlockRange = useMemo(
+    () => (textSelection === null ? null : getSelectedTextBlockRange(document, textSelection)),
+    [document, textSelection],
+  );
   const [crossBlockSelectionRects, setCrossBlockSelectionRects] = useState<CSSProperties[]>([]);
   const crossBlockSelectedIds = useMemo<ReadonlySet<string>>(() =>
-    textSelection !== null && textSelection.anchor.blockId !== textSelection.focus.blockId && selectedTextSlices !== null
-      ? new Set(selectedTextSlices.map(({ block }) => block.id))
+    textSelection !== null && textSelection.anchor.blockId !== textSelection.focus.blockId && selectedTextBlockRange !== null
+      ? new Set(document.blocks.slice(selectedTextBlockRange.start, selectedTextBlockRange.end + 1).map((block) => block.id))
       : new Set(),
-  [textSelection, selectedTextSlices]);
+  [document, textSelection, selectedTextBlockRange]);
 
   useLayoutEffect(() => {
     const highlightName = "wte-cross-block-selection";
@@ -1942,11 +2005,11 @@ export function DocumentEditor<
   return (
     <MessagesProvider messages={messages}>
     <div
+      ref={editorRootRef}
       className={["wte-editor", props.className].filter(Boolean).join(" ")}
       role="group"
       aria-label={props.ariaLabel ?? messages.documentAriaLabel}
       onKeyDown={handleContainerKeyDown}
-      onBeforeInput={handleBeforeInput}
       onPointerDownCapture={handleEditorMouseDown}
       onMouseDownCapture={handleEditorMouseDownFallback}
       onBlur={handleContainerBlur}

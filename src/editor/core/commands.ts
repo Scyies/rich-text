@@ -3,7 +3,7 @@ import { getInlineLength } from "./inline";
 import { createHistory, type HistoryEntry } from "./history";
 import { applyPatches, type DocumentPatch } from "./patches";
 import { deleteTextRange as deleteDocumentTextRange, replaceTextRangeWithBlocks, replaceTextRangeWithInline } from "./ranges";
-import { clampSelection, selectionsEqual, type EditorSelection, type TextSelection } from "./selection";
+import { caretAt, clampSelection, selectionsEqual, type EditorSelection, type TextSelection } from "./selection";
 import { getSection, getSectionTree, type Section, type SectionTree } from "./sections";
 import type { Block, BlockMeta, ImageGroupEntry, InlineNode, WealthyDocument } from "./schema";
 import * as transforms from "./transforms";
@@ -57,6 +57,8 @@ export interface EditorCommands<TBlockMeta extends BlockMeta = BlockMeta> {
   turnInto(blockId: string, target: TurnIntoTarget): void;
   /** Returns the id of the new (second) block; caret belongs at its start. */
   splitBlock(blockId: string, offset: number): string;
+  /** Deletes a document text range and splits at its start as one undoable edit. */
+  splitTextRange(selection: TextSelection): string;
   /** Returns the caret offset inside the merged block. */
   mergeWithPrevious(blockId: string): number;
   /**
@@ -245,6 +247,19 @@ export function createEditorEngine<
         document: transforms.splitBlock(current, blockId, offset, newBlockId),
         result: newBlockId,
       }));
+    },
+
+    splitTextRange(textSelection) {
+      const newBlockId = generateBlockId();
+      return transact("splitTextRange", null, (current) => {
+        const deleted = deleteDocumentTextRange(current, textSelection);
+        const point = deleted.selection.focus;
+        return {
+          document: transforms.splitBlock(deleted.document, point.blockId, point.offset, newBlockId),
+          selection: caretAt(newBlockId, 0),
+          result: newBlockId,
+        };
+      });
     },
 
     insertImageGroupEntry(groupId, afterEntryId, entry) {

@@ -36,16 +36,20 @@ describe("document range operations", () => {
 
   it("extracts clipped blocks for rich and plain-text clipboard output", () => {
     const first = createTextBlock({ content: "first" });
+    const image = createImageBlock({ source: { type: "url", url: "https://example.com/a.png" }, altText: "diagram" });
     const last = createTextBlock({ content: "last" });
-    const document = docWith([first, last]);
+    const document = docWith([first, image, last]);
     const selection = {
       type: "text" as const,
-      anchor: { blockId: first.id, offset: 2 },
-      focus: { blockId: last.id, offset: 3 },
+      anchor: { blockId: last.id, offset: 3 },
+      focus: { blockId: first.id, offset: 2 },
     };
     const fragment = extractTextRange(document, selection);
-    expect(fragment.blocks.map((block) => getInlineText((block as typeof first).content))).toEqual(["rst", "las"]);
-    expect(textRangeToPlainText(document, selection)).toBe("rst\nlas");
+    expect(fragment.blocks).toHaveLength(3);
+    expect(getInlineText((fragment.blocks[0] as typeof first).content)).toBe("rst");
+    expect(fragment.blocks[1]).toBe(image);
+    expect(getInlineText((fragment.blocks[2] as typeof last).content)).toBe("las");
+    expect(textRangeToPlainText(document, selection)).toBe("rst\ndiagram\nlas");
   });
 
   it("replaces a backward cross-block range with inline text", () => {
@@ -62,13 +66,26 @@ describe("document range operations", () => {
 
   it("replaces a cross-block range with block content atomically", () => {
     const first = createTextBlock({ content: "first" });
+    const image = createImageBlock({ source: { type: "url", url: "https://example.com/a.png" } });
     const last = createTextBlock({ content: "last" });
     const inserted = createTextBlock({ variant: "bullet", content: "inserted" });
-    const result = replaceTextRangeWithBlocks(docWith([first, last]), {
+    const result = replaceTextRangeWithBlocks(docWith([first, image, last]), {
       type: "text",
       anchor: { blockId: first.id, offset: 2 },
       focus: { blockId: last.id, offset: 2 },
     }, [inserted]);
     expect(result.document.blocks.map((block) => block.type === "text" ? getInlineText(block.content) : "")).toEqual(["fi", "inserted", "st"]);
+  });
+
+  it("rejects replacement blocks whose ids collide with surviving blocks", () => {
+    const first = createTextBlock({ content: "first" });
+    const last = createTextBlock({ content: "last" });
+    const survivor = createTextBlock({ content: "survivor" });
+
+    expect(() => replaceTextRangeWithBlocks(docWith([first, last, survivor]), {
+      type: "text",
+      anchor: { blockId: first.id, offset: 2 },
+      focus: { blockId: last.id, offset: 2 },
+    }, [survivor], false)).toThrow(RangeError);
   });
 });
