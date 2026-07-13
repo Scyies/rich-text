@@ -157,15 +157,21 @@ point for **external (LLM/server) edits** — see [Headless & server use](./head
 | `isCollapsed` | `(selection) => boolean` |
 | `clampSelection` | `(document, selection) => EditorSelection \| null` |
 | `getSelectedBlockRange` | `(document, selection) => { start, end } \| null` |
+| `compareSelectionPoints` / `orderTextSelection` | Orders directional endpoints in document order. |
+| `getSelectedTextSlices` | Returns the selected slice of every top-level text-like block. |
+| `deleteTextRange` / `replaceTextRangeWithInline` / `replaceTextRangeWithBlocks` | Pure, atomic document range transforms. |
+| `extractTextRange` / `textRangeToPlainText` | Clipboard fragment helpers. |
 | `selectionsEqual` | `(a, b) => boolean` |
 
 **Types:** `EditorSelection` (= `TextSelection \| BlockSelection`), `TextSelection`
-(`{ type: "text"; blockId; entryId?; anchor; focus }`), `BlockSelection`
+(`{ type: "text"; anchor: SelectionPoint; focus: SelectionPoint }`), `SelectionPoint`
+(`{ blockId; entryId?; offset }`), `BlockSelection`
 (`{ type: "blocks"; anchorBlockId; focusBlockId }`).
 
 `entryId` addresses an editable region nested inside a block. It is omitted for a block's
 primary content (heading/text) and for a single image's caption; it is set to an entry id to
-target one caption inside an `imageGroup`. A `TextSelection` is valid (survives `clampSelection`)
+target one caption inside an `imageGroup`. Each endpoint is clamped independently, so a
+`TextSelection` can span top-level heading/text blocks while preserving backward direction. It is valid (survives `clampSelection`)
 only when the `(blockId, entryId)` pair resolves to a real editable region — so an `entryId` on a
 heading/text/image selection, or a missing/unknown `entryId` on an `imageGroup` selection, clamps
 to `null`.
@@ -174,6 +180,8 @@ to `null`.
 
 Pure operations over `InlineNode[]` and an inline-unit `[start, end)` range:
 `toggleMark`, `applyMark`, `removeMark`, `getActiveMarks`, `rangeHasMark`, `markEquals`.
+`toggleMark` accepts optional inherited-active state; `getActiveMarks` accepts optional inherited
+mark types. These produce/read `enabled: false` overrides for Word-like direct formatting.
 
 ### Engine
 
@@ -196,6 +204,9 @@ Every command runs as one undoable transaction and throws on invalid input.
 | `updateBlock(id, patch)` | `void` | Shallow patch, re-validated. Content updates coalesce (typing). |
 | `insertBlockAfter(afterId \| null, block)` | `string` | New block id. |
 | `deleteBlock(id)` | `void` | |
+| `deleteTextRange(selection)` | `void` | Merges endpoints and removes intervening blocks atomically. |
+| `replaceTextRange(selection, inline)` | `void` | Inline typing/replacement across blocks. |
+| `replaceTextRangeWithBlocks(selection, blocks, inlineSingle?)` | `void` | Rich paste across blocks. |
 | `moveBlock(id, afterId \| null)` | `void` | |
 | `turnInto(id, target)` | `void` | Heading ⇄ text variants. |
 | `splitBlock(id, offset)` | `string` | Id of the new (second) block. |
@@ -302,6 +313,9 @@ dragged web images) become images, at both block level and into row slots; file 
 `onUploadImage` are independent of it. When `groupUploadedImages` is `true`, pasting/dropping two or
 more image files at once inserts a single side-by-side `imageGroup` instead of separate image blocks
 (defaults to `false`; a single file is always a plain image).
+
+HTML table paste is resource-bounded: spans and expanded dimensions are capped at 64 rows by
+64 columns (4,096 cells). Rows belonging to nested tables are not promoted into the outer table.
 
 #### `BlockEditor`
 

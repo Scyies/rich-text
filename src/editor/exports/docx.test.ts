@@ -79,6 +79,20 @@ describe("exportDocx", () => {
     expect(xml).toContain("CALLOUT:NoteText");
   });
 
+  it("writes explicit off run properties for inherited-format overrides", async () => {
+    const { xml } = await documentXml(docWith([
+      createTextBlock({
+        content: [{
+          type: "text",
+          text: "direct formatting off",
+          marks: [{ type: "bold", enabled: false }, { type: "underline", enabled: false }],
+        }],
+      }),
+    ]));
+    expect(xml).toContain('<w:b w:val="false"');
+    expect(xml).toContain('<w:u w:val="none"');
+  });
+
   it("uses an explicit serializer for image blocks", async () => {
     const doc = docWith([createImageBlock({ source: { type: "asset", id: "asset-1" }, caption: "Caption" })]);
     const { xml } = await documentXml(doc, {

@@ -76,4 +76,17 @@ describe("toggleMark / rangeHasMark / getActiveMarks", () => {
     expect(rangeHasMark(content, 0, 1, { type: "color", token: "red" })).toBe(true);
     expect(rangeHasMark(content, 0, 1, { type: "color", token: "blue" })).toBe(false);
   });
+
+  it("creates and clears an explicit off override for an inherited mark", () => {
+    const inherited = new Set(["bold"] as const);
+    const content: InlineNode[] = [{ type: "text", text: "styled by the paragraph" }];
+
+    expect(getActiveMarks(content, 0, 23, inherited)).toEqual([bold]);
+    const disabled = toggleMark(content, 0, 23, bold, true);
+    expect(disabled).toEqual([
+      { type: "text", text: "styled by the paragraph", marks: [{ type: "bold", enabled: false }] },
+    ]);
+    expect(getActiveMarks(disabled, 0, 23, inherited)).toEqual([]);
+    expect(toggleMark(disabled, 0, 23, bold, true)).toEqual(content);
+  });
 });

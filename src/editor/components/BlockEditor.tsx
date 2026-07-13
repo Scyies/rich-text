@@ -92,7 +92,11 @@ export function BlockEditor<TMeta extends BlockMeta = BlockMeta>(props: BlockEdi
           style={block.align !== undefined ? { textAlign: block.align } : undefined}
           onContentChange={(content) => editor.update({ content })}
           onSelectionChange={(start, end) =>
-            editor.setSelection({ type: "text", blockId: block.id, anchor: start, focus: end })
+            editor.setSelection({
+              type: "text",
+              anchor: { blockId: block.id, offset: start },
+              focus: { blockId: block.id, offset: end },
+            })
           }
         />
       )}

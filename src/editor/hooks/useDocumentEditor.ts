@@ -19,12 +19,15 @@ import type { BlockMeta, WealthyDocument } from "../core/schema";
  * `onChange` back into `value` is a no-op.
  */
 
-export interface UseDocumentEditorOptions<TMeta extends BlockMeta = BlockMeta> {
-  value: WealthyDocument<TMeta>;
+export interface UseDocumentEditorOptions<
+  TMeta extends BlockMeta = BlockMeta,
+  TDocMeta extends BlockMeta = BlockMeta,
+> {
+  value: WealthyDocument<TMeta, TDocMeta>;
   /** Fires after every transaction (commands, patches, undo/redo). */
-  onChange?: ((document: WealthyDocument<TMeta>, info: ChangeInfo) => void) | undefined;
+  onChange?: ((document: WealthyDocument<TMeta, TDocMeta>, info: ChangeInfo) => void) | undefined;
   /** Fires on explicit `commit()` and on idle commit. */
-  onCommit?: ((document: WealthyDocument<TMeta>) => void) | undefined;
+  onCommit?: ((document: WealthyDocument<TMeta, TDocMeta>) => void) | undefined;
   /** Auto-commit after this many ms without a transaction. Off by default. */
   commitIdleMs?: number | undefined;
   /** Undo depth (engine creation time only). */
@@ -33,11 +36,11 @@ export interface UseDocumentEditorOptions<TMeta extends BlockMeta = BlockMeta> {
   coalesceWindowMs?: number | undefined;
 }
 
-export interface DocumentEditorApi<TMeta extends BlockMeta = BlockMeta> {
-  document: WealthyDocument<TMeta>;
+export interface DocumentEditorApi<TMeta extends BlockMeta = BlockMeta, TDocMeta extends BlockMeta = BlockMeta> {
+  document: WealthyDocument<TMeta, TDocMeta>;
   commands: EditorCommands<TMeta>;
   /** Escape hatch to the underlying engine. */
-  engine: EditorEngine<TMeta>;
+  engine: EditorEngine<TMeta, TDocMeta>;
   selection: EditorSelection | null;
   setSelection(selection: EditorSelection | null): void;
   sectionTree: SectionTree<TMeta>;
@@ -65,7 +68,10 @@ const EMPTY_SET: ReadonlySet<string> = new Set<string>();
  * identical by reference — only a genuinely different document (edited,
  * deserialized, or loaded) triggers a switch.
  */
-function isSameDocument(a: WealthyDocument<BlockMeta>, b: WealthyDocument<BlockMeta>): boolean {
+function isSameDocument<TMeta extends BlockMeta, TDocMeta extends BlockMeta>(
+  a: WealthyDocument<TMeta, TDocMeta>,
+  b: WealthyDocument<TMeta, TDocMeta>,
+): boolean {
   if (a === b) {
     return true;
   }
@@ -78,13 +84,13 @@ function isSameDocument(a: WealthyDocument<BlockMeta>, b: WealthyDocument<BlockM
   return a.blocks.length === b.blocks.length && a.blocks.every((block, index) => block === b.blocks[index]);
 }
 
-export function useDocumentEditor<TMeta extends BlockMeta = BlockMeta>(
-  options: UseDocumentEditorOptions<TMeta>,
-): DocumentEditorApi<TMeta> {
+export function useDocumentEditor<TMeta extends BlockMeta = BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  options: UseDocumentEditorOptions<TMeta, TDocMeta>,
+): DocumentEditorApi<TMeta, TDocMeta> {
   const { value } = options;
 
   const [engine] = useState(() =>
-    createEditorEngine<TMeta>({
+    createEditorEngine<TMeta, TDocMeta>({
       value,
       ...(options.historyLimit !== undefined ? { limit: options.historyLimit } : {}),
       ...(options.coalesceWindowMs !== undefined ? { coalesceWindowMs: options.coalesceWindowMs } : {}),
@@ -102,7 +108,7 @@ export function useDocumentEditor<TMeta extends BlockMeta = BlockMeta>(
   // Committed baseline: ref for timers, state for render reactivity.
   const [lastCommitted, setLastCommittedState] = useState(value);
   const lastCommittedRef = useRef(value);
-  const setLastCommitted = useCallback((document: WealthyDocument<TMeta>) => {
+  const setLastCommitted = useCallback((document: WealthyDocument<TMeta, TDocMeta>) => {
     lastCommittedRef.current = document;
     setLastCommittedState(document);
   }, []);

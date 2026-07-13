@@ -106,6 +106,43 @@ describe("parseHtmlToBlocks", () => {
     expect(table.rows[0]!.cells[0]!.columnId).toBe(table.columns[0]!.id);
   });
 
+  it("expands colspan and rowspan into a rectangular core table", () => {
+    const [block] = parseHtmlToBlocks(
+      "<table><tr><th colspan='2'>Merged</th></tr><tr><td rowspan='2'>A</td><td>B</td></tr><tr><td>C</td></tr></table>",
+    );
+    expect(block?.type).toBe("table");
+    const table = block as TableBlock;
+    expect(table.columns).toHaveLength(2);
+    expect(table.rows).toHaveLength(3);
+    expect(table.rows.every((row) => row.cells.length === 2)).toBe(true);
+    expect(table.rows.map((row) => row.cells.map(cellText))).toEqual([
+      ["Merged", ""],
+      ["A", "B"],
+      ["", "C"],
+    ]);
+  });
+
+  it("bounds hostile spans and the total expanded table size", () => {
+    const [block] = parseHtmlToBlocks(
+      "<table><tr><td colspan='1000000000' rowspan='1000000000'>x</td></tr></table>",
+    );
+    const table = block as TableBlock;
+
+    expect(table.columns.length).toBeLessThanOrEqual(64);
+    expect(table.rows.length).toBeLessThanOrEqual(64);
+    expect(table.columns.length * table.rows.length).toBeLessThanOrEqual(4096);
+  });
+
+  it("does not treat nested-table rows as rows of the outer table", () => {
+    const [block] = parseHtmlToBlocks(
+      "<table><tbody><tr><td>outer<table><tbody><tr><td>inner</td></tr></tbody></table></td></tr></tbody></table>",
+    );
+    const table = block as TableBlock;
+
+    expect(table.rows).toHaveLength(1);
+    expect(table.columns).toHaveLength(1);
+  });
+
   it("recurses into wrapper divs and collects loose inline as a paragraph", () => {
     expect(parseHtmlToBlocks("<div><p>inside</p></div>loose text")).toMatchObject([
       { type: "text", content: [{ type: "text", text: "inside" }] },

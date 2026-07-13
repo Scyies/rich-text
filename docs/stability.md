@@ -87,7 +87,7 @@ boundary is clear. `docx` is an **optional peer dependency** so the host control
 Out of scope for 1.0 by design:
 
 - Real-time collaboration
-- Partial text selection spanning multiple blocks
+- Text ranges that cross into captions, table cells, or custom editable regions (top-level heading/text ranges are supported)
 - Nested tables
 - Markdown *paste* (HTML paste is supported)
 

@@ -1,5 +1,6 @@
 import { getHeadingNumbers, formatHeadingNumber, getListItemNumbers } from "../core/numbering";
 import { SEPARATOR_BLOCK_KIND } from "../plugins/separator-core";
+import { sanitizeLinkHref } from "../core/urls";
 import type {
   Block,
   BlockMeta,
@@ -48,6 +49,7 @@ function escapeMarkdown(text: string): string {
 }
 
 function applyMark(text: string, mark: InlineMark): string {
+  if ("enabled" in mark && mark.enabled === false) return text;
   switch (mark.type) {
     case "bold":
       return `**${text}**`;
@@ -58,7 +60,7 @@ function applyMark(text: string, mark: InlineMark): string {
     case "code":
       return `\`${text}\``;
     case "link":
-      return `[${text}](${mark.href})`;
+      return sanitizeLinkHref(mark.href) === null ? text : `[${text}](${escapeMarkdownUrl(mark.href.trim())})`;
     case "underline":
       return `<u>${text}</u>`;
     case "highlight":

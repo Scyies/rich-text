@@ -6,6 +6,7 @@ import {
   documentSchema,
   headingLevelSchema,
   textVariantSchema,
+  type Block,
   type BlockMeta,
   type WealthyDocument,
 } from "./schema";
@@ -42,7 +43,7 @@ export const turnIntoTargetSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("text"), variant: textVariantSchema }),
 ]);
 
-export const documentPatchSchema = z.discriminatedUnion("op", [
+const documentPatchSchema = z.discriminatedUnion("op", [
   z.object({
     op: z.literal("update_block"),
     blockId: blockIdSchema,
@@ -82,7 +83,17 @@ export const documentPatchSchema = z.discriminatedUnion("op", [
   }),
 ]);
 
-export type DocumentPatch = z.infer<typeof documentPatchSchema>;
+type WithOptionalId<T> = T extends Block ? Omit<T, "id"> & { id?: string } : never;
+export type InsertableBlock = WithOptionalId<Block>;
+export type DocumentPatch =
+  | { op: "update_block"; blockId: string; changes: Record<string, unknown> }
+  | { op: "insert_block_after"; afterBlockId: string | null; block: Block | InsertableBlock }
+  | { op: "delete_block"; blockId: string }
+  | { op: "move_block"; blockId: string; afterBlockId: string | null }
+  | { op: "turn_into"; blockId: string; target: TurnIntoTarget }
+  | { op: "move_section"; headingId: string; afterBlockId: string | null }
+  | { op: "delete_section"; headingId: string }
+  | { op: "duplicate_section"; headingId: string };
 
 export class PatchError extends Error {
   constructor(
@@ -118,7 +129,7 @@ export function applyPatches<TMeta extends BlockMeta, TDocMeta extends BlockMeta
   let result = document;
   parsed.data.forEach((patch, index) => {
     try {
-      result = applyPatch(result, patch);
+      result = applyPatch(result, patch as DocumentPatch);
     } catch (error) {
       throw new PatchError(
         `applyPatches: patch ${index} (${patch.op}) failed: ${(error as Error).message}`,
@@ -137,7 +148,7 @@ export function applyPatches<TMeta extends BlockMeta, TDocMeta extends BlockMeta
     );
   }
 
-  return { document: result, applied: parsed.data };
+  return { document: result, applied: parsed.data as DocumentPatch[] };
 }
 
 function applyPatch<TMeta extends BlockMeta, TDocMeta extends BlockMeta>(

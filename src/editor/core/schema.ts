@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isSafeLinkHref } from "./urls";
 
 /**
  * wealthy-text-editor — core schema (v0.1)
@@ -37,12 +38,12 @@ export type BlockMeta = Record<string, unknown>;
 // ---------------------------------------------------------------------------
 
 export const inlineMarkSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("bold") }),
-  z.object({ type: z.literal("italic") }),
-  z.object({ type: z.literal("underline") }),
-  z.object({ type: z.literal("strikethrough") }),
-  z.object({ type: z.literal("code") }),
-  z.object({ type: z.literal("link"), href: z.string().min(1) }),
+  z.object({ type: z.literal("bold"), enabled: z.boolean().optional() }),
+  z.object({ type: z.literal("italic"), enabled: z.boolean().optional() }),
+  z.object({ type: z.literal("underline"), enabled: z.boolean().optional() }),
+  z.object({ type: z.literal("strikethrough"), enabled: z.boolean().optional() }),
+  z.object({ type: z.literal("code"), enabled: z.boolean().optional() }),
+  z.object({ type: z.literal("link"), href: z.string().min(1).refine(isSafeLinkHref, "Unsafe link URL") }),
   z.object({ type: z.literal("color"), token: z.string().min(1) }),
   z.object({ type: z.literal("highlight"), token: z.string().min(1) }),
 ]);
@@ -448,13 +449,34 @@ export function validateDocument(input: unknown): WealthyDocument {
   return documentSchema.parse(input) as WealthyDocument;
 }
 
+export interface DocumentValidationIssue {
+  code: string;
+  message: string;
+  path: Array<string | number>;
+}
+
+export interface DocumentValidationError {
+  message: string;
+  issues: DocumentValidationIssue[];
+}
+
 export function safeValidateDocument(input: unknown):
   | { success: true; document: WealthyDocument }
-  | { success: false; error: z.ZodError } {
+  | { success: false; error: DocumentValidationError } {
   const result = documentSchema.safeParse(input);
   return result.success
     ? { success: true, document: result.data as WealthyDocument }
-    : { success: false, error: result.error };
+    : {
+        success: false,
+        error: {
+          message: result.error.message,
+          issues: result.error.issues.map((issue) => ({
+            code: issue.code,
+            message: issue.message,
+            path: issue.path.map((part) => typeof part === "symbol" ? part.description ?? part.toString() : part),
+          })),
+        },
+      };
 }
 
 export function isBlockOfType<TType extends Block["type"]>(

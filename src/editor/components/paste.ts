@@ -259,9 +259,65 @@ function mapList(listElement: Element, out: Block[], indent: number, ordered: bo
   }
 }
 
+const MAX_TABLE_ROWS = 64;
+const MAX_TABLE_COLUMNS = 64;
+const MAX_TABLE_SPAN = 64;
+const MAX_EXPANDED_TABLE_CELLS = MAX_TABLE_ROWS * MAX_TABLE_COLUMNS;
+
+function directTableRows(tableElement: HTMLTableElement): HTMLTableRowElement[] {
+  const rows: HTMLTableRowElement[] = [];
+  for (const child of Array.from(tableElement.children)) {
+    if (child.tagName === "TR") {
+      rows.push(child as HTMLTableRowElement);
+    } else if (child.tagName === "THEAD" || child.tagName === "TBODY" || child.tagName === "TFOOT") {
+      for (const row of Array.from(child.children)) {
+        if (row.tagName === "TR") rows.push(row as HTMLTableRowElement);
+        if (rows.length >= MAX_TABLE_ROWS) return rows;
+      }
+    }
+    if (rows.length >= MAX_TABLE_ROWS) return rows;
+  }
+  return rows;
+}
+
+function boundedSpan(cell: Element, attribute: "colspan" | "rowspan"): number {
+  const parsed = Number.parseInt(cell.getAttribute(attribute) ?? "1", 10);
+  return Math.min(MAX_TABLE_SPAN, Number.isFinite(parsed) && parsed > 0 ? parsed : 1);
+}
+
 function mapTable(tableElement: HTMLTableElement): TableBlock {
-  const rowElements = Array.from(tableElement.querySelectorAll("tr"));
-  const columnCount = Math.max(1, ...rowElements.map((row) => row.children.length));
+  const rowElements = directTableRows(tableElement);
+  // The core intentionally has no merged-cell model. Expand HTML spans into a
+  // rectangular grid: content stays in the top-left covered cell and every
+  // other covered coordinate becomes an explicit empty cell.
+  const grid: InlineNode[][][] = [];
+  let expandedCellCount = 0;
+  rowElements.forEach((row, rowIndex) => {
+    grid[rowIndex] ??= [];
+    let columnIndex = 0;
+    const cells = Array.from(row.children).filter((cell) => cell.tagName === "TD" || cell.tagName === "TH");
+    for (const cell of cells) {
+      while (columnIndex < MAX_TABLE_COLUMNS && grid[rowIndex]![columnIndex] !== undefined) columnIndex += 1;
+      if (columnIndex >= MAX_TABLE_COLUMNS || expandedCellCount >= MAX_EXPANDED_TABLE_CELLS) break;
+      const colspan = Math.min(boundedSpan(cell, "colspan"), MAX_TABLE_COLUMNS - columnIndex);
+      const rowspan = Math.min(boundedSpan(cell, "rowspan"), MAX_TABLE_ROWS - rowIndex);
+      const content = domToInlineNodes(cell as HTMLElement);
+      for (let rowOffset = 0; rowOffset < rowspan; rowOffset += 1) {
+        const targetRow = rowIndex + rowOffset;
+        grid[targetRow] ??= [];
+        for (let columnOffset = 0; columnOffset < colspan; columnOffset += 1) {
+          if (expandedCellCount >= MAX_EXPANDED_TABLE_CELLS) break;
+          const targetColumn = columnIndex + columnOffset;
+          if (grid[targetRow]![targetColumn] === undefined) {
+            grid[targetRow]![targetColumn] = rowOffset === 0 && columnOffset === 0 ? content : [];
+            expandedCellCount += 1;
+          }
+        }
+      }
+      columnIndex += colspan;
+    }
+  });
+  const columnCount = Math.min(MAX_TABLE_COLUMNS, Math.max(1, ...grid.map((row) => row.length)));
   const columns: TableColumn[] = Array.from({ length: columnCount }, () => ({ id: generateBlockId() }));
 
   const firstRow = rowElements[0];
@@ -269,14 +325,13 @@ function mapTable(tableElement: HTMLTableElement): TableBlock {
     firstRow !== undefined &&
     firstRow.children.length > 0 &&
     Array.from(firstRow.children).every((cell) => cell.tagName === "TH");
-  const showHeader = tableElement.querySelector("thead") !== null || firstRowAllHeaders;
+  const showHeader = Array.from(tableElement.children).some((child) => child.tagName === "THEAD") || firstRowAllHeaders;
 
-  const rows: TableRow[] = rowElements.map((rowElement) => ({
+  const rows: TableRow[] = grid.map((gridRow) => ({
     id: generateBlockId(),
-    cells: Array.from(rowElement.children).map((cell, columnIndex) => ({
-      columnId: columns[Math.min(columnIndex, columnCount - 1)]!.id,
-      // D9: cells hold text-variant blocks only — flatten cell content to one paragraph.
-      blocks: [createTextBlock({ content: domToInlineNodes(cell as HTMLElement) })] as TextBlock[],
+    cells: columns.map((column, columnIndex) => ({
+      columnId: column.id,
+      blocks: [createTextBlock({ content: gridRow[columnIndex] ?? [] })] as TextBlock[],
     })),
   }));
 

@@ -92,8 +92,8 @@ describe("useBlockEditor", () => {
     const { result } = renderHook(() => useBlockEditor({ value: block }));
 
     act(() => {
-      result.current.setSelection({ type: "text", blockId: block.id, anchor: 0, focus: 99 });
+      result.current.setSelection({ type: "text", anchor: { blockId: block.id, offset: 0 }, focus: { blockId: block.id, offset: 99 } });
     });
-    expect(result.current.selection).toMatchObject({ anchor: 0, focus: 5 }); // clamped
+    expect(result.current.selection).toMatchObject({ anchor: { offset: 0 }, focus: { offset: 5 } }); // clamped
   });
 });

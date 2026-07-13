@@ -1,23 +1,23 @@
 import { getInlineLength } from "./inline";
 import type { Block, BlockMeta, InlineNode, WealthyDocument } from "./schema";
 
-/**
- * Selection model (D7): inline text selection lives inside a single block
- * (per-block contenteditable); anything wider is a whole-block selection.
- * Offsets are inline units (see inline.ts).
- */
+/** An address inside one editable region of a document block. */
+export interface SelectionPoint {
+  blockId: string;
+  /** Entry id for nested editable regions such as an image-group caption. */
+  entryId?: string;
+  /** Offset in inline units (see inline.ts). */
+  offset: number;
+}
 
+/**
+ * Direction-preserving text range. Anchor is where extension began; focus is
+ * the active end. The points may address different top-level text blocks.
+ */
 export interface TextSelection {
   type: "text";
-  blockId: string;
-  /**
-   * Addresses an editable region nested inside the block. Omitted for a
-   * block's primary content (heading/text) and for a single image's caption;
-   * set to an entry id to target one caption inside an `imageGroup`.
-   */
-  entryId?: string;
-  anchor: number;
-  focus: number;
+  anchor: SelectionPoint;
+  focus: SelectionPoint;
 }
 
 export interface BlockSelection {
@@ -28,19 +28,31 @@ export interface BlockSelection {
 
 export type EditorSelection = TextSelection | BlockSelection;
 
+export interface OrderedTextSelection {
+  start: SelectionPoint;
+  end: SelectionPoint;
+  backward: boolean;
+}
+
+export interface SelectedTextSlice<TMeta extends BlockMeta = BlockMeta> {
+  block: Extract<Block<TMeta>, { type: "heading" | "text" }>;
+  start: number;
+  end: number;
+}
+
+export function selectionPointsEqual(a: SelectionPoint, b: SelectionPoint): boolean {
+  return a.blockId === b.blockId && a.entryId === b.entryId && a.offset === b.offset;
+}
+
 export function isCollapsed(selection: TextSelection): boolean {
-  return selection.anchor === selection.focus;
+  return selectionPointsEqual(selection.anchor, selection.focus);
 }
 
 export function selectionsEqual(a: EditorSelection | null, b: EditorSelection | null): boolean {
-  if (a === b) {
-    return true;
-  }
-  if (a === null || b === null || a.type !== b.type) {
-    return false;
-  }
+  if (a === b) return true;
+  if (a === null || b === null || a.type !== b.type) return false;
   if (a.type === "text" && b.type === "text") {
-    return a.blockId === b.blockId && a.entryId === b.entryId && a.anchor === b.anchor && a.focus === b.focus;
+    return selectionPointsEqual(a.anchor, b.anchor) && selectionPointsEqual(a.focus, b.focus);
   }
   if (a.type === "blocks" && b.type === "blocks") {
     return a.anchorBlockId === b.anchorBlockId && a.focusBlockId === b.focusBlockId;
@@ -49,23 +61,15 @@ export function selectionsEqual(a: EditorSelection | null, b: EditorSelection | 
 }
 
 export function caretAt(blockId: string, offset: number, entryId?: string): TextSelection {
-  return {
-    type: "text",
-    blockId,
-    ...(entryId !== undefined ? { entryId } : {}),
-    anchor: offset,
-    focus: offset,
-  };
+  const point: SelectionPoint = { blockId, ...(entryId !== undefined ? { entryId } : {}), offset };
+  return { type: "text", anchor: point, focus: point };
 }
 
-/**
- * The inline content a text selection points at, or null when the
- * (block, entryId) pair is not a valid editable region:
- * - heading/text: the block's own content; invalid with an entryId.
- * - image: the caption; invalid with an entryId.
- * - imageGroup: the matching entry's caption; invalid without an entryId.
- */
-function resolveSelectionContent(block: Block<BlockMeta>, entryId: string | undefined): InlineNode[] | null {
+/** Returns the inline content addressed by a point, or null for a non-editable region. */
+export function resolveSelectionPointContent<TMeta extends BlockMeta>(
+  block: Block<TMeta>,
+  entryId: string | undefined,
+): InlineNode[] | null {
   switch (block.type) {
     case "heading":
     case "text":
@@ -73,9 +77,7 @@ function resolveSelectionContent(block: Block<BlockMeta>, entryId: string | unde
     case "image":
       return entryId === undefined ? (block.caption ?? []) : null;
     case "imageGroup": {
-      if (entryId === undefined) {
-        return null;
-      }
+      if (entryId === undefined) return null;
       const entry = block.images.find((candidate) => candidate.id === entryId);
       return entry === undefined ? null : (entry.caption ?? []);
     }
@@ -84,52 +86,108 @@ function resolveSelectionContent(block: Block<BlockMeta>, entryId: string | unde
   }
 }
 
-/**
- * Clamps a selection to the current document: offsets are clamped to the
- * block's content length; selections pointing at missing blocks become null.
- */
-export function clampSelection(
-  document: WealthyDocument<BlockMeta>,
+function clampPoint<TMeta extends BlockMeta, TDocMeta extends BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
+  point: SelectionPoint,
+): SelectionPoint | null {
+  const block = document.blocks.find((candidate) => candidate.id === point.blockId);
+  if (block === undefined) return null;
+  const content = resolveSelectionPointContent(block, point.entryId);
+  if (content === null) return null;
+  return { ...point, offset: Math.min(Math.max(point.offset, 0), getInlineLength(content)) };
+}
+
+/** Clamps both endpoints independently, preserving range direction. */
+export function clampSelection<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
   selection: EditorSelection | null,
 ): EditorSelection | null {
-  if (selection === null) {
-    return null;
-  }
-
+  if (selection === null) return null;
   if (selection.type === "text") {
-    const block = document.blocks.find((candidate) => candidate.id === selection.blockId);
-    if (block === undefined) {
-      return null;
-    }
-    const content = resolveSelectionContent(block, selection.entryId);
-    if (content === null) {
-      return null;
-    }
-    const length = getInlineLength(content);
-    return {
-      ...selection,
-      anchor: Math.min(Math.max(selection.anchor, 0), length),
-      focus: Math.min(Math.max(selection.focus, 0), length),
-    };
+    const anchor = clampPoint(document, selection.anchor);
+    const focus = clampPoint(document, selection.focus);
+    return anchor === null || focus === null ? null : { type: "text", anchor, focus };
   }
-
   const anchorExists = document.blocks.some((block) => block.id === selection.anchorBlockId);
   const focusExists = document.blocks.some((block) => block.id === selection.focusBlockId);
   return anchorExists && focusExists ? selection : null;
 }
 
+function regionIndex(block: Block, entryId: string | undefined): number {
+  if (entryId === undefined) return 0;
+  if (block.type !== "imageGroup") return -1;
+  return block.images.findIndex((entry) => entry.id === entryId);
+}
+
+/** Compares document points in visual document order. */
+export function compareSelectionPoints<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
+  a: SelectionPoint,
+  b: SelectionPoint,
+): number | null {
+  const aIndex = document.blocks.findIndex((block) => block.id === a.blockId);
+  const bIndex = document.blocks.findIndex((block) => block.id === b.blockId);
+  if (aIndex === -1 || bIndex === -1) return null;
+  if (aIndex !== bIndex) return aIndex - bIndex;
+  const block = document.blocks[aIndex]!;
+  const aRegion = regionIndex(block, a.entryId);
+  const bRegion = regionIndex(block, b.entryId);
+  if (aRegion === -1 || bRegion === -1) return null;
+  return aRegion === bRegion ? a.offset - b.offset : aRegion - bRegion;
+}
+
+export function orderTextSelection<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
+  selection: TextSelection,
+): OrderedTextSelection | null {
+  const comparison = compareSelectionPoints(document, selection.anchor, selection.focus);
+  if (comparison === null) return null;
+  return comparison <= 0
+    ? { start: selection.anchor, end: selection.focus, backward: false }
+    : { start: selection.focus, end: selection.anchor, backward: true };
+}
+
 /**
- * The contiguous index range [start, end] covered by a block selection,
- * or null if either endpoint is missing.
+ * Returns inline slices for top-level heading/text ranges. Atomic blocks may
+ * lie between slices and remain represented by the enclosing block range.
  */
-export function getSelectedBlockRange(
-  document: WealthyDocument<BlockMeta>,
+export function getSelectedTextSlices<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
+  selection: TextSelection,
+): SelectedTextSlice<TMeta>[] | null {
+  const ordered = orderTextSelection(document, selection);
+  if (ordered === null || ordered.start.entryId !== undefined || ordered.end.entryId !== undefined) return null;
+  const startIndex = document.blocks.findIndex((block) => block.id === ordered.start.blockId);
+  const endIndex = document.blocks.findIndex((block) => block.id === ordered.end.blockId);
+  const startBlock = document.blocks[startIndex];
+  const endBlock = document.blocks[endIndex];
+  if (
+    startBlock === undefined || endBlock === undefined ||
+    (startBlock.type !== "heading" && startBlock.type !== "text") ||
+    (endBlock.type !== "heading" && endBlock.type !== "text")
+  ) return null;
+
+  const slices: SelectedTextSlice<TMeta>[] = [];
+  for (let index = startIndex; index <= endIndex; index += 1) {
+    const block = document.blocks[index];
+    if (block?.type !== "heading" && block?.type !== "text") continue;
+    const length = getInlineLength(block.content);
+    slices.push({
+      block,
+      start: index === startIndex ? ordered.start.offset : 0,
+      end: index === endIndex ? ordered.end.offset : length,
+    });
+  }
+  return slices;
+}
+
+/** The contiguous index range [start, end] covered by a block selection. */
+export function getSelectedBlockRange<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
   selection: BlockSelection,
 ): { start: number; end: number } | null {
   const anchorIndex = document.blocks.findIndex((block) => block.id === selection.anchorBlockId);
   const focusIndex = document.blocks.findIndex((block) => block.id === selection.focusBlockId);
-  if (anchorIndex === -1 || focusIndex === -1) {
-    return null;
-  }
+  if (anchorIndex === -1 || focusIndex === -1) return null;
   return { start: Math.min(anchorIndex, focusIndex), end: Math.max(anchorIndex, focusIndex) };
 }

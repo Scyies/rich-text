@@ -9,6 +9,15 @@ function docWith(blocks: Block[]): WealthyDocument {
 }
 
 describe("exportMarkdown", () => {
+  it("escapes link destinations and drops unsafe schemes", () => {
+    const doc = docWith([
+      createTextBlock({ content: [
+        { type: "text", text: "safe", marks: [{ type: "link", href: "https://example.com/a file_(1)" }] },
+        { type: "text", text: " unsafe", marks: [{ type: "link", href: "javascript:alert(1)" }] },
+      ] }),
+    ]);
+    expect(exportMarkdown(doc)).toBe("[safe](https://example.com/a%20file_(1%29) unsafe");
+  });
   it("renders headings and paragraphs with GFM marks", () => {
     const doc = docWith([
       createHeadingBlock({ level: 2, content: "Title" }),

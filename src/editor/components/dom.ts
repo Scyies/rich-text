@@ -1,4 +1,5 @@
 import { normalizeInlineContent } from "../core/inline";
+import { sanitizeLinkHref } from "../core/urls";
 import type { InlineMark, InlineNode, InlineObjectNode } from "../core/schema";
 
 /**
@@ -52,17 +53,17 @@ const MARK_ORDER: InlineMark["type"][] = [
 function wrapWithMark(html: string, mark: InlineMark): string {
   switch (mark.type) {
     case "bold":
-      return `<strong>${html}</strong>`;
+      return mark.enabled === false ? `<span data-wte-bold="false" style="font-weight: normal">${html}</span>` : `<strong>${html}</strong>`;
     case "italic":
-      return `<em>${html}</em>`;
+      return mark.enabled === false ? `<span data-wte-italic="false" style="font-style: normal">${html}</span>` : `<em>${html}</em>`;
     case "underline":
-      return `<u>${html}</u>`;
+      return mark.enabled === false ? `<span data-wte-underline="false" style="display: inline-block; text-decoration: none">${html}</span>` : `<u>${html}</u>`;
     case "strikethrough":
-      return `<s>${html}</s>`;
+      return mark.enabled === false ? `<span data-wte-strikethrough="false" style="display: inline-block; text-decoration: none">${html}</span>` : `<s>${html}</s>`;
     case "code":
-      return `<code>${html}</code>`;
+      return mark.enabled === false ? `<span data-wte-code="false" style="font-family: inherit">${html}</span>` : `<code>${html}</code>`;
     case "link":
-      return `<a href="${escapeAttribute(mark.href)}">${html}</a>`;
+      return sanitizeLinkHref(mark.href) === null ? html : `<a href="${escapeAttribute(mark.href.trim())}">${html}</a>`;
     case "color":
       return `<span data-wte-color="${escapeAttribute(mark.token)}">${html}</span>`;
     case "highlight":
@@ -93,7 +94,10 @@ export function inlineNodesToHtml(
         .filter((value): value is string => typeof value === "string" && value.length > 0)
         .join(" ");
       const payload = escapeAttribute(JSON.stringify({ data: node.data, meta: node.meta }));
-      html += `<span class="${escapeAttribute(className)}" data-wte-object="${escapeAttribute(node.kind)}" data-wte-payload="${payload}" contenteditable="false">${escapeHtml(label)}</span>`;
+      const interactionAttributes = config?.interactive === true
+        ? ` role="button" tabindex="0" aria-label="${escapeAttribute(label)}"`
+        : "";
+      html += `<span class="${escapeAttribute(className)}" data-wte-object="${escapeAttribute(node.kind)}" data-wte-payload="${payload}" contenteditable="false"${interactionAttributes}>${escapeHtml(label)}</span>`;
     }
   }
   return html;
@@ -108,6 +112,10 @@ function markForElement(element: Element): InlineMark | null {
     }
     return null;
   };
+
+  for (const type of ["bold", "italic", "underline", "strikethrough", "code"] as const) {
+    if (element.getAttribute(`data-wte-${type}`) === "false") return { type, enabled: false };
+  }
 
   switch (element.tagName) {
     case "STRONG":
@@ -126,7 +134,8 @@ function markForElement(element: Element): InlineMark | null {
       return { type: "code" };
     case "A": {
       const href = element.getAttribute("href");
-      return href !== null && href.length > 0 ? { type: "link", href } : null;
+      const safeHref = href === null ? null : sanitizeLinkHref(href);
+      return safeHref === null ? null : { type: "link", href: safeHref };
     }
     default: {
       const color = element.getAttribute("data-wte-color");
@@ -261,6 +270,12 @@ function positionToOffset(root: HTMLElement, position: WalkPosition): number | n
   return found;
 }
 
+/** Maps an arbitrary DOM Selection endpoint inside a root to inline units. */
+export function domPositionToOffset(root: HTMLElement, node: Node, offset: number): number | null {
+  if (node !== root && !root.contains(node)) return null;
+  return positionToOffset(root, { node, offset });
+}
+
 export function getSelectionOffsets(root: HTMLElement): { start: number; end: number } | null {
   const selection = root.ownerDocument.defaultView?.getSelection();
   if (!selection || selection.rangeCount === 0) {
@@ -276,6 +291,15 @@ export function getSelectionOffsets(root: HTMLElement): { start: number; end: nu
     return null;
   }
   return { start: Math.min(start, end), end: Math.max(start, end) };
+}
+
+/** Reads anchor/focus independently so backward selections keep their direction. */
+export function getDirectionalSelectionOffsets(root: HTMLElement): { anchor: number; focus: number } | null {
+  const selection = root.ownerDocument.defaultView?.getSelection();
+  if (!selection?.anchorNode || !selection.focusNode) return null;
+  const anchor = domPositionToOffset(root, selection.anchorNode, selection.anchorOffset);
+  const focus = domPositionToOffset(root, selection.focusNode, selection.focusOffset);
+  return anchor === null || focus === null ? null : { anchor, focus };
 }
 
 export function getCaretOffset(root: HTMLElement): number | null {
@@ -335,6 +359,11 @@ function resolveOffset(root: HTMLElement, offset: number): WalkPosition | null {
 
   walk(root);
   return target;
+}
+
+/** Resolves inline units to a concrete DOM Selection endpoint. */
+export function offsetToDomPosition(root: HTMLElement, offset: number): { node: Node; offset: number } | null {
+  return resolveOffset(root, offset);
 }
 
 /** Selects [start, end] in inline units (clamped; collapsed when equal). */
@@ -478,6 +507,34 @@ export function getOffsetNearViewportX(root: HTMLElement, x: number, line: "firs
       return null;
     }
     return positionToOffset(root, { node, offset: domOffset });
+  } catch {
+    return null;
+  }
+}
+
+/** Hit-tests an arbitrary viewport point into inline units within one editor. */
+export function getOffsetAtViewportPoint(root: HTMLElement, x: number, y: number): number | null {
+  try {
+    const rect = root.getBoundingClientRect();
+    const probeX = Math.min(Math.max(x, rect.left + 1), rect.right - 1);
+    const probeY = Math.min(Math.max(y, rect.top + 1), rect.bottom - 1);
+    const doc = root.ownerDocument as Document & {
+      caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+      caretRangeFromPoint?: (x: number, y: number) => Range | null;
+    };
+    if (typeof doc.caretPositionFromPoint === "function") {
+      const position = doc.caretPositionFromPoint(probeX, probeY);
+      if (position !== null && (position.offsetNode === root || root.contains(position.offsetNode))) {
+        return positionToOffset(root, { node: position.offsetNode, offset: position.offset });
+      }
+    }
+    if (typeof doc.caretRangeFromPoint === "function") {
+      const range = doc.caretRangeFromPoint(probeX, probeY);
+      if (range !== null && (range.startContainer === root || root.contains(range.startContainer))) {
+        return positionToOffset(root, { node: range.startContainer, offset: range.startOffset });
+      }
+    }
+    return null;
   } catch {
     return null;
   }

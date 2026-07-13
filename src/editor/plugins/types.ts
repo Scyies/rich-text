@@ -27,6 +27,35 @@ export interface BlockTypeRegistration<TMeta extends BlockMeta = BlockMeta> {
   render(props: RenderBlockProps<TMeta>): ReactNode;
 }
 
+export type TypedCustomBlock<
+  TKind extends string,
+  TData extends Record<string, unknown>,
+  TMeta extends BlockMeta = BlockMeta,
+> = Omit<CustomBlock<TMeta>, "kind" | "data"> & { kind: TKind; data: TData };
+
+/**
+ * Couples a literal custom-block kind, its host decoder, and its renderer.
+ * Persisted data remains open in core; unsafe decoding is concentrated at the
+ * plugin seam instead of repeated inside every renderer.
+ */
+export function defineBlockType<
+  TKind extends string,
+  TData extends Record<string, unknown>,
+  TMeta extends BlockMeta = BlockMeta,
+>(definition: {
+  kind: TKind;
+  decode(data: Record<string, unknown>): TData;
+  render(props: Omit<RenderBlockProps<TMeta>, "block"> & { block: TypedCustomBlock<TKind, TData, TMeta> }): ReactNode;
+}): BlockTypeRegistration<TMeta> {
+  return {
+    kind: definition.kind,
+    render: (props) => definition.render({
+      ...props,
+      block: { ...props.block, kind: definition.kind, data: definition.decode(props.block.data) },
+    }),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Inline objects (D6) — chips: placeholders, mentions, …
 // ---------------------------------------------------------------------------

@@ -9,6 +9,11 @@ const demoDir = dirname(fileURLToPath(import.meta.url));
 // unaffected). Resolves the package name to local source.
 export default defineConfig({
   root: demoDir,
+  build: {
+    // Lightning CSS currently warns on the standards-based ::highlight()
+    // selector used for cross-block selections. Esbuild preserves it cleanly.
+    cssMinify: "esbuild",
+  },
   server: {
     port: Number(process.env.PORT) || 5173,
   },

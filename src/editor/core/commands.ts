@@ -2,7 +2,8 @@ import { generateBlockId } from "./factories";
 import { getInlineLength } from "./inline";
 import { createHistory, type HistoryEntry } from "./history";
 import { applyPatches, type DocumentPatch } from "./patches";
-import { clampSelection, selectionsEqual, type EditorSelection } from "./selection";
+import { deleteTextRange as deleteDocumentTextRange, replaceTextRangeWithBlocks, replaceTextRangeWithInline } from "./ranges";
+import { clampSelection, selectionsEqual, type EditorSelection, type TextSelection } from "./selection";
 import { getSection, getSectionTree, type Section, type SectionTree } from "./sections";
 import type { Block, BlockMeta, ImageGroupEntry, InlineNode, WealthyDocument } from "./schema";
 import * as transforms from "./transforms";
@@ -46,6 +47,12 @@ export interface EditorCommands<TBlockMeta extends BlockMeta = BlockMeta> {
   updateBlock(blockId: string, patch: Record<string, unknown>): void;
   insertBlockAfter(afterBlockId: string | null, block: Block<TBlockMeta>): string;
   deleteBlock(blockId: string): void;
+  /** Deletes and merges a top-level document text range as one undoable edit. */
+  deleteTextRange(selection: TextSelection): void;
+  /** Replaces a document text range with inline nodes as one undoable edit. */
+  replaceTextRange(selection: TextSelection, content: InlineNode[]): void;
+  /** Replaces a range with blocks as one undoable edit. */
+  replaceTextRangeWithBlocks(selection: TextSelection, blocks: Block<TBlockMeta>[], inlineSingleParagraph?: boolean): void;
   moveBlock(blockId: string, afterBlockId: string | null): void;
   turnInto(blockId: string, target: TurnIntoTarget): void;
   /** Returns the id of the new (second) block; caret belongs at its start. */
@@ -158,14 +165,16 @@ export function createEditorEngine<
     run: (current: WealthyDocument<TBlockMeta, TDocMeta>) => {
       document: WealthyDocument<TBlockMeta, TDocMeta>;
       result: TResult;
+      selection?: EditorSelection | null;
     },
     origin: ChangeOrigin = "command",
   ): TResult {
     const previous = snapshot();
-    const { document: next, result } = run(document);
+    const outcome = run(document);
+    const { document: next, result } = outcome;
     history.record(previous, coalesceKey);
     document = next;
-    selection = clampSelection(document, selection);
+    selection = clampSelection(document, "selection" in outcome ? (outcome.selection ?? null) : selection);
     notify(origin === "command" ? { origin, command } : { origin });
     return result;
   }
@@ -193,6 +202,27 @@ export function createEditorEngine<
         document: transforms.deleteBlock(current, blockId),
         result: undefined,
       }));
+    },
+
+    deleteTextRange(textSelection) {
+      transact("deleteTextRange", null, (current) => {
+        const result = deleteDocumentTextRange(current, textSelection);
+        return { document: result.document, selection: result.selection, result: undefined };
+      });
+    },
+
+    replaceTextRange(textSelection, content) {
+      transact("replaceTextRange", null, (current) => {
+        const result = replaceTextRangeWithInline(current, textSelection, content);
+        return { document: result.document, selection: result.selection, result: undefined };
+      });
+    },
+
+    replaceTextRangeWithBlocks(textSelection, blocks, inlineSingleParagraph = true) {
+      transact("replaceTextRangeWithBlocks", null, (current) => {
+        const result = replaceTextRangeWithBlocks(current, textSelection, blocks, inlineSingleParagraph);
+        return { document: result.document, selection: result.selection, result: undefined };
+      });
     },
 
     moveBlock(blockId, afterBlockId) {

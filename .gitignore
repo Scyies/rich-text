@@ -2,4 +2,8 @@
 .history
 node_modules/
 dist/
+demo/dist/
+coverage/
+playwright-report/
+test-results/
 *.tsbuildinfo

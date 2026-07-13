@@ -9,6 +9,10 @@ function docWith(blocks: Block[]): WealthyDocument {
 }
 
 describe("exportHtml", () => {
+  it("does not emit executable link schemes", () => {
+    const doc = docWith([createTextBlock({ content: [{ type: "text", text: "unsafe", marks: [{ type: "link", href: "javascript:alert(1)" }] }] })]);
+    expect(exportHtml(doc)).toBe("<p>unsafe</p>");
+  });
   it("renders headings and paragraphs with marks", () => {
     const doc = docWith([
       createHeadingBlock({ level: 2, content: "Title" }),

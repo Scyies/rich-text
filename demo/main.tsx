@@ -1,4 +1,4 @@
-import { StrictMode, useRef, useState } from "react";
+import { StrictMode, useCallback, useRef, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import {
   SCHEMA_VERSION,
@@ -8,9 +8,13 @@ import {
   createSeparatorBlock,
   createTableBlock,
   createTextBlock,
+  getSelectedTextSlices,
+  selectionPointsEqual,
+  type EditorSelection,
   type WealthyDocument,
 } from "wealthy-text-editor";
 import {
+  defineBlockType,
   DocumentEditor,
   separatorPlugin,
   type CustomSlashItem,
@@ -33,14 +37,44 @@ const placeholderSlashItem: CustomSlashItem = {
   },
 };
 
+const EMPTY_SUBSCRIBE = () => () => {};
+
+type CalloutData = {
+  text: string;
+  tone: "note" | "warning";
+};
+
 function stringField(data: Record<string, unknown>, key: string): string {
   const value = data[key];
   return typeof value === "string" ? value : "";
 }
 
+const calloutBlockType = defineBlockType({
+  kind: "callout",
+  decode(data): CalloutData {
+    return {
+      text: stringField(data, "text"),
+      tone: data["tone"] === "warning" ? "warning" : "note",
+    };
+  },
+  render: ({ block, update }) => (
+    <div className={`demo-callout demo-callout--${block.data.tone}`}>
+      <span className="demo-callout__mark" aria-hidden>{block.data.tone === "warning" ? "!" : "§"}</span>
+      <div className="demo-callout__body">
+        <span className="demo-callout__eyebrow">Typed plugin block</span>
+        <input
+          aria-label="Callout text"
+          value={block.data.text}
+          onChange={(event) => update({ data: { ...block.data, text: event.target.value } })}
+        />
+      </div>
+    </div>
+  ),
+});
+
 // Everything domain-specific rides on one plugin (v0.5): the placeholder chip
-// (with a click-to-fill popover), the slash item that inserts it, and a
-// host-rendered "callout" custom block — the whole plugin surface, dogfooded.
+// (with a click-to-fill popover), the slash item that inserts it, and a typed
+// host-rendered callout block — the whole plugin surface, dogfooded.
 const minutaPlugin: EditorPlugin = {
   name: "minuta-demo",
   slashItems: [placeholderSlashItem],
@@ -79,20 +113,7 @@ const minutaPlugin: EditorPlugin = {
       },
     },
   ],
-  blockTypes: [
-    {
-      kind: "callout",
-      render: ({ block, update }) => (
-        <div className="demo-callout">
-          <span aria-hidden>💡</span>
-          <input
-            value={stringField(block.data, "text")}
-            onChange={(event) => update({ data: { ...block.data, text: event.target.value } })}
-          />
-        </div>
-      ),
-    },
-  ],
+  blockTypes: [calloutBlockType],
 };
 
 function buildSampleDocument(): WealthyDocument {
@@ -106,7 +127,7 @@ function buildSampleDocument(): WealthyDocument {
           { type: "text", text: "wealthy-text-editor", marks: [{ type: "bold" }] },
           { type: "text", text: " pipeline end to end. Try " },
           { type: "text", text: "markdown rules", marks: [{ type: "italic" }] },
-          { type: "text", text: " (\"# \", \"- \", \"1. \"), the slash menu (\"/\"), {{tags}} for placeholders (click a chip to fill it), Tab/Shift+Tab, drag handles, and the heading chevrons." },
+          { type: "text", text: " (\"# \", \"- \", \"1. \"), the slash menu (\"/\"), {{tags}} for placeholders, image paste/drop, drag handles, and heading chevrons. Drag across the heading and facts below to exercise document-wide text selection." },
         ],
       }),
       createHeadingBlock({ level: 2, content: "Dos Fatos" }),
@@ -128,10 +149,40 @@ function buildSampleDocument(): WealthyDocument {
       createTableBlock({ columnCount: 3, rowCount: 2 }),
       // An empty image row: drag or paste an image into each slot to fill it.
       createEmptyImageGroupBlock({ columns: 2, gap: 12 }),
-      createCustomBlock({ kind: "callout", data: { text: "Host-rendered custom block (plugin blockType)." } }),
+      createCustomBlock({
+        kind: "callout",
+        data: { text: "This host-rendered block is decoded by defineBlockType().", tone: "note" },
+      }),
       createTextBlock({ content: "" }),
     ],
   };
+}
+
+function describeSelection(document: WealthyDocument, selection: EditorSelection | null): string {
+  if (selection === null) return "No active selection";
+  if (selection.type === "blocks") {
+    const anchor = document.blocks.findIndex((block) => block.id === selection.anchorBlockId);
+    const focus = document.blocks.findIndex((block) => block.id === selection.focusBlockId);
+    const count = anchor === -1 || focus === -1 ? 0 : Math.abs(anchor - focus) + 1;
+    return `${count} whole block${count === 1 ? "" : "s"} selected`;
+  }
+  if (selectionPointsEqual(selection.anchor, selection.focus)) {
+    const index = document.blocks.findIndex((block) => block.id === selection.focus.blockId);
+    return `Caret in block ${index + 1} · offset ${selection.focus.offset}`;
+  }
+  const slices = getSelectedTextSlices(document, selection);
+  if (slices === null) return "Local nested text selection";
+  return `${slices.length} text block${slices.length === 1 ? "" : "s"} · ${selection.anchor.offset} → ${selection.focus.offset}`;
+}
+
+function supportsInlineInsertion(document: WealthyDocument, selection: EditorSelection | null): boolean {
+  if (selection?.type !== "text" || selection.anchor.entryId !== undefined || selection.focus.entryId !== undefined) {
+    return false;
+  }
+  return [selection.anchor, selection.focus].every((point) => {
+    const block = document.blocks.find((candidate) => candidate.id === point.blockId);
+    return block?.type === "heading" || block?.type === "text";
+  });
 }
 
 function App() {
@@ -140,6 +191,18 @@ function App() {
   const [showJson, setShowJson] = useState(true);
   const [locale, setLocale] = useState<Locale>("en");
   const editorRef = useRef<DocumentEditorApi | null>(null);
+  const [editorEngine, setEditorEngine] = useState<DocumentEditorApi["engine"] | null>(null);
+
+  const captureEditor = useCallback((api: DocumentEditorApi | null) => {
+    editorRef.current = api;
+    if (api !== null) setEditorEngine((current) => current ?? api.engine);
+  }, []);
+  const subscribeToSelection = useCallback(
+    (onStoreChange: () => void) => editorEngine?.subscribe(() => onStoreChange()) ?? EMPTY_SUBSCRIBE(),
+    [editorEngine],
+  );
+  const getSelectionSnapshot = useCallback(() => editorEngine?.getSelection() ?? null, [editorEngine]);
+  const selection = useSyncExternalStore(subscribeToSelection, getSelectionSnapshot, () => null);
 
   // Image dogfooding. Images are user-supplied via drag/paste: the `/image row`
   // slash inserts empty slots, and dropped/pasted files are host-owned — we keep
@@ -154,46 +217,76 @@ function App() {
 
   function insertPlaceholderAtCaret() {
     const api = editorRef.current;
-    const selection = api?.selection;
-    if (api == null || selection?.type !== "text") {
+    if (api == null || selection?.type !== "text" || !supportsInlineInsertion(document, selection)) {
       return;
     }
-    api.commands.insertInlineNode(selection.blockId, Math.min(selection.anchor, selection.focus), {
+    const node = {
       type: "object",
       kind: "placeholder",
       data: { key: "novo_campo", label: "Novo Campo" },
-    });
+    } as const;
+    if (selectionPointsEqual(selection.anchor, selection.focus)) {
+      api.commands.insertInlineNode(selection.focus.blockId, selection.focus.offset, node);
+    } else {
+      api.commands.replaceTextRange(selection, [node]);
+    }
   }
+
+  const canInsertPlaceholder = supportsInlineInsertion(document, selection);
+  const selectionLabel = describeSelection(document, selection);
 
   return (
     <div className="demo">
       <header className="demo__header">
-        <h1>wealthy-text-editor</h1>
-        <span className="demo__meta">
-          blocks: {document.blocks.length} · last idle commit: {lastCommit}
-        </span>
-        <button
-          type="button"
-          onMouseDown={(event) => event.preventDefault() /* keep editor focus/caret */}
-          onClick={insertPlaceholderAtCaret}
-        >
-          + Placeholder
-        </button>
-        <button type="button" onClick={() => setShowJson((value) => !value)}>
-          {showJson ? "Hide JSON" : "Show JSON"}
-        </button>
-        <button
-          type="button"
-          data-testid="locale-toggle"
-          onClick={() => setLocale((value) => (value === "en" ? "pt-BR" : "en"))}
-        >
-          locale: {locale}
-        </button>
+        <div className="demo__brand">
+          <span className="demo__brand-mark" aria-hidden>W</span>
+          <div>
+            <h1>Wealthy Text</h1>
+            <span>Integration workbench</span>
+          </div>
+        </div>
+        <span className="demo__meta">{document.blocks.length} blocks · commit {lastCommit}</span>
+        <div className="demo__actions">
+          <button
+            type="button"
+            disabled={!canInsertPlaceholder}
+            onMouseDown={(event) => event.preventDefault() /* keep editor focus/caret */}
+            onClick={insertPlaceholderAtCaret}
+          >
+            Insert placeholder
+          </button>
+          <button type="button" onClick={() => setDocument(buildSampleDocument())}>Reset document</button>
+          <button type="button" onClick={() => setShowJson((value) => !value)}>
+            {showJson ? "Hide JSON" : "Show JSON"}
+          </button>
+          <button
+            type="button"
+            data-testid="locale-toggle"
+            onClick={() => setLocale((value) => (value === "en" ? "pt-BR" : "en"))}
+          >
+            {locale === "en" ? "EN" : "PT-BR"}
+          </button>
+        </div>
       </header>
       <main className={showJson ? "demo__main demo__main--split" : "demo__main"}>
         <div className="demo__editor">
+          <section className="demo__docket" aria-labelledby="interaction-docket-title">
+            <div className="demo__docket-copy">
+              <span className="demo__eyebrow">Interaction docket</span>
+              <h2 id="interaction-docket-title">Select across the document</h2>
+              <p>Drag from “Dos Fatos” into “First supporting fact”. Format, type, paste, cut, or delete—the change stays atomic and undoable.</p>
+            </div>
+            <ol className="demo__docket-steps">
+              <li><span>Drag</span> across heading and text blocks</li>
+              <li><span>Edit</span> with the toolbar or clipboard</li>
+              <li><span>Undo</span> once to restore the range</li>
+            </ol>
+            <output className="demo__selection-status" aria-live="polite" data-testid="selection-status">
+              <span aria-hidden>●</span> {selectionLabel}
+            </output>
+          </section>
           <DocumentEditor
-            ref={editorRef}
+            ref={captureEditor}
             plugins={[minutaPlugin, separatorPlugin]}
             value={document}
             onChange={setDocument}

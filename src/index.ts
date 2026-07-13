@@ -12,6 +12,8 @@ export type {
   Block,
   BlockMeta,
   CustomBlock,
+  DocumentValidationError,
+  DocumentValidationIssue,
   HeadingBlock,
   HeadingLevel,
   AssetImageSource,
@@ -42,6 +44,7 @@ export type {
 
 // Factories
 export {
+  cloneBlocksWithFreshIds,
   createBlock,
   createCustomBlock,
   createEmptyDocument,
@@ -130,11 +133,17 @@ export type { TurnIntoTarget } from "./editor/core/transforms";
 
 // Patches (D10)
 export { PatchError, applyPatches } from "./editor/core/patches";
-export type { ApplyPatchesResult, DocumentPatch } from "./editor/core/patches";
+export type { ApplyPatchesResult, DocumentPatch, InsertableBlock } from "./editor/core/patches";
 
 // Selection (D7)
 export { caretAt, clampSelection, getSelectedBlockRange, isCollapsed } from "./editor/core/selection";
 export type { BlockSelection, EditorSelection, TextSelection } from "./editor/core/selection";
+export type { OrderedTextSelection, SelectedTextSlice, SelectionPoint } from "./editor/core/selection";
+export { compareSelectionPoints, getSelectedTextSlices, orderTextSelection, selectionPointsEqual } from "./editor/core/selection";
+
+// Document text ranges
+export { deleteTextRange, extractTextRange, replaceTextRangeWithBlocks, replaceTextRangeWithInline, textRangeToPlainText } from "./editor/core/ranges";
+export type { RangeEditResult } from "./editor/core/ranges";
 
 // Selection equality
 export { selectionsEqual } from "./editor/core/selection";

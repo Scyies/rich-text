@@ -44,7 +44,7 @@ function Editor() {
 
 ## What you get out of the box
 
-- Per-line block editing with whole-block multi-select (drag handles).
+- Per-line block editing with partial text selection across heading/text blocks and separate whole-block multi-select (drag handles).
 - `Enter` / `Backspace` / `Tab` structure: split, merge, indent/outdent. `Enter` on an empty
   list item exits the list.
 - Markdown input rules: `# `, `## `, `- `, `1. `.
@@ -72,7 +72,7 @@ function Editor() {
 | `locale` | `"en" \| "pt-BR"` | UI language of the built-in chrome (default `en`). |
 | `messages` | `Partial<EditorMessages>` | Per-string overrides. |
 | `renderBlock` | `(props: RenderBlockProps) => ReactNode` | Fallback custom-block renderer. |
-| `ref` | `Ref<DocumentEditorApi<TMeta>>` | Imperative handle (commands, selection, sections). |
+| `ref` | `Ref<DocumentEditorApi<TBlockMeta, TDocMeta>>` | Imperative handle (commands, selection, sections). |
 
 See the full list and types in the [API reference](./api-reference.md#documenteditor).
 

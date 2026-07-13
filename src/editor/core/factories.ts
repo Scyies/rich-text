@@ -272,3 +272,32 @@ export function createEmptyDocument<
     blocks: [createTextBlock<TBlockMeta>()],
   };
 }
+
+/** Clones clipboard blocks while regenerating every structural id. */
+export function cloneBlocksWithFreshIds<TMeta extends BlockMeta>(blocks: Block<TMeta>[]): Block<TMeta>[] {
+  return blocks.map((block) => {
+    switch (block.type) {
+      case "table": {
+        const columnIds = new Map(block.columns.map((column) => [column.id, generateBlockId()]));
+        return {
+          ...block,
+          id: generateBlockId(),
+          columns: block.columns.map((column) => ({ ...column, id: columnIds.get(column.id)! })),
+          rows: block.rows.map((row) => ({
+            ...row,
+            id: generateBlockId(),
+            cells: row.cells.map((cell) => ({
+              ...cell,
+              columnId: columnIds.get(cell.columnId)!,
+              blocks: cell.blocks.map((cellBlock) => ({ ...cellBlock, id: generateBlockId() })),
+            })),
+          })),
+        };
+      }
+      case "imageGroup":
+        return { ...block, id: generateBlockId(), images: block.images.map((image) => ({ ...image, id: generateBlockId() })) };
+      default:
+        return { ...block, id: generateBlockId() };
+    }
+  });
+}

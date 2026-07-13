@@ -47,10 +47,10 @@ Ao soltar uma seção num alvo onde o nível não cabe, o nível do heading movi
 Todo bloco carrega `meta?: Record<string, unknown>` que a lib **round-tripa intacto e nunca interpreta**; o host valida com Zod próprio e tipa via generic (`Document<TMeta>`). Estruturas de domínio (ex.: `request_list`, `signature` do Minuta) viram block types registrados por plugin com renderer do host. Todo o `baseBlock` legal do Minuta (role, provenance, sources, required, workflow…) vira o schema de meta do Minuta.
 
 ### D6 — Modelo inline: texto + marks + objetos atômicos
-Nós inline do core: `TextNode { text, marks }` e `InlineObjectNode { kind, data, meta }` — atômico (o cursor o trata como um caractere, sem edição interna), renderizado por componente registrado via plugin. Placeholders, mentions e chips são inline objects sem mudança no core. Marks são um conjunto fixo: `bold`, `italic`, `underline`, `strikethrough`, `code`, `link`, `color(token)`, `highlight(token)`. Inlines-contêiner (editáveis por dentro) são não-objetivo.
+Nós inline do core: `TextNode { text, marks }` e `InlineObjectNode { kind, data, meta }` — atômico (o cursor o trata como um caractere, sem edição interna), renderizado por componente registrado via plugin. Placeholders, mentions e chips são inline objects sem mudança no core. Marks são um conjunto fixo: `bold`, `italic`, `underline`, `strikethrough`, `code`, `link`, `color(token)`, `highlight(token)`. Os cinco marks booleanos aceitam `enabled: false` como override direto sobre formatação herdada do host; a ausência de `enabled` continua significando ligado. Inlines-contêiner (editáveis por dentro) são não-objetivo.
 
-### D7 — Substrato: contenteditable por bloco + multi-select de blocos
-Um contenteditable por bloco. Arrastar a seleção para fora de um bloco vira seleção de blocos inteiros (overlay, como o Notion). Seleção parcial de texto cruzando blocos **não existe** no v1. Copy/cut/paste/delete operam sobre ranges de blocos.
+### D7 — Substrato: contenteditable por bloco + seleção de documento
+Um contenteditable por bloco continua sendo o caminho nativo de digitação. A seleção de texto, porém, é endereçada no documento por dois pontos independentes (`blockId`, região, offset), preservando direção e podendo atravessar headings/text blocks. Um controller DOM no `DocumentEditor` traduz drag/Selection do browser para o modelo e restaura a seleção após undo ou mudanças programáticas. Copy/cut/paste/delete/formatação cruzada são transações atômicas; seleção estrutural de blocos via handles permanece um modo separado. No v1, ranges de texto cruzados cobrem conteúdo top-level de heading/text; captions e células continuam locais às suas regiões.
 
 ### D8 — Undo/redo: histórico de snapshots no engine
 O engine mantém uma pilha limitada de snapshots do documento (JSON imutável → compartilhamento estrutural barato) + seleção para restaurar. Digitação consecutiva coalesce numa entrada (janela/palavra); todo command estrutural é entrada própria. Ctrl+Z é interceptado dentro dos blocos (sem undo nativo do browser).
@@ -260,7 +260,7 @@ interface EditorPlugin {
 ## Não-objetivos (v1)
 
 - Colaboração em tempo real (CRDT/OT) — D13.
-- Seleção parcial de texto cruzando blocos — D7.
+- Ranges cruzando captions, células de tabela e conteúdo top-level — D7 limita ranges cruzados a heading/text.
 - Tabelas aninhadas / headings dentro de células — D9.
 - Inlines-contêiner editáveis por dentro — D6.
 - Tipografia/spacing no schema do core — D15.

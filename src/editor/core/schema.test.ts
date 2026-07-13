@@ -188,6 +188,13 @@ describe("inline nodes", () => {
     expect(inlineNodeSchema.parse(node)).toEqual(node);
   });
 
+  it.each(["javascript:alert(1)", "data:text/html,x", "vbscript:msgbox(1)"])(
+    "rejects unsafe link scheme %s",
+    (href) => {
+      expect(inlineNodeSchema.safeParse({ type: "text", text: "x", marks: [{ type: "link", href }] }).success).toBe(false);
+    },
+  );
+
   it("accepts atomic inline objects with a data bag", () => {
     const node = { type: "object", kind: "placeholder", data: { key: "client_name" } };
     expect(inlineNodeSchema.parse(node)).toEqual(node);
@@ -285,6 +292,10 @@ describe("document schema", () => {
     const block = createTextBlock({ content: "once" });
     const result = safeValidateDocument(docWith([block, { ...block }]));
     expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(Array.isArray(result.error.issues)).toBe(true);
+      expect(result.error.constructor).toBe(Object);
+    }
   });
 
   it("rejects wrong schemaVersion", () => {

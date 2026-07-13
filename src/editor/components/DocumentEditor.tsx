@@ -2,23 +2,36 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  memo,
   useMemo,
   useRef,
   useState,
   type ClipboardEvent as ReactClipboardEvent,
   type CSSProperties,
   type FocusEvent as ReactFocusEvent,
+  type FormEvent as ReactFormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type Ref,
   type ReactNode,
 } from "react";
 import type { ChangeInfo } from "../core/commands";
 import { getInlineLength, getInlineText, splitInlineContent, concatInlineContent } from "../core/inline";
-import { getActiveMarks, toggleMark } from "../core/marks";
+import { extractTextRange, textRangeToPlainText } from "../core/ranges";
+import { deserializeDocument, serializeDocument } from "../core/serialization";
+import { applyMark, getActiveMarks, removeMark } from "../core/marks";
 import { getHeadingNumbers, getListItemNumbers, formatHeadingNumber } from "../core/numbering";
-import { getSelectedBlockRange } from "../core/selection";
 import {
+  getSelectedBlockRange,
+  getSelectedTextSlices,
+  isCollapsed,
+  selectionPointsEqual,
+  type SelectionPoint,
+  type TextSelection,
+} from "../core/selection";
+import {
+  cloneBlocksWithFreshIds,
   createEmptyImageGroupBlock,
   createImageBlock,
   createImageGroupBlock,
@@ -29,6 +42,7 @@ import {
   type CreateImageGroupEntryInput,
 } from "../core/factories";
 import { isDurableImageUrl } from "../core/schema";
+import { exportHtml } from "../exports/html";
 import type {
   Block,
   BlockMeta,
@@ -48,7 +62,11 @@ import type { CustomSlashItem, EditorPlugin, RenderBlockProps } from "../plugins
 import {
   getCaretLineRect,
   getCaretViewportX,
+  getOffsetAtViewportPoint,
   getOffsetNearViewportX,
+  domPositionToOffset,
+  domToInlineNodes,
+  offsetToDomPosition,
   offsetOfInlineObject,
   type InlineRenderConfig,
 } from "./dom";
@@ -98,14 +116,19 @@ export type ImageInsertionResult<TMeta extends BlockMeta = BlockMeta> =
   | null
   | undefined;
 
-export interface DocumentEditorProps<TMeta extends BlockMeta = BlockMeta> {
-  value: WealthyDocument<TMeta>;
-  onChange?: ((document: WealthyDocument<TMeta>, info: ChangeInfo) => void) | undefined;
-  onCommit?: ((document: WealthyDocument<TMeta>) => void) | undefined;
+export interface DocumentEditorProps<
+  TMeta extends BlockMeta = BlockMeta,
+  TDocMeta extends BlockMeta = BlockMeta,
+> {
+  value: WealthyDocument<TMeta, TDocMeta>;
+  onChange?: ((document: WealthyDocument<TMeta, TDocMeta>, info: ChangeInfo) => void) | undefined;
+  onCommit?: ((document: WealthyDocument<TMeta, TDocMeta>) => void) | undefined;
   commitIdleMs?: number | undefined;
   readOnly?: boolean | undefined;
   /** Show computed hierarchical numbers (1., 1.1…) before headings. */
   showHeadingNumbers?: boolean | undefined;
+  /** Host-resolved block formatting inherited by inline text (for Word-like direct overrides). */
+  getInheritedMarkTypes?: ((block: Block<TMeta>) => ReadonlySet<InlineMark["type"]>) | undefined;
   placeholder?: string | undefined;
   /** UI locale for built-in chrome (default `en`). */
   locale?: Locale | undefined;
@@ -155,7 +178,7 @@ export interface DocumentEditorProps<TMeta extends BlockMeta = BlockMeta> {
    * Escape hatch to the headless editor API (commands, selection,
    * sections) — e.g. to insert placeholder chips from host UI.
    */
-  ref?: Ref<DocumentEditorApi<TMeta>> | undefined;
+  ref?: Ref<DocumentEditorApi<TMeta, TDocMeta>> | undefined;
 }
 
 /**
@@ -176,6 +199,18 @@ function editorKeyId(key: EditorKey): string {
 
 function blockKey(blockId: string): EditorKey {
   return { kind: "block", blockId };
+}
+
+function selectionPointForEditor(key: EditorKey, offset: number): SelectionPoint {
+  return {
+    blockId: key.blockId,
+    ...(key.kind === "imageGroupCaption" ? { entryId: key.entryId } : {}),
+    offset,
+  };
+}
+
+function editorIdForSelectionPoint(point: SelectionPoint): string {
+  return point.entryId === undefined ? point.blockId : `${point.blockId}::${point.entryId}`;
 }
 
 /** Maps an uploaded image payload to a group entry input (entries have no `align`). */
@@ -208,6 +243,18 @@ interface DropIndicator {
 
 function isTextLike(block: Block): block is Extract<Block, { type: "heading" | "text" }> {
   return block.type === "heading" || block.type === "text";
+}
+
+function isSupportedTopLevelTextRange<TMeta extends BlockMeta, TDocMeta extends BlockMeta>(
+  document: WealthyDocument<TMeta, TDocMeta>,
+  selection: TextSelection,
+): boolean {
+  if (selection.anchor.entryId !== undefined || selection.focus.entryId !== undefined) return false;
+  const anchor = document.blocks.find((block) => block.id === selection.anchor.blockId);
+  const focus = document.blocks.find((block) => block.id === selection.focus.blockId);
+  return anchor !== undefined && focus !== undefined &&
+    (anchor.type === "heading" || anchor.type === "text") &&
+    (focus.type === "heading" || focus.type === "text");
 }
 
 function isImageFile(file: File): boolean {
@@ -264,7 +311,10 @@ function imageBlocksFromHtml(html: string): Block[] {
   return parseHtmlToBlocks(html).filter((block) => block.type === "image");
 }
 
-export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: DocumentEditorProps<TMeta>) {
+export function DocumentEditor<
+  TMeta extends BlockMeta = BlockMeta,
+  TDocMeta extends BlockMeta = BlockMeta,
+>(props: DocumentEditorProps<TMeta, TDocMeta>) {
   const {
     readOnly = false,
     showHeadingNumbers = false,
@@ -274,6 +324,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     onUploadImage,
     allowDroppedImageUrls = false,
     groupUploadedImages = false,
+    getInheritedMarkTypes,
   } = props;
 
   const messages = useMemo(
@@ -282,13 +333,13 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
   );
   const placeholder = props.placeholder ?? messages.placeholder;
 
-  const editor = useDocumentEditor<TMeta>({
+  const editor = useDocumentEditor<TMeta, TDocMeta>({
     value: props.value,
     onChange: props.onChange,
     onCommit: props.onCommit,
     commitIdleMs: props.commitIdleMs,
   });
-  const { commands, engine } = editor;
+  const { commands, engine, commit } = editor;
   const document = editor.document;
 
   // ---- plugin registry (D5/D6) ----
@@ -325,14 +376,25 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
 
   // ---- per-block InlineEditor handles + focus requests ----
   const editorsRef = useRef(new Map<string, InlineEditorHandle>());
+  const editorKeysRef = useRef(new Map<string, EditorKey>());
+  const dragSelectionRef = useRef<{ anchor: SelectionPoint; editorId: string; pointerId: number | null } | null>(null);
+  const suppressNativeSelectionRef = useRef(false);
   const focusTokenRef = useRef(0);
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
   const appliedFocusTokenRef = useRef(0);
 
-  const requestFocus = useCallback((key: EditorKey, offset: number) => {
-    focusTokenRef.current += 1;
-    setFocusRequest({ key, offset, token: focusTokenRef.current });
-  }, []);
+  const requestFocus = useCallback(
+    (key: EditorKey, offset: number) => {
+      // Programmatic focus and the engine selection are one operation. Leaving
+      // the old model selection in place lets the document-level selection
+      // adapter move the native caret back to the previous block after Enter.
+      const point = selectionPointForEditor(key, offset);
+      engine.setSelection({ type: "text", anchor: point, focus: point });
+      focusTokenRef.current += 1;
+      setFocusRequest({ key, offset, token: focusTokenRef.current });
+    },
+    [engine],
+  );
 
   useLayoutEffect(() => {
     if (focusRequest === null || focusRequest.token === appliedFocusTokenRef.current) {
@@ -346,10 +408,151 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     const id = editorKeyId(key);
     if (handle === null) {
       editorsRef.current.delete(id);
+      editorKeysRef.current.delete(id);
     } else {
       editorsRef.current.set(id, handle);
+      editorKeysRef.current.set(id, key);
     }
   }, []);
+
+  const resolveDomSelectionPoint = useCallback((node: Node, offset: number): SelectionPoint | null => {
+    for (const [id, handle] of editorsRef.current) {
+      const root = handle.getElement();
+      const inlineOffset = root === null ? null : domPositionToOffset(root, node, offset);
+      const key = editorKeysRef.current.get(id);
+      if (inlineOffset !== null && key !== undefined) return selectionPointForEditor(key, inlineOffset);
+    }
+    return null;
+  }, []);
+
+  // One document-level adapter observes native selections that cross sibling
+  // contenteditables. InlineEditor continues to own local native-first input.
+  useEffect(() => {
+    const ownerDocument = editorsRef.current.values().next().value?.getElement()?.ownerDocument ??
+      (typeof window !== "undefined" ? window.document : null);
+    if (ownerDocument === null) return;
+    const handleSelectionChange = () => {
+      // During a cross-root drag, the engine owns the selection. WebKit can
+      // emit a delayed local selectionchange after the pointer has crossed
+      // into another contenteditable, which would otherwise collapse it.
+      if (dragSelectionRef.current !== null || suppressNativeSelectionRef.current) {
+        return;
+      }
+      const nativeSelection = ownerDocument.defaultView?.getSelection();
+      if (!nativeSelection?.anchorNode || !nativeSelection.focusNode) return;
+      const anchor = resolveDomSelectionPoint(nativeSelection.anchorNode, nativeSelection.anchorOffset);
+      const focus = resolveDomSelectionPoint(nativeSelection.focusNode, nativeSelection.focusOffset);
+      if (anchor !== null && focus !== null) {
+        const selection: TextSelection = { type: "text", anchor, focus };
+        if (isSupportedTopLevelTextRange(engine.getDocument(), selection)) engine.setSelection(selection);
+      }
+    };
+    ownerDocument.addEventListener("selectionchange", handleSelectionChange);
+    return () => ownerDocument.removeEventListener("selectionchange", handleSelectionChange);
+  }, [engine, resolveDomSelectionPoint]);
+
+  useEffect(() => {
+    const ownerDocument = typeof window !== "undefined" ? window.document : null;
+    if (ownerDocument === null) return;
+    const handleMouseDown = (event: MouseEvent) => {
+      if (dragSelectionRef.current !== null || event.button !== 0) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest("[data-wte-object]") != null) return;
+      const root = target?.closest(".wte-inline-editor");
+      if (!(root instanceof HTMLElement)) return;
+      const entry = [...editorsRef.current.entries()].find(([, handle]) => handle.getElement() === root);
+      if (entry === undefined) return;
+      const key = editorKeysRef.current.get(entry[0]);
+      if (key === undefined || key.kind !== "block") return;
+      const rect = root.getBoundingClientRect();
+      const measuredOffset = getOffsetAtViewportPoint(root, event.clientX, event.clientY);
+      const fallbackLength = getInlineLength(domToInlineNodes(root));
+      const offset = measuredOffset ?? Math.round(
+        fallbackLength * Math.min(1, Math.max(0, (event.clientX - rect.left) / Math.max(rect.width, 1))),
+      );
+      dragSelectionRef.current = { anchor: selectionPointForEditor(key, offset), editorId: entry[0], pointerId: null };
+      suppressNativeSelectionRef.current = true;
+    };
+    const updateDragSelection = (event: MouseEvent | PointerEvent, pointerId: number | null) => {
+      const drag = dragSelectionRef.current;
+      // The drag lifetime is bounded by pointerup/mouseup below. Relying on
+      // `buttons` here is less robust: WebKit reports 0 for synthetic mouse
+      // moves even while the corresponding drag session is active.
+      // Compatibility mouse events may follow a pointer-backed start (WebKit
+      // does this for dispatched mouse input). A real pointer move must still
+      // belong to the pointer that opened the session.
+      if (drag === null || (pointerId !== null && drag.pointerId !== pointerId)) return;
+      const hit = event.target instanceof Element ? event.target : ownerDocument.elementFromPoint(event.clientX, event.clientY);
+      const row = hit?.closest("[data-block-id]");
+      const root = hit?.closest(".wte-inline-editor") ?? row?.querySelector(".wte-inline-editor");
+      if (!(root instanceof HTMLElement)) return;
+      const entry = [...editorsRef.current.entries()].find(([, handle]) => handle.getElement() === root);
+      if (entry === undefined || entry[0] === drag.editorId) return;
+      const key = editorKeysRef.current.get(entry[0]);
+      if (key === undefined || key.kind !== "block") return;
+      const rect = root.getBoundingClientRect();
+      const measuredOffset = getOffsetAtViewportPoint(root, event.clientX, event.clientY) ??
+        getOffsetNearViewportX(root, event.clientX, event.clientY < rect.top + rect.height / 2 ? "first" : "last");
+      const fallbackLength = getInlineLength(domToInlineNodes(root));
+      const offset = measuredOffset ?? Math.round(
+        fallbackLength * Math.min(1, Math.max(0, (event.clientX - rect.left) / Math.max(rect.width, 1))),
+      );
+      event.preventDefault();
+      suppressNativeSelectionRef.current = true;
+      engine.setSelection({ type: "text", anchor: drag.anchor, focus: selectionPointForEditor(key, offset) });
+    };
+    const handlePointerMove = (event: PointerEvent) => updateDragSelection(event, event.pointerId);
+    const handleMouseMove = (event: MouseEvent) => updateDragSelection(event, null);
+    const handleDragEnd = () => {
+      dragSelectionRef.current = null;
+      ownerDocument.defaultView?.requestAnimationFrame(() => {
+        suppressNativeSelectionRef.current = false;
+      });
+    };
+    ownerDocument.addEventListener("mousedown", handleMouseDown, true);
+    ownerDocument.addEventListener("pointermove", handlePointerMove, { passive: false });
+    ownerDocument.addEventListener("pointerup", handleDragEnd);
+    ownerDocument.addEventListener("mousemove", handleMouseMove, { passive: false });
+    ownerDocument.addEventListener("mouseup", handleDragEnd);
+    ownerDocument.defaultView?.addEventListener("blur", handleDragEnd);
+    return () => {
+      ownerDocument.removeEventListener("mousedown", handleMouseDown, true);
+      ownerDocument.removeEventListener("pointermove", handlePointerMove);
+      ownerDocument.removeEventListener("pointerup", handleDragEnd);
+      ownerDocument.removeEventListener("mousemove", handleMouseMove);
+      ownerDocument.removeEventListener("mouseup", handleDragEnd);
+      ownerDocument.defaultView?.removeEventListener("blur", handleDragEnd);
+    };
+  }, [engine]);
+
+  // History and programmatic selection changes flow back to the browser. This
+  // is intentionally a layout effect so the visible highlight/caret and the
+  // engine snapshot cannot diverge for a painted frame.
+  useLayoutEffect(() => {
+    const selection = editor.selection;
+    if (selection?.type !== "text") return;
+    const anchorRoot = editorsRef.current.get(editorIdForSelectionPoint(selection.anchor))?.getElement();
+    const focusRoot = editorsRef.current.get(editorIdForSelectionPoint(selection.focus))?.getElement();
+    if (anchorRoot == null || focusRoot == null) return;
+    const anchor = offsetToDomPosition(anchorRoot, selection.anchor.offset);
+    const focus = offsetToDomPosition(focusRoot, selection.focus.offset);
+    const nativeSelection = anchorRoot.ownerDocument.defaultView?.getSelection();
+    if (anchor === null || focus === null || nativeSelection == null) return;
+    if (nativeSelection.anchorNode && nativeSelection.focusNode) {
+      const liveAnchor = resolveDomSelectionPoint(nativeSelection.anchorNode, nativeSelection.anchorOffset);
+      const liveFocus = resolveDomSelectionPoint(nativeSelection.focusNode, nativeSelection.focusOffset);
+      if (liveAnchor !== null && liveFocus !== null && selectionPointsEqual(liveAnchor, selection.anchor) && selectionPointsEqual(liveFocus, selection.focus)) return;
+    }
+    if (typeof nativeSelection.setBaseAndExtent === "function") {
+      nativeSelection.setBaseAndExtent(anchor.node, anchor.offset, focus.node, focus.offset);
+      return;
+    }
+    const range = anchorRoot.ownerDocument.createRange();
+    range.setStart(anchor.node, anchor.offset);
+    range.setEnd(focus.node, focus.offset);
+    nativeSelection.removeAllRanges();
+    nativeSelection.addRange(range);
+  }, [editor.selection, resolveDomSelectionPoint]);
 
   // ---- image-row item surfaces (focusable, non-editable drop/paste targets) ----
   const itemElementsRef = useRef(new Map<string, HTMLElement>());
@@ -447,84 +650,14 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     [insertBlocksAfter],
   );
 
-  const insertBlocksAtTextSelection = useCallback(
-    (selection: { blockId: string; anchor: number; focus: number }, pasted: Block<TMeta>[], inlineSingleParagraph: boolean) => {
-      if (pasted.length === 0) {
-        return;
-      }
-      const currentDocument = engine.getDocument();
-      const block = currentDocument.blocks.find((candidate) => candidate.id === selection.blockId);
-      if (block === undefined || !isTextLike(block)) {
-        return;
-      }
-
-      const start = Math.min(selection.anchor, selection.focus);
-      const end = Math.max(selection.anchor, selection.focus);
-      const [left] = splitInlineContent(block.content, start);
-      const [, right] = splitInlineContent(block.content, end);
-
-      // Inline paste: a single paragraph splices into the current block (keeps its type).
-      const only = pasted.length === 1 ? pasted[0] : undefined;
-      if (inlineSingleParagraph && only !== undefined && only.type === "text" && only.variant === "paragraph") {
-        const merged = concatInlineContent(concatInlineContent(left, only.content), right);
-        commands.updateBlock(block.id, { content: merged });
-        requestFocus(blockKey(block.id), getInlineLength(left) + getInlineLength(only.content));
-        return;
-      }
-
-      // Block paste: split the current line, splice the blocks between, as one
-      // atomic (single-undo) transaction through the patch pipeline.
-      const index = currentDocument.blocks.findIndex((candidate) => candidate.id === block.id);
-      const previousId = index > 0 ? currentDocument.blocks[index - 1]!.id : null;
-      const rightBlock = getInlineLength(right) > 0 ? createTextBlock<TMeta>({ content: right }) : null;
-      const patches: unknown[] = [];
-
-      if (getInlineLength(left) === 0 && rightBlock === null) {
-        // Pasting into an empty line replaces it.
-        pasted.forEach((pastedBlock, position) =>
-          patches.push({
-            op: "insert_block_after",
-            afterBlockId: position === 0 ? previousId : pasted[position - 1]!.id,
-            block: pastedBlock,
-          }),
-        );
-        patches.push({ op: "delete_block", blockId: block.id });
-      } else {
-        patches.push({ op: "update_block", blockId: block.id, changes: { content: left } });
-        pasted.forEach((pastedBlock, position) =>
-          patches.push({
-            op: "insert_block_after",
-            afterBlockId: position === 0 ? block.id : pasted[position - 1]!.id,
-            block: pastedBlock,
-          }),
-        );
-        if (rightBlock !== null) {
-          patches.push({ op: "insert_block_after", afterBlockId: pasted[pasted.length - 1]!.id, block: rightBlock });
-        }
-      }
-      commands.applyPatches(patches);
-
-      // Caret goes to the remainder, else the end of the last text-like pasted block.
-      if (rightBlock !== null) {
-        requestFocus(blockKey(rightBlock.id), 0);
-      } else {
-        const lastTextLike = [...pasted].reverse().find((candidate) => isTextLike(candidate));
-        if (lastTextLike !== undefined && isTextLike(lastTextLike)) {
-          requestFocus(blockKey(lastTextLike.id), getInlineLength(lastTextLike.content));
-        }
-      }
-    },
-    [engine, commands, requestFocus],
-  );
-
   const uploadImageFiles = useCallback(
     async (files: File[]): Promise<Block<TMeta>[]> => {
       if (onUploadImage === undefined || files.length === 0) {
         return [];
       }
-      const inputs = await Promise.all(files.map((file) => onUploadImage(file)));
-      const resolved = inputs.filter(
-        (input): input is ImageInsertionInput<TMeta> => input !== null && input !== undefined,
+      const inputs = await Promise.allSettled(files.map((file) => Promise.resolve().then(() => onUploadImage(file))));
+      const resolved = inputs.flatMap((result) =>
+        result.status === "fulfilled" && result.value !== null && result.value !== undefined ? [result.value] : [],
       );
       // Multiple files become one side-by-side group when opted in; a single
       // file (or the default) stays a plain image block per upload.
@@ -543,8 +676,10 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
       if (onUploadImage === undefined || files.length === 0) {
         return [];
       }
-      const inputs = await Promise.all(files.map((file) => onUploadImage(file)));
-      return inputs.filter((input): input is ImageInsertionInput<TMeta> => input !== null && input !== undefined);
+      const inputs = await Promise.allSettled(files.map((file) => Promise.resolve().then(() => onUploadImage(file))));
+      return inputs.flatMap((result) =>
+        result.status === "fulfilled" && result.value !== null && result.value !== undefined ? [result.value] : [],
+      );
     },
     [onUploadImage],
   );
@@ -694,6 +829,12 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
       }
 
       commands.updateBlock(blockId, { content: inline });
+      if (caret !== null) {
+        const point = { blockId, offset: caret };
+        // updateBlock must land first so the new caret is clamped against the
+        // edited content, not the content length from before this input event.
+        engine.setSelection({ type: "text", anchor: point, focus: point });
+      }
     },
     [engine, commands, slash, closeSlash, requestFocus, readOnly, getSlashAnchor, props.inlineTagToNode],
   );
@@ -746,37 +887,72 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     null,
   );
   const closeChipEdit = useCallback(() => setChipEdit(null), []);
+  const chipTriggerRef = useRef<HTMLElement | null>(null);
+
+  const openChipEditor = useCallback((chip: HTMLElement): boolean => {
+    const kind = chip.dataset["wteObject"];
+    const registration = kind !== undefined ? registry.inlineObjects.get(kind) : undefined;
+    if (registration?.renderEditor === undefined || readOnly) return false;
+    const blockElement = chip.closest("[data-block-id]");
+    const blockId = blockElement instanceof HTMLElement ? blockElement.dataset["blockId"] : undefined;
+    const rootElement = blockId !== undefined ? editorsRef.current.get(blockId)?.getElement() : undefined;
+    if (blockId === undefined || rootElement == null) return false;
+    const offset = offsetOfInlineObject(rootElement, chip);
+    if (offset === null) return false;
+    chipTriggerRef.current = chip;
+    const rect = chip.getBoundingClientRect();
+    setChipEdit({ blockId, offset, anchor: { x: rect.left, y: rect.bottom } });
+    return true;
+  }, [registry, readOnly]);
 
   // A click on an interactive chip (a kind with renderEditor) opens its
   // popover. preventDefault stops a caret from landing on the atomic chip.
   const handleEditorMouseDown = useCallback(
-    (event: ReactMouseEvent) => {
+    (event: ReactPointerEvent) => {
       const target = event.target instanceof Element ? event.target : null;
       const chip = target?.closest("[data-wte-object]");
-      if (!(chip instanceof HTMLElement)) {
+      if (chip instanceof HTMLElement) {
+        if (openChipEditor(chip)) event.preventDefault();
         return;
       }
-      const kind = chip.dataset["wteObject"];
-      const registration = kind !== undefined ? registry.inlineObjects.get(kind) : undefined;
-      if (registration?.renderEditor === undefined || readOnly) {
-        return; // non-interactive chip — leave the click to the browser
-      }
-      const blockElement = chip.closest("[data-block-id]");
-      const blockId = blockElement instanceof HTMLElement ? blockElement.dataset["blockId"] : undefined;
-      const rootElement = blockId !== undefined ? editorsRef.current.get(blockId)?.getElement() : undefined;
-      if (blockId === undefined || rootElement == null) {
-        return;
-      }
-      const offset = offsetOfInlineObject(rootElement, chip);
-      if (offset === null) {
-        return;
-      }
-      event.preventDefault();
-      const rect = chip.getBoundingClientRect();
-      setChipEdit({ blockId, offset, anchor: { x: rect.left, y: rect.bottom } });
+      if (event.button !== 0) return;
+      const root = target?.closest(".wte-inline-editor");
+      if (!(root instanceof HTMLElement)) return;
+      const entry = [...editorsRef.current.entries()].find(([, handle]) => handle.getElement() === root);
+      if (entry === undefined) return;
+      const key = editorKeysRef.current.get(entry[0]);
+      const rect = root.getBoundingClientRect();
+      const measuredOffset = getOffsetAtViewportPoint(root, event.clientX, event.clientY);
+      const fallbackLength = getInlineLength(domToInlineNodes(root));
+      const offset = measuredOffset ?? Math.round(
+        fallbackLength * Math.min(1, Math.max(0, (event.clientX - rect.left) / Math.max(rect.width, 1))),
+      );
+      if (key === undefined || key.kind !== "block") return;
+      dragSelectionRef.current = { anchor: selectionPointForEditor(key, offset), editorId: entry[0], pointerId: event.pointerId };
     },
-    [registry, readOnly],
+    [openChipEditor],
   );
+
+  const handleEditorMouseDownFallback = useCallback((event: ReactMouseEvent) => {
+    // Pointer-capable browsers fire pointerdown first; do not replace that
+    // richer drag session with the compatibility mousedown that follows it.
+    if (dragSelectionRef.current !== null || event.button !== 0) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("[data-wte-object]") !== null) return;
+    const root = target?.closest(".wte-inline-editor");
+    if (!(root instanceof HTMLElement)) return;
+    const entry = [...editorsRef.current.entries()].find(([, handle]) => handle.getElement() === root);
+    if (entry === undefined) return;
+    const key = editorKeysRef.current.get(entry[0]);
+    if (key === undefined || key.kind !== "block") return;
+    const rect = root.getBoundingClientRect();
+    const measuredOffset = getOffsetAtViewportPoint(root, event.clientX, event.clientY);
+    const fallbackLength = getInlineLength(domToInlineNodes(root));
+    const offset = measuredOffset ?? Math.round(
+      fallbackLength * Math.min(1, Math.max(0, (event.clientX - rect.left) / Math.max(rect.width, 1))),
+    );
+    dragSelectionRef.current = { anchor: selectionPointForEditor(key, offset), editorId: entry[0], pointerId: null };
+  }, []);
 
   // Outside-click / Escape close the popover — block blur does NOT, since the
   // user is interacting with the popover (which lives outside the block).
@@ -793,6 +969,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setChipEdit(null);
+        chipTriggerRef.current?.focus();
       }
     };
     window.document.addEventListener("mousedown", handleMouseDown, true);
@@ -814,53 +991,97 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
         return;
       }
       const currentDocument = engine.getDocument();
-      const block = currentDocument.blocks.find((candidate) => candidate.id === selection.blockId);
-      if (block === undefined || !isTextLike(block)) {
+      if (selection.anchor.entryId !== undefined || selection.focus.entryId !== undefined) return;
+      const anchorBlock = currentDocument.blocks.find((candidate) => candidate.id === selection.anchor.blockId);
+      const block = currentDocument.blocks.find((candidate) => candidate.id === selection.focus.blockId);
+      if (anchorBlock === undefined || !isTextLike(anchorBlock) || block === undefined || !isTextLike(block)) {
         return;
       }
-      // Only intercept when a top-level block editor is focused — paste inside
-      // a table cell falls through to the browser's default for now.
-      const targetElement = editorsRef.current.get(block.id)?.getElement();
-      if (targetElement == null || targetElement.ownerDocument.activeElement !== targetElement) {
+      // A real drag leaves activeElement on the anchor block, so accept paste
+      // from either selected top-level editor. Captions and table cells still
+      // fall through to their own editing path.
+      const eventTarget = event.target instanceof Element ? event.target : null;
+      const targetRoot = eventTarget?.closest(".wte-inline-editor");
+      const targetEntry = targetRoot instanceof HTMLElement
+        ? [...editorsRef.current.entries()].find(([, handle]) => handle.getElement() === targetRoot)
+        : undefined;
+      const targetKey = targetEntry === undefined ? undefined : editorKeysRef.current.get(targetEntry[0]);
+      if (
+        targetKey?.kind !== "block" ||
+        (targetKey.blockId !== selection.anchor.blockId && targetKey.blockId !== selection.focus.blockId)
+      ) {
         return;
       }
 
       const html = event.clipboardData.getData("text/html");
       const text = event.clipboardData.getData("text/plain");
+      const structured = event.clipboardData.getData("application/x-wealthy-text+json");
       const imageFiles = getImageFiles(event.clipboardData);
-      if (html.trim().length === 0 && text.length === 0 && imageFiles.length === 0) {
+      if (html.trim().length === 0 && text.length === 0 && structured.length === 0 && imageFiles.length === 0) {
         return;
       }
       event.preventDefault();
       closeSlash();
 
-      const pasteSelection = { blockId: selection.blockId, anchor: selection.anchor, focus: selection.focus };
+      const capturedAnchorBlock = anchorBlock;
+      const capturedFocusBlock = block;
+      const insertResolvedBlocks = (blocks: Block<TMeta>[], inlineSingleParagraph: boolean) => {
+        if (blocks.length === 0) {
+          return;
+        }
+        const latestDocument = engine.getDocument();
+        const latestAnchor = latestDocument.blocks.find((candidate) => candidate.id === selection.anchor.blockId);
+        const latestFocus = latestDocument.blocks.find((candidate) => candidate.id === selection.focus.blockId);
+        if (latestAnchor === capturedAnchorBlock && latestFocus === capturedFocusBlock) {
+          commands.replaceTextRangeWithBlocks(selection, blocks, inlineSingleParagraph);
+          const caret = engine.getSelection();
+          if (caret?.type === "text") requestFocus(blockKey(caret.focus.blockId), caret.focus.offset);
+          return;
+        }
+        // An upload may finish after the user has edited or removed the target
+        // block. Never replay the stale offsets into changed text: retain the
+        // uploaded/fallback content as blocks immediately after the surviving
+        // anchor, or at the document end when that anchor was removed.
+        const afterBlockId = latestFocus?.id ?? latestAnchor?.id ?? latestDocument.blocks.at(-1)?.id ?? null;
+        insertBlocksAfter(afterBlockId, blocks);
+      };
       const insertParsedClipboard = () => {
-        let pasted = parseClipboardToBlocks({ html, text }) as Block<TMeta>[];
+        let pasted: Block<TMeta>[];
+        if (structured.length > 0) {
+          try {
+            pasted = cloneBlocksWithFreshIds(deserializeDocument<TMeta>(structured).blocks);
+          } catch {
+            pasted = parseClipboardToBlocks({ html, text }) as Block<TMeta>[];
+          }
+        } else {
+          pasted = parseClipboardToBlocks({ html, text }) as Block<TMeta>[];
+        }
         // URL-backed images from pasted HTML follow the same opt-in as dropped
         // URLs: drop them (but keep the surrounding text) unless allowed.
-        if (!allowDroppedImageUrls) {
+        if (!allowDroppedImageUrls && structured.length === 0) {
           pasted = pasted.filter((candidate) => candidate.type !== "image" && candidate.type !== "imageGroup");
         }
-        insertBlocksAtTextSelection(pasteSelection, pasted, true);
+        insertResolvedBlocks(pasted, true);
       };
 
       if (imageFiles.length > 0 && onUploadImage !== undefined) {
         void uploadImageFiles(imageFiles).then((imageBlocks) => {
           if (imageBlocks.length > 0) {
-            insertBlocksAtTextSelection(pasteSelection, imageBlocks, false);
-          } else if (html.trim().length > 0 || text.length > 0) {
+            insertResolvedBlocks(imageBlocks, false);
+          } else if (html.trim().length > 0 || text.length > 0 || structured.length > 0) {
             insertParsedClipboard();
+          } else {
+            showDropFeedback(block.id, undefined, messages.imageDropFailed);
           }
-        }).catch(() => undefined);
+        });
         return;
       }
 
-      if (html.trim().length > 0 || text.length > 0) {
+      if (html.trim().length > 0 || text.length > 0 || structured.length > 0) {
         insertParsedClipboard();
       }
     },
-    [readOnly, engine, closeSlash, insertBlocksAtTextSelection, onUploadImage, uploadImageFiles, allowDroppedImageUrls],
+    [readOnly, engine, closeSlash, insertBlocksAfter, onUploadImage, uploadImageFiles, allowDroppedImageUrls, showDropFeedback, messages, commands, requestFocus],
   );
 
   // ---- keyboard structure ----
@@ -1087,15 +1308,15 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
   // ---- selection: inline tracking + block multi-select ----
   const handleSelectionChange = useCallback(
     (blockId: string, start: number, end: number, entryId?: string) => {
-      editor.setSelection({
+      const anchor = { blockId, ...(entryId !== undefined ? { entryId } : {}), offset: start };
+      const focus = { blockId, ...(entryId !== undefined ? { entryId } : {}), offset: end };
+      engine.setSelection({
         type: "text",
-        blockId,
-        ...(entryId !== undefined ? { entryId } : {}),
-        anchor: start,
-        focus: end,
+        anchor,
+        focus,
       });
     },
-    [editor],
+    [engine],
   );
 
   const selectedBlockIds = useMemo<ReadonlySet<string>>(() => {
@@ -1113,16 +1334,23 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     (blockId: string, shiftKey: boolean) => {
       const current = engine.getSelection();
       if (shiftKey && current?.type === "blocks") {
-        editor.setSelection({ ...current, focusBlockId: blockId });
+        engine.setSelection({ ...current, focusBlockId: blockId });
       } else {
-        editor.setSelection({ type: "blocks", anchorBlockId: blockId, focusBlockId: blockId });
+        engine.setSelection({ type: "blocks", anchorBlockId: blockId, focusBlockId: blockId });
       }
     },
-    [engine, editor],
+    [engine],
   );
 
   const handleContainerKeyDown = useCallback(
     (event: ReactKeyboardEvent) => {
+      if ((event.key === "Enter" || event.key === " ") && event.target instanceof HTMLElement) {
+        const chip = event.target.closest("[data-wte-object]");
+        if (chip instanceof HTMLElement && openChipEditor(chip)) {
+          event.preventDefault();
+          return;
+        }
+      }
       // Engine-owned history (D8): browser-native undo must never run
       // inside the contenteditables.
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
@@ -1140,11 +1368,19 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
         return;
       }
       const selection = engine.getSelection();
+      if (selection?.type === "text" && !isCollapsed(selection) && (event.key === "Delete" || event.key === "Backspace")) {
+        if (!isSupportedTopLevelTextRange(engine.getDocument(), selection)) return;
+        event.preventDefault();
+        commands.deleteTextRange(selection);
+        const caret = engine.getSelection();
+        if (caret?.type === "text") requestFocus(blockKey(caret.focus.blockId), caret.focus.offset);
+        return;
+      }
       if (selection?.type !== "blocks") {
         return;
       }
       if (event.key === "Escape") {
-        editor.setSelection(null);
+        engine.setSelection(null);
         event.preventDefault();
         return;
       }
@@ -1157,13 +1393,82 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
             .map((block) => block.id);
           // One atomic, single-undo deletion through the patch pipeline.
           commands.applyPatches(ids.map((blockId) => ({ op: "delete_block", blockId })));
-          editor.setSelection(null);
+          engine.setSelection(null);
         }
         event.preventDefault();
       }
     },
-    [engine, editor, commands],
+    [engine, commands, requestFocus, openChipEditor],
   );
+
+  const handleBeforeInput = useCallback((event: ReactFormEvent<HTMLDivElement>) => {
+    const selection = engine.getSelection();
+    if (readOnly || selection?.type !== "text" || isCollapsed(selection)) return;
+    if (!isSupportedTopLevelTextRange(engine.getDocument(), selection)) return;
+    const spansRegions =
+      selection.anchor.blockId !== selection.focus.blockId || selection.anchor.entryId !== selection.focus.entryId;
+    if (!spansRegions) return;
+    const input = event.nativeEvent as InputEvent;
+    if (input.inputType === "insertText" && input.data !== null) {
+      event.preventDefault();
+      commands.replaceTextRange(selection, [{ type: "text", text: input.data }]);
+    } else if (input.inputType.startsWith("delete")) {
+      event.preventDefault();
+      commands.deleteTextRange(selection);
+    } else {
+      return;
+    }
+    const caret = engine.getSelection();
+    if (caret?.type === "text") requestFocus(blockKey(caret.focus.blockId), caret.focus.offset);
+  }, [readOnly, engine, commands, requestFocus]);
+
+  const writeSelectionToClipboard = useCallback((clipboardData: DataTransfer): boolean => {
+    const selection = engine.getSelection();
+    const currentDocument = engine.getDocument();
+    let fragment: WealthyDocument<TMeta, TDocMeta>;
+    let plainText: string;
+    if (selection?.type === "text" && !isCollapsed(selection)) {
+      try {
+        fragment = extractTextRange(currentDocument, selection);
+        plainText = textRangeToPlainText(currentDocument, selection);
+      } catch {
+        return false;
+      }
+    } else if (selection?.type === "blocks") {
+      const range = getSelectedBlockRange(currentDocument, selection);
+      if (range === null) return false;
+      fragment = { ...currentDocument, blocks: currentDocument.blocks.slice(range.start, range.end + 1) };
+      plainText = fragment.blocks.map((block) =>
+        block.type === "heading" || block.type === "text" ? getInlineText(block.content) : "",
+      ).join("\n");
+    } else {
+      return false;
+    }
+    clipboardData.setData("text/plain", plainText);
+    clipboardData.setData("text/html", exportHtml(fragment));
+    clipboardData.setData("application/x-wealthy-text+json", serializeDocument(fragment));
+    return true;
+  }, [engine]);
+
+  const handleCopy = useCallback((event: ReactClipboardEvent) => {
+    if (writeSelectionToClipboard(event.clipboardData)) event.preventDefault();
+  }, [writeSelectionToClipboard]);
+
+  const handleCut = useCallback((event: ReactClipboardEvent) => {
+    if (readOnly || !writeSelectionToClipboard(event.clipboardData)) return;
+    event.preventDefault();
+    const selection = engine.getSelection();
+    if (selection?.type === "text") {
+      commands.deleteTextRange(selection);
+    } else if (selection?.type === "blocks") {
+      const range = getSelectedBlockRange(engine.getDocument(), selection);
+      if (range !== null) {
+        const ids = engine.getDocument().blocks.slice(range.start, range.end + 1).map((block) => block.id);
+        commands.applyPatches(ids.map((blockId) => ({ op: "delete_block", blockId })));
+        engine.setSelection(null);
+      }
+    }
+  }, [readOnly, writeSelectionToClipboard, engine, commands]);
 
   // ---- drag and drop (blocks and sections, D4) ----
   const [dropIndicator, setDropIndicator] = useState<DropIndicator | null>(null);
@@ -1380,46 +1685,135 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
       // the formatting toolbar doesn't linger over the now-unfocused text.
       setFocusedBlockId(blockId);
       lastFocusedBlockIdRef.current = blockId;
-      editor.setSelection(null);
+      engine.setSelection(null);
     },
-    [editor],
+    [engine],
   );
 
   // ---- floating toolbar ----
   const textSelection = editor.selection?.type === "text" ? editor.selection : null;
+  const selectedTextSlices = useMemo(
+    () => (textSelection === null ? null : getSelectedTextSlices(document, textSelection)),
+    [document, textSelection],
+  );
+  const [crossBlockSelectionRects, setCrossBlockSelectionRects] = useState<CSSProperties[]>([]);
+  const crossBlockSelectedIds = useMemo<ReadonlySet<string>>(() =>
+    textSelection !== null && textSelection.anchor.blockId !== textSelection.focus.blockId && selectedTextSlices !== null
+      ? new Set(selectedTextSlices.map(({ block }) => block.id))
+      : new Set(),
+  [textSelection, selectedTextSlices]);
+
+  useLayoutEffect(() => {
+    const highlightName = "wte-cross-block-selection";
+    const browserWindow = typeof window === "undefined" ? null : window as unknown as {
+      Highlight?: new (...ranges: Range[]) => unknown;
+      CSS?: { highlights?: { set(name: string, value: unknown): void; delete(name: string): void } };
+    };
+    const registry = browserWindow?.CSS?.highlights;
+    registry?.delete(highlightName);
+    setCrossBlockSelectionRects([]);
+    if (
+      textSelection === null ||
+      textSelection.anchor.blockId === textSelection.focus.blockId || selectedTextSlices === null
+    ) return;
+    const buildRanges = () => selectedTextSlices.flatMap(({ block, start, end }) => {
+      const root = editorsRef.current.get(block.id)?.getElement();
+      if (root === null || root === undefined) return [];
+      const startPosition = offsetToDomPosition(root, start);
+      const endPosition = offsetToDomPosition(root, end);
+      if (startPosition === null || endPosition === null) return [];
+      const range = root.ownerDocument.createRange();
+      range.setStart(startPosition.node, startPosition.offset);
+      range.setEnd(endPosition.node, endPosition.offset);
+      return [range];
+    });
+    const updateHighlight = () => {
+      const ranges = buildRanges();
+      if (registry !== undefined && browserWindow?.Highlight !== undefined) {
+        if (ranges.length > 0) registry.set(highlightName, new browserWindow.Highlight(...ranges));
+        return;
+      }
+      setCrossBlockSelectionRects(ranges.flatMap((range) =>
+        (typeof range.getClientRects === "function" ? Array.from(range.getClientRects()) : []).map((rect) => ({
+          position: "fixed",
+          pointerEvents: "none",
+          left: rect.left,
+          top: rect.top,
+          width: Math.max(rect.width, 1),
+          height: Math.max(rect.height, 1),
+        })),
+      ));
+    };
+    updateHighlight();
+    if (typeof window !== "undefined") {
+      window.addEventListener("resize", updateHighlight);
+      window.addEventListener("scroll", updateHighlight, true);
+    }
+    return () => {
+      registry?.delete(highlightName);
+      if (typeof window !== "undefined") {
+        window.removeEventListener("resize", updateHighlight);
+        window.removeEventListener("scroll", updateHighlight, true);
+      }
+    };
+  }, [textSelection, selectedTextSlices]);
+
+  const handleKeyboardMove = useCallback((blockId: string, direction: -1 | 1) => {
+    const blocks = engine.getDocument().blocks;
+    const index = blocks.findIndex((block) => block.id === blockId);
+    const target = blocks[index + direction];
+    if (index === -1 || target === undefined) return;
+    handleDrop(target.id, direction === -1 ? "before" : "after", blockId);
+  }, [engine, handleDrop]);
   // The `isTextLike` filter intentionally excludes image and image-group
   // caption selections: captions are editable but get no formatting toolbar for
   // now (they carry an entryId / target caption content the mark commands don't
   // address yet). This keeps the toolbar from acting on the wrong inline target.
   const toolbarTarget =
-    textSelection !== null && textSelection.anchor !== textSelection.focus
-      ? document.blocks.find((candidate) => candidate.id === textSelection.blockId && isTextLike(candidate))
+    textSelection !== null && !isCollapsed(textSelection) && selectedTextSlices !== null
+      ? selectedTextSlices[0]?.block
       : undefined;
 
   const activeMarkTypes = useMemo<ReadonlySet<InlineMark["type"]>>(() => {
-    if (toolbarTarget === undefined || !isTextLike(toolbarTarget) || textSelection === null) {
+    if (toolbarTarget === undefined || selectedTextSlices === null || selectedTextSlices.length === 0) {
       return new Set();
     }
-    const start = Math.min(textSelection.anchor, textSelection.focus);
-    const end = Math.max(textSelection.anchor, textSelection.focus);
-    return new Set(getActiveMarks(toolbarTarget.content, start, end).map((mark) => mark.type));
-  }, [toolbarTarget, textSelection]);
+    const activeBySlice = selectedTextSlices.map(({ block, start, end }) => {
+      const inherited = getInheritedMarkTypes?.(block as Block<TMeta>) ?? new Set();
+      return new Set(getActiveMarks(block.content, start, end, inherited).map((mark) => mark.type));
+    });
+    return new Set(
+      [...activeBySlice[0]!].filter((type) => activeBySlice.every((active) => active.has(type))),
+    );
+  }, [toolbarTarget, selectedTextSlices, getInheritedMarkTypes]);
 
   const handleToggleMark = useCallback(
     (mark: InlineMark) => {
       const selection = engine.getSelection();
-      if (selection?.type !== "text" || selection.anchor === selection.focus) {
-        return;
-      }
-      const block = engine.getDocument().blocks.find((candidate) => candidate.id === selection.blockId);
-      if (block === undefined || !isTextLike(block)) {
-        return;
-      }
-      const start = Math.min(selection.anchor, selection.focus);
-      const end = Math.max(selection.anchor, selection.focus);
-      commands.updateBlock(block.id, { content: toggleMark(block.content, start, end, mark) });
+      if (selection?.type !== "text" || isCollapsed(selection)) return;
+      const slices = getSelectedTextSlices(engine.getDocument(), selection);
+      if (slices === null || slices.length === 0) return;
+      const activeEverywhere = slices.every(({ block, start, end }) => {
+        const inherited = getInheritedMarkTypes?.(block as Block<TMeta>) ?? new Set();
+        return getActiveMarks(block.content, start, end, inherited).some((active) => active.type === mark.type);
+      });
+      const booleanMark = ["bold", "italic", "underline", "strikethrough", "code"].includes(mark.type);
+      commands.applyPatches(slices.map(({ block, start, end }) => {
+        const inherited = getInheritedMarkTypes?.(block as Block<TMeta>) ?? new Set();
+        let content;
+        if (activeEverywhere) {
+          content = booleanMark && inherited.has(mark.type)
+            ? applyMark(block.content, start, end, { ...mark, enabled: false } as InlineMark)
+            : removeMark(block.content, start, end, mark.type);
+        } else {
+          content = booleanMark && inherited.has(mark.type)
+            ? removeMark(block.content, start, end, mark.type)
+            : applyMark(block.content, start, end, mark);
+        }
+        return { op: "update_block", blockId: block.id, changes: { content } };
+      }));
     },
-    [engine, commands],
+    [engine, commands, getInheritedMarkTypes],
   );
 
   const toolbarStyle = useMemo<CSSProperties | undefined>(() => {
@@ -1526,7 +1920,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
       if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
         return;
       }
-      editor.commit();
+      commit();
       // Clean up unfilled image-row slots when the user leaves the editor — but
       // spare the row they last touched. Leaving is exactly when someone steps
       // out to pick/drag a file, so the in-progress row must survive the round
@@ -1535,7 +1929,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
         commands.pruneEmptyImageSlots(lastFocusedBlockIdRef.current ?? undefined);
       }
     },
-    [editor, readOnly, commands],
+    [commit, readOnly, commands],
   );
 
   // A non-editable block at the end of the document has no caret position after
@@ -1549,22 +1943,25 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
     <MessagesProvider messages={messages}>
     <div
       className={["wte-editor", props.className].filter(Boolean).join(" ")}
-      role="textbox"
-      aria-multiline
+      role="group"
       aria-label={props.ariaLabel ?? messages.documentAriaLabel}
       onKeyDown={handleContainerKeyDown}
-      onMouseDown={handleEditorMouseDown}
+      onBeforeInput={handleBeforeInput}
+      onPointerDownCapture={handleEditorMouseDown}
+      onMouseDownCapture={handleEditorMouseDownFallback}
       onBlur={handleContainerBlur}
       onPaste={handlePaste}
+      onCopy={handleCopy}
+      onCut={handleCut}
     >
       {visibleBlocks.map((block) => (
         <BlockRow
           key={block.id}
           block={block as Block}
-          editor={editor as unknown as DocumentEditorApi}
           readOnly={readOnly}
           placeholder={focusedBlockId === block.id ? placeholder : undefined}
           selected={selectedBlockIds.has(block.id)}
+          textRangeSelected={crossBlockSelectedIds.has(block.id)}
           collapsed={block.type === "heading" && editor.isSectionCollapsed(block.id)}
           dropIndicator={dropIndicator?.blockId === block.id ? dropIndicator.position : null}
           headingNumber={
@@ -1583,6 +1980,7 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
           onEditorBlur={handleEditorBlur}
           onMoveFocus={moveFocus}
           onHandleClick={handleHandleClick}
+          onKeyboardMove={handleKeyboardMove}
           onToggleCollapsed={editor.toggleSectionCollapsed}
           onDropIndicatorChange={setDropIndicator}
           onDropBlock={handleDrop}
@@ -1613,16 +2011,16 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
         />
       ))}
 
+      {crossBlockSelectionRects.map((style, index) => (
+        <span key={index} className="wte-cross-block-selection" aria-hidden="true" style={style} />
+      ))}
+
       {showTrailingAdd && (
-        <div
+        <button
+          type="button"
           className="wte-trailing-line"
-          role="button"
-          tabIndex={-1}
           aria-label={messages.addLineBelow}
-          onMouseDown={(event) => {
-            event.preventDefault();
-            addTrailingParagraph();
-          }}
+          onClick={addTrailingParagraph}
         />
       )}
 
@@ -1676,10 +2074,10 @@ export function DocumentEditor<TMeta extends BlockMeta = BlockMeta>(props: Docum
 
 interface BlockRowProps {
   block: Block;
-  editor: DocumentEditorApi;
   readOnly: boolean;
   placeholder: string | undefined;
   selected: boolean;
+  textRangeSelected: boolean;
   collapsed: boolean;
   dropIndicator: "before" | "after" | null;
   headingNumber: number[] | null;
@@ -1694,6 +2092,7 @@ interface BlockRowProps {
   onEditorBlur(blockId: string): void;
   onMoveFocus(blockId: string, direction: -1 | 1, entryId?: string): boolean;
   onHandleClick(blockId: string, shiftKey: boolean): void;
+  onKeyboardMove(blockId: string, direction: -1 | 1): void;
   onToggleCollapsed(headingId: string): void;
   onDropIndicatorChange(indicator: DropIndicator | null): void;
   onDropBlock(targetBlockId: string, position: "before" | "after", draggedBlockId: string): void;
@@ -1715,11 +2114,12 @@ interface BlockRowProps {
   blockFeedback: string | null;
 }
 
-function BlockRow({
+const BlockRow = memo(function BlockRow({
   block,
   readOnly,
   placeholder,
   selected,
+  textRangeSelected,
   collapsed,
   dropIndicator,
   headingNumber,
@@ -1734,6 +2134,7 @@ function BlockRow({
   onEditorBlur,
   onMoveFocus,
   onHandleClick,
+  onKeyboardMove,
   onToggleCollapsed,
   onDropIndicatorChange,
   onDropBlock,
@@ -1763,6 +2164,7 @@ function BlockRow({
     `wte-block--${block.type}`,
     block.type === "text" ? `wte-block--${block.variant}` : null,
     selected ? "wte-block--selected" : null,
+    textRangeSelected ? "wte-block--text-range-selected" : null,
     dropIndicator === "before" ? "wte-block--drop-before" : null,
     dropIndicator === "after" ? "wte-block--drop-after" : null,
   ]
@@ -1804,18 +2206,26 @@ function BlockRow({
     >
       <div className="wte-block__gutter" contentEditable={false}>
         {!readOnly && (
-          <span
+          <button
+            type="button"
             className="wte-block__handle"
             draggable
             title={messages.dragHandleTitle}
+            aria-label={messages.dragHandleTitle}
             onClick={(event) => onHandleClick(block.id, event.shiftKey)}
+            onKeyDown={(event) => {
+              if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+                event.preventDefault();
+                onKeyboardMove(block.id, event.key === "ArrowUp" ? -1 : 1);
+              }
+            }}
             onDragStart={(event) => {
               event.dataTransfer.setData("text/wte-block", block.id);
               event.dataTransfer.effectAllowed = "move";
             }}
           >
             ⠿
-          </span>
+          </button>
         )}
         {block.type === "heading" && (
           <button
@@ -1962,4 +2372,4 @@ function BlockRow({
       </div>
     </div>
   );
-}
+});

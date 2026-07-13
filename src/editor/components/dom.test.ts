@@ -33,6 +33,11 @@ describe("inlineNodesToHtml", () => {
     ).toBe('<a href="https://a?b=&quot;c&quot;">x</a>');
   });
 
+  it("drops unsafe links when rendering or parsing editor HTML", () => {
+    expect(inlineNodesToHtml([{ type: "text", text: "x", marks: [{ type: "link", href: "javascript:alert(1)" }] }])).toBe("x");
+    expect(domToInlineNodes(element('<a href="javascript:alert(1)">x</a>'))).toEqual([{ type: "text", text: "x" }]);
+  });
+
   it("renders inline objects as atomic chips with payload attributes", () => {
     const html = inlineNodesToHtml([
       { type: "object", kind: "placeholder", data: { key: "client", label: "Cliente" } },
@@ -114,6 +119,15 @@ describe("domToInlineNodes", () => {
   it("ignores <br> and merges adjacent same-marked text", () => {
     const root = element("hello<br>world");
     expect(domToInlineNodes(root)).toEqual([{ type: "text", text: "helloworld" }]);
+  });
+
+  it("round-trips explicit off marks used to override inherited formatting", () => {
+    const content: InlineNode[] = [
+      { type: "text", text: "plain in bold paragraph", marks: [{ type: "bold", enabled: false }] },
+    ];
+    const root = element(inlineNodesToHtml(content));
+    expect(root.querySelector('[data-wte-bold="false"]')).not.toBeNull();
+    expect(domToInlineNodes(root)).toEqual(content);
   });
 
   it("returns empty content for an empty element", () => {

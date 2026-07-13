@@ -57,7 +57,7 @@ echoing back what you got from `onChange` is a no-op, so controlled usage is saf
 
 ## Features
 
-- Per-line block editing with whole-block multi-select and drag handles.
+- Per-line native editing with directional text selection across blocks, rich clipboard operations, and separate whole-block selection via drag handles.
 - `Enter`/`Backspace`/`Tab` structure (split, merge, indent); `Enter` on an empty list item exits the list.
 - Markdown input rules (`# `, `- `, `1. `) and a `/` slash menu.
 - Floating mark toolbar, hierarchical heading numbering, collapsible sections.

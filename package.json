@@ -3,6 +3,27 @@
   "version": "0.5.0-alpha.0",
   "description": "Schema-first, headless, block-based rich text editor for React.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Scyies/rich-text.git"
+  },
+  "homepage": "https://github.com/Scyies/rich-text#readme",
+  "bugs": {
+    "url": "https://github.com/Scyies/rich-text/issues"
+  },
+  "keywords": [
+    "rich-text",
+    "editor",
+    "react",
+    "block-editor",
+    "notion"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "packageManager": "pnpm@10.33.2",
   "sideEffects": [
@@ -17,41 +38,72 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./react": {
-      "types": "./dist/react.d.ts",
-      "import": "./dist/react.js",
-      "require": "./dist/react.cjs"
+      "import": {
+        "types": "./dist/react.d.ts",
+        "default": "./dist/react.js"
+      },
+      "require": {
+        "types": "./dist/react.d.cts",
+        "default": "./dist/react.cjs"
+      }
     },
     "./export-html": {
-      "types": "./dist/html.d.ts",
-      "import": "./dist/html.js",
-      "require": "./dist/html.cjs"
+      "import": {
+        "types": "./dist/html.d.ts",
+        "default": "./dist/html.js"
+      },
+      "require": {
+        "types": "./dist/html.d.cts",
+        "default": "./dist/html.cjs"
+      }
     },
     "./export-markdown": {
-      "types": "./dist/markdown.d.ts",
-      "import": "./dist/markdown.js",
-      "require": "./dist/markdown.cjs"
+      "import": {
+        "types": "./dist/markdown.d.ts",
+        "default": "./dist/markdown.js"
+      },
+      "require": {
+        "types": "./dist/markdown.d.cts",
+        "default": "./dist/markdown.cjs"
+      }
     },
     "./export-docx": {
-      "types": "./dist/docx.d.ts",
-      "import": "./dist/docx.js",
-      "require": "./dist/docx.cjs"
+      "import": {
+        "types": "./dist/docx.d.ts",
+        "default": "./dist/docx.js"
+      },
+      "require": {
+        "types": "./dist/docx.d.cts",
+        "default": "./dist/docx.cjs"
+      }
     },
     "./styles.css": "./styles.css"
   },
   "scripts": {
     "build": "tsup",
+    "build:demo": "vite build --config demo/vite.config.ts",
     "demo": "vite --config demo/vite.config.ts",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit",
+    "typecheck:demo": "tsc --noEmit -p demo/tsconfig.json",
     "lint": "eslint . --max-warnings 0",
     "smoke:exports": "node scripts/smoke-exports.mjs",
-    "validate:release": "pnpm lint && pnpm test && pnpm typecheck && pnpm build && pnpm pack --dry-run && pnpm smoke:exports"
+    "smoke:consumer": "node scripts/smoke-consumer.mjs",
+    "check:release-tag": "node scripts/check-release-tag.mjs",
+    "validate:release": "pnpm lint && pnpm test:coverage && pnpm typecheck && pnpm typecheck:demo && pnpm build && pnpm build:demo && pnpm pack --dry-run && pnpm smoke:exports && pnpm smoke:consumer && pnpm check:release-tag"
   },
   "dependencies": {
     "zod": "^4.1.0"
@@ -68,10 +120,13 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.61.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
+    "@vitest/coverage-v8": "3.2.6",
     "docx": "^9.7.1",
     "eslint": "^10.5.0",
     "eslint-plugin-react-hooks": "^7.1.1",

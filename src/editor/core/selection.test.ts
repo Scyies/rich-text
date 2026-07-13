@@ -1,122 +1,80 @@
 import { describe, expect, it } from "vitest";
-import {
-  createHeadingBlock,
-  createImageBlock,
-  createImageGroupBlock,
-  createTextBlock,
-} from "./factories";
+import { createHeadingBlock, createImageBlock, createImageGroupBlock, createTextBlock } from "./factories";
 import { SCHEMA_VERSION, type WealthyDocument } from "./schema";
-import { caretAt, clampSelection, selectionsEqual, type TextSelection } from "./selection";
+import {
+  caretAt,
+  clampSelection,
+  compareSelectionPoints,
+  getSelectedTextSlices,
+  orderTextSelection,
+  selectionsEqual,
+  type SelectionPoint,
+  type TextSelection,
+} from "./selection";
 
 function docWith(blocks: WealthyDocument["blocks"]): WealthyDocument {
   return { schemaVersion: SCHEMA_VERSION, blocks };
 }
 
-describe("caretAt", () => {
-  it("omits entryId when not given and includes it when provided", () => {
-    expect(caretAt("b1", 3)).toEqual({ type: "text", blockId: "b1", anchor: 3, focus: 3 });
-    expect(caretAt("b1", 3, "e1")).toEqual({
-      type: "text",
-      blockId: "b1",
-      entryId: "e1",
-      anchor: 3,
-      focus: 3,
-    });
-  });
-});
+function point(blockId: string, offset: number, entryId?: string): SelectionPoint {
+  return { blockId, ...(entryId !== undefined ? { entryId } : {}), offset };
+}
 
-describe("selectionsEqual", () => {
-  it("treats selections with different entryIds as unequal", () => {
-    const base: TextSelection = { type: "text", blockId: "b1", anchor: 0, focus: 0 };
+describe("document text selection", () => {
+  it("creates a direction-preserving collapsed caret", () => {
+    expect(caretAt("b1", 3)).toEqual({ type: "text", anchor: point("b1", 3), focus: point("b1", 3) });
+    expect(caretAt("b1", 3, "e1").anchor).toEqual(point("b1", 3, "e1"));
+  });
+
+  it("compares both independently addressed endpoints", () => {
+    const base: TextSelection = { type: "text", anchor: point("b1", 0), focus: point("b2", 1) };
     expect(selectionsEqual(base, { ...base })).toBe(true);
-    expect(selectionsEqual({ ...base, entryId: "e1" }, { ...base, entryId: "e2" })).toBe(false);
-    expect(selectionsEqual({ ...base, entryId: "e1" }, base)).toBe(false);
-    expect(selectionsEqual({ ...base, entryId: "e1" }, { ...base, entryId: "e1" })).toBe(true);
+    expect(selectionsEqual(base, { ...base, focus: point("b2", 2) })).toBe(false);
+    expect(selectionsEqual(base, { ...base, focus: point("b2", 1, "caption") })).toBe(false);
   });
-});
 
-describe("clampSelection", () => {
-  it("accepts heading/text content selections and rejects them when an entryId is present", () => {
-    const text = createTextBlock({ content: "hello" });
+  it("clamps endpoints independently across blocks", () => {
     const heading = createHeadingBlock({ level: 1, content: "title" });
+    const text = createTextBlock({ content: "hello" });
     const doc = docWith([heading, text]);
-
-    expect(clampSelection(doc, { type: "text", blockId: text.id, anchor: 0, focus: 99 })).toEqual({
+    expect(clampSelection(doc, { type: "text", anchor: point(heading.id, -2), focus: point(text.id, 99) })).toEqual({
       type: "text",
-      blockId: text.id,
-      anchor: 0,
-      focus: 5,
+      anchor: point(heading.id, 0),
+      focus: point(text.id, 5),
     });
-    expect(clampSelection(doc, { type: "text", blockId: heading.id, anchor: 2, focus: 2 })).toEqual({
-      type: "text",
-      blockId: heading.id,
-      anchor: 2,
-      focus: 2,
-    });
-    // A stray entryId on a text block is not a valid region.
-    expect(
-      clampSelection(doc, { type: "text", blockId: text.id, entryId: "nope", anchor: 0, focus: 1 }),
-    ).toBeNull();
   });
 
-  it("accepts a single image's caption selection (no entryId) and clamps to caption length", () => {
-    const image = createImageBlock({
-      source: { type: "url", url: "https://example.com/a.png" },
-      caption: "cap",
-    });
-    const doc = docWith([image]);
-
-    expect(clampSelection(doc, { type: "text", blockId: image.id, anchor: 1, focus: 99 })).toEqual({
+  it("validates image and image-group caption regions", () => {
+    const image = createImageBlock({ source: { type: "url", url: "https://example.com/a.png" }, caption: "cap" });
+    const group = createImageGroupBlock({ images: [{ source: { type: "url", url: "https://example.com/b.png" }, caption: "left" }] });
+    const entry = group.images[0]!;
+    const doc = docWith([image, group]);
+    expect(clampSelection(doc, { type: "text", anchor: point(image.id, 9), focus: point(group.id, 9, entry.id) })).toEqual({
       type: "text",
-      blockId: image.id,
-      anchor: 1,
-      focus: 3,
+      anchor: point(image.id, 3),
+      focus: point(group.id, 4, entry.id),
     });
-    // An entryId is invalid on a single image.
-    expect(
-      clampSelection(doc, { type: "text", blockId: image.id, entryId: "x", anchor: 0, focus: 0 }),
-    ).toBeNull();
+    expect(clampSelection(doc, { type: "text", anchor: point(group.id, 0), focus: point(group.id, 1) })).toBeNull();
   });
 
-  it("clamps an empty image caption to length 0", () => {
+  it("preserves backward direction while ordering a range", () => {
+    const first = createTextBlock({ content: "one" });
+    const second = createTextBlock({ content: "two" });
+    const doc = docWith([first, second]);
+    const selection: TextSelection = { type: "text", anchor: point(second.id, 2), focus: point(first.id, 1) };
+    expect(compareSelectionPoints(doc, selection.anchor, selection.focus)).toBeGreaterThan(0);
+    expect(orderTextSelection(doc, selection)).toEqual({ start: point(first.id, 1), end: point(second.id, 2), backward: true });
+  });
+
+  it("returns slices across text blocks and skips atomic blocks", () => {
+    const first = createTextBlock({ content: "first" });
     const image = createImageBlock({ source: { type: "url", url: "https://example.com/a.png" } });
-    const doc = docWith([image]);
-    expect(clampSelection(doc, { type: "text", blockId: image.id, anchor: 5, focus: 7 })).toEqual({
-      type: "text",
-      blockId: image.id,
-      anchor: 0,
-      focus: 0,
-    });
-  });
-
-  it("requires a matching entryId for image-group caption selections", () => {
-    const group = createImageGroupBlock({
-      images: [
-        { source: { type: "url", url: "https://example.com/a.png" }, caption: "left" },
-        { source: { type: "url", url: "https://example.com/b.png" } },
-      ],
-    });
-    const [first, second] = group.images;
-    const doc = docWith([group]);
-
-    // Valid: matching entry, clamped to its caption length ("left" = 4).
-    expect(
-      clampSelection(doc, { type: "text", blockId: group.id, entryId: first!.id, anchor: 0, focus: 99 }),
-    ).toEqual({ type: "text", blockId: group.id, entryId: first!.id, anchor: 0, focus: 4 });
-    // Valid: empty caption clamps to 0.
-    expect(
-      clampSelection(doc, { type: "text", blockId: group.id, entryId: second!.id, anchor: 3, focus: 3 }),
-    ).toEqual({ type: "text", blockId: group.id, entryId: second!.id, anchor: 0, focus: 0 });
-    // Invalid: no entryId.
-    expect(clampSelection(doc, { type: "text", blockId: group.id, anchor: 0, focus: 0 })).toBeNull();
-    // Invalid: unknown entryId.
-    expect(
-      clampSelection(doc, { type: "text", blockId: group.id, entryId: "missing", anchor: 0, focus: 0 }),
-    ).toBeNull();
-  });
-
-  it("returns null for missing blocks", () => {
-    const doc = docWith([createTextBlock({ content: "x" })]);
-    expect(clampSelection(doc, { type: "text", blockId: "ghost", anchor: 0, focus: 0 })).toBeNull();
+    const last = createHeadingBlock({ level: 2, content: "last" });
+    const doc = docWith([first, image, last]);
+    const slices = getSelectedTextSlices(doc, { type: "text", anchor: point(first.id, 2), focus: point(last.id, 3) });
+    expect(slices?.map(({ block, start, end }) => [block.id, start, end])).toEqual([
+      [first.id, 2, 5],
+      [last.id, 0, 3],
+    ]);
   });
 });

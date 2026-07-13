@@ -37,7 +37,7 @@ describe("useDocumentEditor", () => {
 
     act(() => {
       result.current.commands.updateBlock(block.id, { content: textContent("b") });
-      result.current.setSelection({ type: "text", blockId: block.id, anchor: 1, focus: 1 });
+      result.current.setSelection({ type: "text", anchor: { blockId: block.id, offset: 1 }, focus: { blockId: block.id, offset: 1 } });
     });
 
     expect(onChange).toHaveBeenCalledTimes(1);
@@ -45,7 +45,7 @@ describe("useDocumentEditor", () => {
       origin: "command",
       command: "updateBlock",
     });
-    expect(result.current.selection).toMatchObject({ anchor: 1, focus: 1 });
+    expect(result.current.selection).toMatchObject({ anchor: { offset: 1 }, focus: { offset: 1 } });
   });
 
   it("echoing the onChange document back into value does NOT reset the editor", () => {

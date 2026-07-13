@@ -35,7 +35,7 @@ Publicação progressiva em 5 etapas. As decisões D1–D15 referenciadas estão
 
 - `useDocumentEditor()` — engine-owned state; `value` por referência = troca de documento (D10)
 - `useBlockEditor()` — hook para bloco único
-- Selection: cursor inline + multi-select de blocos (D7)
+- Selection: ranges direcionais entre blocos + multi-select estrutural de blocos (D7) ✅
 - Lifecycle: `onChange` por transação, `onCommit` em blur/idle/explícito, dirty detection
 - Estado de collapse/expand de seções (view state, fora do JSON) (D3.4)
 
@@ -48,7 +48,7 @@ Publicação progressiva em 5 etapas. As decisões D1–D15 referenciadas estão
 **Pacote:** componentes de UI.
 
 - `DocumentEditor` / `BlockEditor`
-- Contenteditable por bloco + seleção de blocos via handles (D7)
+- Contenteditable por bloco + seleção parcial entre blocos + seleção estrutural via handles (D7) ✅
 - Enter/Backspace/Tab: split, merge, indent — cada linha é um bloco (D2)
 - Input rules markdown: `# `, `- `, `1. `, Tab/Shift+Tab, Backspace reverte (D11)
 - `SlashMenu` com tipos do core + plugins (D11)
@@ -275,7 +275,7 @@ Esse script roda testes, typecheck, build, `pnpm pack --dry-run` e um smoke test
 ## Não-objetivos do v1
 
 - Colaboração em tempo real (D13)
-- Seleção parcial de texto cruzando blocos (D7)
+- Ranges cruzando captions/células e blocos top-level (fora do escopo inicial de D7)
 - Tabelas aninhadas (D9)
 - Markdown paste (D11)
 

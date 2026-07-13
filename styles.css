@@ -21,6 +21,32 @@
   outline: none;
 }
 
+::highlight(wte-cross-block-selection) {
+  background: var(--wte-accent-soft, rgba(99, 102, 241, 0.24));
+  color: inherit;
+}
+
+.wte-cross-block-selection {
+  z-index: 20;
+  border-radius: 2px;
+  background: var(--wte-accent-soft, rgba(99, 102, 241, 0.24));
+  mix-blend-mode: multiply;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wte-editor *,
+  .wte-editor *::before,
+  .wte-editor *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.wte-block--text-range-selected {
+  background: color-mix(in srgb, var(--wte-accent-soft, rgba(99, 102, 241, 0.24)) 55%, transparent);
+}
+
 /* ---- block rows ---- */
 
 .wte-block {

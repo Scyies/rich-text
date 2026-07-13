@@ -549,6 +549,32 @@ function ImageContentView({
     [onContentChange],
   );
 
+  const handleResizeKeyDown = useCallback((event: ReactKeyboardEvent) => {
+    const direction = event.key === "ArrowLeft" || event.key === "ArrowDown"
+      ? -1
+      : event.key === "ArrowRight" || event.key === "ArrowUp"
+        ? 1
+        : 0;
+    if (direction === 0 && event.key !== "Home" && event.key !== "End") return;
+    event.preventDefault();
+    event.stopPropagation();
+    const frame = frameRef.current;
+    const container = resizeContainerRef?.current;
+    const measured = frame !== null && container != null && container.clientWidth > 0
+      ? (frame.getBoundingClientRect().width / container.clientWidth) * 100
+      : MAX_WIDTH_PERCENT;
+    const current = content.size?.unit === "percent" && content.size.width !== undefined
+      ? content.size.width
+      : measured;
+    const step = event.shiftKey ? 10 : 5;
+    const width = event.key === "Home"
+      ? MIN_WIDTH_PERCENT
+      : event.key === "End"
+        ? MAX_WIDTH_PERCENT
+        : clampPercent(current + direction * step);
+    onContentChange({ size: { width: Math.round(width), unit: "percent" } });
+  }, [content.size, onContentChange, resizeContainerRef]);
+
   return (
     <>
       {hasImage ? (
@@ -559,6 +585,7 @@ function ImageContentView({
               type="button"
               className="wte-image__resize-handle"
               aria-label={messages.imageResizeAriaLabel}
+              onKeyDown={handleResizeKeyDown}
               onPointerDown={handleResizePointerDown}
               onPointerMove={handleResizePointerMove}
               onPointerUp={endResize}
@@ -579,7 +606,10 @@ function ImageContentView({
           readOnly={readOnly}
           placeholder={messages.imageCaptionPlaceholder}
           ariaLabel={messages.imageCaptionAriaLabel}
-          onContentChange={(caption) => onContentChange({ caption })}
+          onContentChange={(caption, caret) => {
+            onContentChange({ caption });
+            if (caret !== null) onCaptionSelectionChange?.(caret, caret);
+          }}
           onSelectionChange={onCaptionSelectionChange}
           onFocus={onCaptionFocus}
           onBlur={onCaptionBlur}

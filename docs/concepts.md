@@ -131,6 +131,8 @@ interface InlineObjectNode { type: "object"; kind: string; data: Record<string, 
 `InlineMark` is a discriminated union: `bold`, `italic`, `underline`, `strikethrough`,
 `code`, `link { href }`, `color { token }`, `highlight { token }`. `color`/`highlight` carry a
 **token** (a theme key), not a raw CSS value — the host maps tokens to colors.
+The five boolean marks accept optional `enabled`; omitted means on, while `enabled: false`
+is a direct-formatting override that turns inherited host/template formatting off.
 
 ### Offsets
 

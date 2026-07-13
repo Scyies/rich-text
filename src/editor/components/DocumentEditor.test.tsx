@@ -2,10 +2,11 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createEmptyImageGroupBlock, createHeadingBlock, createImageBlock, createImageGroupBlock, createTableBlock, createTextBlock } from "../core/factories";
+import { createCustomBlock, createEmptyImageGroupBlock, createHeadingBlock, createImageBlock, createImageGroupBlock, createTableBlock, createTextBlock } from "../core/factories";
 import { createSeparatorBlock } from "../plugins/separator-core";
 import { separatorPlugin } from "../plugins/separator";
 import { SCHEMA_VERSION, type Block, type ImageBlock, type ImageGroupBlock, type TextBlock, type WealthyDocument } from "../core/schema";
+import { getInlineText } from "../core/inline";
 import { setCaretOffset } from "./dom";
 import { DocumentEditor } from "./DocumentEditor";
 
@@ -606,6 +607,21 @@ describe("DocumentEditor", () => {
     expect(readonly.container.querySelector(".wte-image__resize-handle")).toBeNull();
   });
 
+  it("resizes images from the keyboard", () => {
+    const image = createImageBlock({
+      source: { type: "url", url: "https://example.com/a.png" },
+      size: { width: 50, unit: "percent" },
+    });
+    const onChange = vi.fn();
+    const { container } = render(<DocumentEditor value={docWith([image])} onChange={onChange} />);
+    const handle = container.querySelector(".wte-image__resize-handle") as HTMLButtonElement;
+
+    fireEvent.keyDown(handle, { key: "ArrowRight" });
+
+    const latest = (onChange.mock.lastCall![0] as WealthyDocument).blocks[0] as ImageBlock;
+    expect(latest.size).toEqual({ width: 55, unit: "percent" });
+  });
+
   it("resizes image group entries inside their own columns", () => {
     const group = createImageGroupBlock({
       images: [
@@ -910,7 +926,7 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
     );
 
     expect(within(container).queryByRole("dialog")).toBeNull();
-    fireEvent.mouseDown(container.querySelector(".wte-inline-object")!);
+    fireEvent.pointerDown(container.querySelector(".wte-inline-object")!, { pointerId: 1, button: 0 });
     expect(within(container).getByRole("dialog")).toBeTruthy();
 
     fireEvent.change(within(container).getByLabelText("fill"), { target: { value: "Ana" } });
@@ -930,7 +946,7 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
       <DocumentEditor value={docWith([block])} onChange={onChange} plugins={[fillablePlaceholder]} />,
     );
 
-    fireEvent.mouseDown(container.querySelector(".wte-inline-object")!);
+    fireEvent.pointerDown(container.querySelector(".wte-inline-object")!, { pointerId: 1, button: 0 });
     fireEvent.click(within(container).getByRole("button", { name: "remove-chip" }));
 
     const latest = onChange.mock.lastCall![0] as WealthyDocument;
@@ -965,10 +981,73 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
     );
 
     // A non-collapsed text selection brings up the floating toolbar.
-    act(() => api!.setSelection({ type: "text", blockId: block.id, anchor: 0, focus: 3 }));
+    act(() => api!.setSelection({ type: "text", anchor: { blockId: block.id, offset: 0 }, focus: { blockId: block.id, offset: 3 } }));
     const star = within(container).getByRole("button", { name: "★" });
     fireEvent.mouseDown(star);
     expect(applied).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not re-render an unchanged sibling block while typing", () => {
+    const text = createTextBlock({ content: "before" });
+    const custom = createCustomBlock({ kind: "render-count", data: {} });
+    const renderBlock = vi.fn(() => <div>stable sibling</div>);
+    render(<DocumentEditor value={docWith([text, custom])} renderBlock={renderBlock} />);
+    expect(renderBlock).toHaveBeenCalledTimes(1);
+
+    typeInto(getBlockElement(text.id), "after");
+
+    expect(renderBlock).toHaveBeenCalledTimes(1);
+  });
+
+  it("removes an existing AI-authored mark from the selected text", () => {
+    const block = createTextBlock({
+      content: [{ type: "text", text: "already bold", marks: [{ type: "bold" }] }],
+    });
+    const onChange = vi.fn();
+    let api: import("../hooks/useDocumentEditor").DocumentEditorApi | null = null;
+    const { container } = render(
+      <DocumentEditor
+        value={docWith([block])}
+        onChange={onChange}
+        ref={(value) => {
+          api = value;
+        }}
+      />,
+    );
+
+    act(() => api!.setSelection({ type: "text", anchor: { blockId: block.id, offset: 0 }, focus: { blockId: block.id, offset: 12 } }));
+    const boldButton = within(container).getByRole("button", { name: "B" });
+    expect(boldButton.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.mouseDown(boldButton);
+
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect((latest.blocks[0] as TextBlock).content).toEqual([{ type: "text", text: "already bold" }]);
+  });
+
+  it("turns inherited bold off instead of stacking another bold mark", () => {
+    const block = createHeadingBlock({ level: 1, content: "styled heading" });
+    const onChange = vi.fn();
+    let api: import("../hooks/useDocumentEditor").DocumentEditorApi | null = null;
+    const { container } = render(
+      <DocumentEditor
+        value={docWith([block])}
+        onChange={onChange}
+        getInheritedMarkTypes={() => new Set(["bold"])}
+        ref={(value) => {
+          api = value;
+        }}
+      />,
+    );
+
+    act(() => api!.setSelection({ type: "text", anchor: { blockId: block.id, offset: 0 }, focus: { blockId: block.id, offset: 14 } }));
+    const boldButton = within(container).getByRole("button", { name: "B" });
+    expect(boldButton.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.mouseDown(boldButton);
+
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect((latest.blocks[0] as TextBlock).content).toEqual([
+      { type: "text", text: "styled heading", marks: [{ type: "bold", enabled: false }] },
+    ]);
   });
 
   it("a plugin slash item appears in the menu and applies", () => {
@@ -1103,7 +1182,7 @@ describe("DocumentEditor — paste (D11)", () => {
   function paste(api: Api, blockId: string, offset: number, payload: { html?: string; text?: string; files?: File[] }): void {
     const element = getBlockElement(blockId);
     element.focus();
-    act(() => api.setSelection({ type: "text", blockId, anchor: offset, focus: offset }));
+    act(() => api.setSelection({ type: "text", anchor: { blockId, offset }, focus: { blockId, offset } }));
     const clipboardData = {
       getData: (type: string) => (type === "text/html" ? (payload.html ?? "") : (payload.text ?? "")),
       files: payload.files ?? [],
@@ -1195,6 +1274,34 @@ describe("DocumentEditor — paste (D11)", () => {
       });
     });
     expect(onUploadImage).toHaveBeenCalledWith(imageFile);
+  });
+
+  it("falls back to clipboard text when every image upload fails", async () => {
+    const block = createTextBlock({ content: "" });
+    const imageFile = new File(["image"], "broken.png", { type: "image/png" });
+    const { onChange, getApi } = setup([block], {
+      onUploadImage: vi.fn(async () => Promise.reject(new Error("upload failed"))),
+    });
+
+    paste(getApi(), block.id, 0, { files: [imageFile], text: "fallback" });
+
+    await waitFor(() => expect(summary(onChange.mock.lastCall![0] as WealthyDocument)).toEqual(["fallback"]));
+  });
+
+  it("does not replay stale paste offsets after an asynchronous upload", async () => {
+    const block = createTextBlock({ content: "abc" });
+    const imageFile = new File(["image"], "late.png", { type: "image/png" });
+    let resolveUpload!: (value: { source: { type: "asset"; id: string } }) => void;
+    const upload = new Promise<{ source: { type: "asset"; id: string } }>((resolve) => {
+      resolveUpload = resolve;
+    });
+    const { onChange, getApi } = setup([block], { onUploadImage: vi.fn(() => upload) });
+
+    paste(getApi(), block.id, 1, { files: [imageFile] });
+    act(() => getApi().commands.updateBlock(block.id, { content: [{ type: "text", text: "changed" }] }));
+    resolveUpload({ source: { type: "asset", id: "late.png" } });
+
+    await waitFor(() => expect(summary(onChange.mock.lastCall![0] as WealthyDocument)).toEqual(["changed", "[image]"]));
   });
 
   it("is a single undo step (atomic block paste)", () => {
@@ -1319,6 +1426,118 @@ describe("DocumentEditor — paste (D11)", () => {
   });
 });
 
+describe("DocumentEditor — cross-block text ranges", () => {
+  type Api = import("../hooks/useDocumentEditor").DocumentEditorApi;
+
+  function renderRangeEditor() {
+    const first = createTextBlock({ content: "first" });
+    const second = createTextBlock({ content: "last" });
+    const onChange = vi.fn();
+    let api: Api | null = null;
+    const rendered = render(
+      <DocumentEditor
+        value={docWith([first, second])}
+        onChange={onChange}
+        ref={(value) => { api = value; }}
+      />,
+    );
+    const select = () => {
+      getBlockElement(second.id).focus();
+      act(() => api!.setSelection({
+        type: "text",
+        anchor: { blockId: first.id, offset: 2 },
+        focus: { blockId: second.id, offset: 2 },
+      }));
+    };
+    return { ...rendered, first, second, onChange, getApi: () => api!, select };
+  }
+
+  it("copies plain text, HTML, and the structured fragment", () => {
+    const { second, select } = renderRangeEditor();
+    select();
+    const values = new Map<string, string>();
+    fireEvent.copy(getBlockElement(second.id), {
+      clipboardData: { setData: (type: string, value: string) => values.set(type, value) },
+    });
+    expect(values.get("text/plain")).toBe("rst\nla");
+    expect(values.get("text/html")).toContain("<p>rst</p>");
+    expect(values.get("application/x-wealthy-text+json")).toContain('"schemaVersion":1');
+  });
+
+  it("deletes and merges the range in one undoable command", () => {
+    const { second, onChange, getApi, select } = renderRangeEditor();
+    select();
+    fireEvent.keyDown(getBlockElement(second.id), { key: "Backspace" });
+    let latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect(latest.blocks).toHaveLength(1);
+    expect(getInlineText((latest.blocks[0] as TextBlock).content)).toBe("fist");
+    act(() => getApi().commands.undo());
+    latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect(latest.blocks).toHaveLength(2);
+  });
+
+  it("replaces the range when pasting plain text", () => {
+    const { second, onChange, select } = renderRangeEditor();
+    select();
+    fireEvent.paste(getBlockElement(second.id), {
+      clipboardData: { getData: (type: string) => type === "text/plain" ? "X" : "", files: [], items: [] },
+    });
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect(latest.blocks).toHaveLength(1);
+    expect(getInlineText((latest.blocks[0] as TextBlock).content)).toBe("fiXst");
+  });
+
+  it("replaces a real drag range when focus remains on the anchor block", () => {
+    const { first, onChange, select } = renderRangeEditor();
+    select();
+    // Real browser drags leave activeElement at the drag anchor even though
+    // the engine focus endpoint is in the second block.
+    getBlockElement(first.id).focus();
+    const handled = !fireEvent.paste(getBlockElement(first.id), {
+      clipboardData: { getData: (type: string) => type === "text/plain" ? "X" : "", files: [], items: [] },
+    });
+
+    expect(handled).toBe(true);
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    expect(latest.blocks).toHaveLength(1);
+    expect(getInlineText((latest.blocks[0] as TextBlock).content)).toBe("fiXst");
+  });
+
+  it("does not create a mixed caption-to-block drag range", () => {
+    const image = createImageBlock({
+      source: { type: "url", url: "https://example.com/a.png" },
+      caption: "caption",
+    });
+    const text = createTextBlock({ content: "text" });
+    let api: Api | null = null;
+    const { container } = render(
+      <DocumentEditor value={docWith([image, text])} ref={(value) => { api = value; }} />,
+    );
+    const caption = container.querySelector("figcaption.wte-inline-editor") as HTMLElement;
+    const target = getBlockElement(text.id);
+
+    fireEvent.pointerDown(caption, { button: 0, buttons: 1, pointerId: 7, clientX: 1, clientY: 1 });
+    fireEvent.pointerMove(target, { button: 0, buttons: 1, pointerId: 7, clientX: 10, clientY: 10 });
+    fireEvent.pointerUp(target, { button: 0, buttons: 0, pointerId: 7, clientX: 10, clientY: 10 });
+
+    const selection = api!.engine.getSelection();
+    expect(
+      selection?.type === "text" &&
+      ((selection.anchor.entryId === undefined) !== (selection.focus.entryId === undefined)),
+    ).toBe(false);
+    expect(() => fireEvent.keyDown(target, { key: "Backspace" })).not.toThrow();
+  });
+
+  it("applies a toolbar mark across every selected text slice", () => {
+    const { container, onChange, select } = renderRangeEditor();
+    select();
+    fireEvent.mouseDown(within(container).getByRole("button", { name: "B" }));
+    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const textBlocks = latest.blocks as TextBlock[];
+    expect(textBlocks.every((block) => block.content.some((node) => node.type === "text" && node.marks?.some((mark) => mark.type === "bold")))).toBe(true);
+  });
+});
+
 describe("DocumentEditor — trailing non-editable block", () => {
   const separator = () => ({ id: crypto.randomUUID(), type: "custom" as const, kind: "sep", data: {} });
 
@@ -1342,7 +1561,7 @@ describe("DocumentEditor — trailing non-editable block", () => {
     const onChange = vi.fn();
     const { container } = render(<DocumentEditor value={docWith([foo, separator()])} onChange={onChange} />);
 
-    fireEvent.mouseDown(within(container).getByRole("button", { name: "Add a line below" }));
+    fireEvent.click(within(container).getByRole("button", { name: "Add a line below" }));
 
     const latest = onChange.mock.lastCall![0] as WealthyDocument;
     expect(latest.blocks).toHaveLength(3);

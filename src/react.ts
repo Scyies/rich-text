@@ -47,4 +47,6 @@ export type {
   InlineObjectRegistration,
   ToolbarItemContext,
   ToolbarItemRegistration,
+  TypedCustomBlock,
 } from "./editor/plugins/types";
+export { defineBlockType } from "./editor/plugins/types";

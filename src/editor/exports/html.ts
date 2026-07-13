@@ -1,5 +1,6 @@
 import { getHeadingNumbers, formatHeadingNumber } from "../core/numbering";
 import { resolveImageGroupColumnWidths } from "../core/image-layout";
+import { sanitizeLinkHref } from "../core/urls";
 import { SEPARATOR_BLOCK_KIND } from "../plugins/separator-core";
 import type {
   Block,
@@ -67,17 +68,17 @@ const MARK_ORDER: InlineMark["type"][] = [
 function wrapWithMark(html: string, mark: InlineMark): string {
   switch (mark.type) {
     case "bold":
-      return `<strong>${html}</strong>`;
+      return mark.enabled === false ? `<span style="font-weight: normal">${html}</span>` : `<strong>${html}</strong>`;
     case "italic":
-      return `<em>${html}</em>`;
+      return mark.enabled === false ? `<span style="font-style: normal">${html}</span>` : `<em>${html}</em>`;
     case "underline":
-      return `<u>${html}</u>`;
+      return mark.enabled === false ? `<span style="display: inline-block; text-decoration: none">${html}</span>` : `<u>${html}</u>`;
     case "strikethrough":
-      return `<s>${html}</s>`;
+      return mark.enabled === false ? `<span style="display: inline-block; text-decoration: none">${html}</span>` : `<s>${html}</s>`;
     case "code":
-      return `<code>${html}</code>`;
+      return mark.enabled === false ? `<span style="font-family: inherit">${html}</span>` : `<code>${html}</code>`;
     case "link":
-      return `<a href="${escapeAttribute(mark.href)}">${html}</a>`;
+      return sanitizeLinkHref(mark.href) === null ? html : `<a href="${escapeAttribute(mark.href.trim())}">${html}</a>`;
     case "color":
       return `<span class="wte-color-${escapeAttribute(mark.token)}">${html}</span>`;
     case "highlight":

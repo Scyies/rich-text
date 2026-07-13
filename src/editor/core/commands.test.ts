@@ -147,12 +147,12 @@ describe("createEditorEngine", () => {
     const block = createTextBlock({ content: "hello world" });
     const engine = createEditorEngine({ value: docWith([block]) });
 
-    engine.setSelection({ type: "text", blockId: block.id, anchor: 11, focus: 11 });
+    engine.setSelection({ type: "text", anchor: { blockId: block.id, offset: 11 }, focus: { blockId: block.id, offset: 11 } });
     engine.commands.updateBlock(block.id, { content: textContent("hi") });
-    expect(engine.getSelection()).toMatchObject({ anchor: 2, focus: 2 }); // clamped to new length
+    expect(engine.getSelection()).toMatchObject({ anchor: { offset: 2 }, focus: { offset: 2 } }); // clamped
 
     engine.commands.undo();
-    expect(engine.getSelection()).toMatchObject({ anchor: 11, focus: 11 }); // restored
+    expect(engine.getSelection()).toMatchObject({ anchor: { offset: 11 }, focus: { offset: 11 } }); // restored
   });
 
   it("setDocument switches documents and resets history (D10)", () => {

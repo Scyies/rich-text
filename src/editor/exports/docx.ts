@@ -10,6 +10,7 @@ import {
   TableCell,
   TableRow,
   TextRun,
+  UnderlineType,
   WidthType,
   type FileChild,
   type IRunOptions,
@@ -88,7 +89,15 @@ function alignment(align: Align | undefined): (typeof AlignmentType)[keyof typeo
 }
 
 function runOptionsFromMarks(marks: InlineMark[]): IRunOptions {
-  const has = (type: InlineMark["type"]): boolean => marks.some((mark) => mark.type === type);
+  type ToggleMark = Extract<InlineMark, { type: "bold" | "italic" | "underline" | "strikethrough" | "code" }>;
+  const toggle = (type: "bold" | "italic" | "underline" | "strikethrough" | "code"): boolean | undefined => {
+    const mark = marks.find((candidate): candidate is ToggleMark => candidate.type === type);
+    return mark === undefined ? undefined : mark.enabled !== false;
+  };
+  const bold = toggle("bold");
+  const italic = toggle("italic");
+  const underline = toggle("underline");
+  const strikethrough = toggle("strikethrough");
   const colorMark = marks.find((mark): mark is Extract<InlineMark, { type: "color" }> => mark.type === "color");
   const color =
     colorMark !== undefined && /^#?[0-9a-fA-F]{6}$/.test(colorMark.token)
@@ -96,11 +105,11 @@ function runOptionsFromMarks(marks: InlineMark[]): IRunOptions {
       : undefined;
   // link is handled by the caller; highlight tokens have no reliable Word mapping.
   return {
-    ...(has("bold") ? { bold: true } : {}),
-    ...(has("italic") ? { italics: true } : {}),
-    ...(has("underline") ? { underline: {} } : {}),
-    ...(has("strikethrough") ? { strike: true } : {}),
-    ...(has("code") ? { font: "Consolas" } : {}),
+    ...(bold !== undefined ? { bold } : {}),
+    ...(italic !== undefined ? { italics: italic } : {}),
+    ...(underline !== undefined ? { underline: { type: underline ? UnderlineType.SINGLE : UnderlineType.NONE } } : {}),
+    ...(strikethrough !== undefined ? { strike: strikethrough } : {}),
+    ...(toggle("code") === true ? { font: "Consolas" } : {}),
     ...(color !== undefined ? { color } : {}),
   };
 }

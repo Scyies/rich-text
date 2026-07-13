@@ -13,6 +13,7 @@ import type { InlineNode } from "../core/schema";
 import {
   domToInlineNodes,
   getCaretOffset,
+  getDirectionalSelectionOffsets,
   getSelectionOffsets,
   inlineNodesToHtml,
   isCaretOnFirstLine,
@@ -166,9 +167,9 @@ export const InlineEditor = forwardRef<InlineEditorHandle, InlineEditorProps>(fu
     if (element === null || onSelectionChange === undefined) {
       return;
     }
-    const offsets = getSelectionOffsets(element);
+    const offsets = getDirectionalSelectionOffsets(element);
     if (offsets !== null) {
-      onSelectionChange(offsets.start, offsets.end);
+      onSelectionChange(offsets.anchor, offsets.focus);
     }
   }
 
