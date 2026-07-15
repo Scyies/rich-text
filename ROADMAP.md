@@ -1,8 +1,8 @@
-# wealthy-text-editor — Roadmap
+# mogul-text-editor — Roadmap
 
 Publicação progressiva em 5 etapas. As decisões D1–D15 referenciadas estão em [ARCHITECTURE.md](./ARCHITECTURE.md#decisões-de-design-resolvidas).
 
-## v0.1 — Schema (📦 `wealthy-text-editor`) ✅
+## v0.1 — Schema (📦 `mogul-text-editor`) ✅
 
 **Pacote:** schema + tipos apenas.
 
@@ -14,7 +14,7 @@ Publicação progressiva em 5 etapas. As decisões D1–D15 referenciadas estão
 
 **Arquivos:** `src/editor/core/schema.ts`
 
-## v0.2 — Core Engine (📦 `wealthy-text-editor`) ✅
+## v0.2 — Core Engine (📦 `mogul-text-editor`) ✅
 
 **Pacote:** motor headless (zero React).
 
@@ -29,7 +29,7 @@ Publicação progressiva em 5 etapas. As decisões D1–D15 referenciadas estão
 
 **Arquivos:** `src/editor/core/{sections,numbering,commands,transforms,history,patches,selection}.ts`
 
-## v0.3 — Hooks React (📦 `wealthy-text-editor`) ✅
+## v0.3 — Hooks React (📦 `mogul-text-editor`) ✅
 
 **Pacote:** hooks headless para React.
 
@@ -41,7 +41,7 @@ Publicação progressiva em 5 etapas. As decisões D1–D15 referenciadas estão
 
 **Arquivos:** `src/editor/hooks/`
 
-## v0.4 — Componentes React (📦 `wealthy-text-editor`) ✅
+## v0.4 — Componentes React (📦 `mogul-text-editor`) ✅
 
 > Nota de implementação: o pacote ganhou duas entradas — raiz (core, zero React, server-safe) e `/react` (hooks + componentes). CSS é folha global `.wte-*` (styles.css) em vez de CSS Modules; shadcn/radix não foi necessário até aqui (menus são posicionamento próprio). UX estrutural de tabela (add/remover linhas, resize) ficou para a v0.5.
 
@@ -58,7 +58,7 @@ Publicação progressiva em 5 etapas. As decisões D1–D15 referenciadas estão
 
 **Arquivos:** `src/editor/components/`
 
-## v0.5-alpha — Plugins e Exporters (📦 `wealthy-text-editor`) ✅ parcial
+## v0.5-alpha — Plugins e Exporters (📦 `mogul-text-editor`) ✅ parcial
 
 **Pacote:** validação antecipada das extensões e dos exporters antes do polimento final.
 
@@ -67,7 +67,7 @@ Publicação progressiva em 5 etapas. As decisões D1–D15 referenciadas estão
 - Edição de chips por `inlineObjects[].renderEditor` ✅
 - `package.json` expõe root core, `/react`, exporters e `styles.css` ✅
 
-## v0.5 — Polimento final para v1.0 (📦 `wealthy-text-editor`) ✅
+## v0.5 — Polimento final para v1.0 (📦 `mogul-text-editor`) ✅
 
 **Pacote:** fechar o restante da v0.5 antes de promover para release estável.
 
@@ -92,7 +92,7 @@ Publicação progressiva em 5 etapas. As decisões D1–D15 referenciadas estão
 
 > Nota de implementação (Exporters — feito): três entradas tsup achatadas
 > (`dist/{html,markdown,docx}.js`) mapeadas em `package.json` para
-> `wealthy-text-editor/export-{html,markdown,docx}`. Todas consomem o modelo puro
+> `mogul-text-editor/export-{html,markdown,docx}`. Todas consomem o modelo puro
 > (zero React). `exportHtml`/`exportMarkdown` retornam string (testes de saída exata);
 > `exportDocx` usa a lib `docx` (única dep pesada, **externalizada** — só carrega via o
 > subpath docx) e retorna um `Document` que o consumidor empacota com `Packer`. Cada um
@@ -113,8 +113,8 @@ Publicação progressiva em 5 etapas. As decisões D1–D15 referenciadas estão
 > `deserializeDocument`; dois `exhaustive-deps` intencionais documentados com disable.
 > Script `lint` (`--max-warnings 0`) entrou no `validate:release` (primeiro passo).
 > Workflow `.github/workflows/ci.yml`: job `validate` (pnpm + Node 24 → `validate:release`)
-> em push/PR; job `publish` em tag `v*`, com dist-tag derivado da versão (prerelease →
-> `alpha`, estável → `latest`) e provenance (precisa do secret `NPM_TOKEN`).
+> em push/PR; job `publish` em tag `v*`, publica a versão estável em `latest` com
+> trusted publishing do npm via OIDC e provenance automática (sem token persistente).
 >
 > Nota de implementação (i18n — feito): `src/editor/i18n/` — `messages.ts`
 > (React-free: interface `EditorMessages`, dicionários `en`/`ptBR`, `resolveMessages`)
@@ -147,7 +147,7 @@ documentação final de v1.0. Esta etapa é o gate entre o alpha funcional e uma
 
 ### Correções obrigatórias antes do freeze
 
-- **Generics do documento:** implementar `WealthyDocument<TBlockMeta = BlockMeta, TDocMeta = BlockMeta>`.
+- **Generics do documento:** implementar `MogulDocument<TBlockMeta = BlockMeta, TDocMeta = BlockMeta>`.
   Nota: adicionar um segundo parâmetro defaultado depois seria não-breaking em TS, mas fazer agora
   é barato e deixa explícito que `document.meta` não precisa ter a mesma shape de `block.meta`.
   Escopo v1.0: model/engine/serialization; React pode continuar single-generic e ganhar `TDocMeta`
@@ -160,7 +160,7 @@ documentação final de v1.0. Esta etapa é o gate entre o alpha funcional e uma
   helpers). Também revisar exports borderline: remover `buildPluginRegistry`/`PluginRegistry`
   (internos) e remover `CORE_SLASH_ITEMS`/`filterSlashItems`/`matchInputRule` salvo se houver
   consumidor host real. Recomendação atual: remover da superfície estável; se Minuta precisar,
-  criar `wealthy-text-editor/unstable` em vez de congelar esses contratos.
+  criar `mogul-text-editor/unstable` em vez de congelar esses contratos.
 - **React ref:** como o peer atual é React `>=19`, trocar `apiRef` por `ref` no `DocumentEditor`
   antes do freeze. Manter `apiRef` só faria sentido se o pacote decidir suportar React 18.
 - **`TableColumn.width`:** honrar em HTML via `<colgroup>`. No DOCX, documentar como não
@@ -262,7 +262,7 @@ pnpm validate:release
 ```
 
 Esse script roda testes, typecheck, build, `pnpm pack --dry-run` e um smoke test das entradas
-`wealthy-text-editor`, `/react`, `/export-html`, `/export-markdown` e `/export-docx`.
+`mogul-text-editor`, `/react`, `/export-html`, `/export-markdown` e `/export-docx`.
 
 ## v1.0 — Stable
 

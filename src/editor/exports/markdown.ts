@@ -14,11 +14,11 @@ import type {
   InlineObjectNode,
   TableBlock,
   TextBlock,
-  WealthyDocument,
+  MogulDocument,
 } from "../core/schema";
 
 /**
- * Markdown exporter (D12 — subpath entry `wealthy-text-editor/export-markdown`).
+ * Markdown exporter (D12 — subpath entry `mogul-text-editor/export-markdown`).
  *
  * Consumes the pure document model — zero React. Emits GitHub-flavored
  * Markdown: ATX headings, `-`/`1.` lists (indent-nested), GFM marks, and GFM
@@ -198,7 +198,7 @@ function renderImageGroup(block: ImageGroupBlock, options: MarkdownExportOptions
 }
 
 export function exportMarkdown(
-  document: WealthyDocument<BlockMeta>,
+  document: MogulDocument<BlockMeta>,
   options: MarkdownExportOptions = {},
 ): string {
   const headingNumbers = options.headingNumbers === true ? getHeadingNumbers(document) : null;

@@ -15,11 +15,11 @@ import type {
   InlineObjectNode,
   TableBlock,
   TextBlock,
-  WealthyDocument,
+  MogulDocument,
 } from "../core/schema";
 
 /**
- * HTML exporter (D12 — subpath entry `wealthy-text-editor/export-html`).
+ * HTML exporter (D12 — subpath entry `mogul-text-editor/export-html`).
  *
  * Consumes the pure document model — zero React. Produces clean, semantic
  * HTML: headings, paragraphs, nested lists (grouped from the flat block list
@@ -261,7 +261,7 @@ function renderImageGroup(block: ImageGroupBlock, options: HtmlExportOptions): s
   return `<figure class="wte-image-group"${alignStyle(block.align)}><div class="wte-image-group__row"${rowStyle}>${items}</div></figure>`;
 }
 
-export function exportHtml(document: WealthyDocument<BlockMeta>, options: HtmlExportOptions = {}): string {
+export function exportHtml(document: MogulDocument<BlockMeta>, options: HtmlExportOptions = {}): string {
   const headingNumbers = options.headingNumbers === true ? getHeadingNumbers(document) : null;
   const parts: string[] = [];
   const blocks = document.blocks;

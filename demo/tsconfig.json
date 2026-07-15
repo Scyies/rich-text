@@ -3,8 +3,8 @@
   "compilerOptions": {
     "baseUrl": "..",
     "paths": {
-      "wealthy-text-editor": ["src/index.ts"],
-      "wealthy-text-editor/react": ["src/react.ts"]
+      "mogul-text-editor": ["src/index.ts"],
+      "mogul-text-editor/react": ["src/react.ts"]
     }
   },
   "include": ["./main.tsx", "./vite.config.ts", "./vite-env.d.ts"]

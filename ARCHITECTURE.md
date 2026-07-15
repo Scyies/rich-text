@@ -1,6 +1,6 @@
-# wealthy-text-editor — Architecture
+# mogul-text-editor — Architecture
 
-> Nome: **wealthy-text-editor** (trocadilho com Rich → Wealthy)
+> Nome: **mogul-text-editor** (trocadilho com Rich → Mogul)
 > Status: Design resolvido (grill 2026-06-11) — pronto para v0.1
 > Licença: MIT
 
@@ -14,7 +14,7 @@
 | Schema | Zod |
 | Texto inline | Contenteditable custom (um por bloco) |
 | Gerenciador de pacotes | pnpm |
-| Publicação | npm (`wealthy-text-editor`) |
+| Publicação | npm (`mogul-text-editor`) |
 
 ## Filosofia
 
@@ -68,7 +68,7 @@ O engine é dono do documento de trabalho. `value` é estado inicial; trocar a r
 - Markdown paste: fora do v1.
 
 ### D12 — Exporters como subpath entries
-`wealthy-text-editor/export-docx`, `/export-html`, `/export-markdown` como entry points separados do tsup. Deps pesadas (lib `docx`) só carregam se importadas. Um pacote, uma versão.
+`mogul-text-editor/export-docx`, `/export-html`, `/export-markdown` como entry points separados do tsup. Deps pesadas (lib `docx`) só carregam se importadas. Um pacote, uma versão.
 
 ### D13 — Colaboração em tempo real: não-objetivo explícito
 Nenhuma maquinaria CRDT/OT no v1. Ids estáveis de bloco + todas as mutações como patches serializáveis num pipeline único já são a superfície de adaptação que uma camada de sync futura precisaria.
@@ -91,7 +91,7 @@ Nunca interceptar digitação com preventDefault para re-renderizar texto via Re
 ## Estrutura de diretórios
 
 ```
-wealthy-text-editor/
+mogul-text-editor/
 ├── src/
 │   ├── editor/
 │   │   ├── components/
@@ -121,9 +121,9 @@ wealthy-text-editor/
 │   │   │   ├── context.tsx             # MessagesProvider / useMessages (default en)
 │   │   │   └── index.ts
 │   │   └── exports/
-│   │       ├── docx.ts                 # entry: wealthy-text-editor/export-docx
-│   │       ├── html.ts                 # entry: wealthy-text-editor/export-html
-│   │       └── markdown.ts             # entry: wealthy-text-editor/export-markdown
+│   │       ├── docx.ts                 # entry: mogul-text-editor/export-docx
+│   │       ├── html.ts                 # entry: mogul-text-editor/export-html
+│   │       └── markdown.ts             # entry: mogul-text-editor/export-markdown
 │   └── index.ts
 ├── styles.css
 ├── package.json
@@ -269,7 +269,7 @@ interface EditorPlugin {
 
 - `styles.css` global com classes prefixadas por `.wte-`.
 - Variáveis CSS definidas na lib (não dependem do theme do host).
-- Host importa: `import "wealthy-text-editor/styles.css"`.
+- Host importa: `import "mogul-text-editor/styles.css"`.
 - Nenhuma dependência de Tailwind config do host.
 
 ## Dependências

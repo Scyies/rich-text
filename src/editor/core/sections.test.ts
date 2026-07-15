@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createHeadingBlock, createTextBlock } from "./factories";
 import { getImpliedLevelAt, getSection, getSectionRange, getSectionTree } from "./sections";
-import { SCHEMA_VERSION, type WealthyDocument } from "./schema";
+import { SCHEMA_VERSION, type MogulDocument } from "./schema";
 
 const h1 = createHeadingBlock({ level: 1, content: "H1" });
 const h1p1 = createTextBlock({ content: "h1 paragraph" });
@@ -13,7 +13,7 @@ const h2b = createHeadingBlock({ level: 2, content: "H2b" });
 const h1b = createHeadingBlock({ level: 1, content: "second H1" });
 const tail = createTextBlock({ content: "tail" });
 
-const doc: WealthyDocument = {
+const doc: MogulDocument = {
   schemaVersion: SCHEMA_VERSION,
   blocks: [h1, h1p1, h2a, h2aP, h3, h3p, h2b, h1b, tail],
 };
@@ -110,7 +110,7 @@ describe("getImpliedLevelAt (D4)", () => {
 
   it("clamps at 6", () => {
     const h6 = createHeadingBlock({ level: 6, content: "deepest" });
-    const docWithH6: WealthyDocument = { schemaVersion: SCHEMA_VERSION, blocks: [h6] };
+    const docWithH6: MogulDocument = { schemaVersion: SCHEMA_VERSION, blocks: [h6] };
     expect(getImpliedLevelAt(docWithH6, 1)).toBe(6);
   });
 });

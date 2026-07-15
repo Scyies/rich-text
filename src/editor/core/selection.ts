@@ -1,5 +1,5 @@
 import { getInlineLength } from "./inline";
-import type { Block, BlockMeta, InlineNode, WealthyDocument } from "./schema";
+import type { Block, BlockMeta, InlineNode, MogulDocument } from "./schema";
 
 /** An address inside one editable region of a document block. */
 export interface SelectionPoint {
@@ -87,7 +87,7 @@ export function resolveSelectionPointContent<TMeta extends BlockMeta>(
 }
 
 function clampPoint<TMeta extends BlockMeta, TDocMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   point: SelectionPoint,
 ): SelectionPoint | null {
   const block = document.blocks.find((candidate) => candidate.id === point.blockId);
@@ -99,7 +99,7 @@ function clampPoint<TMeta extends BlockMeta, TDocMeta extends BlockMeta>(
 
 /** Clamps both endpoints independently, preserving range direction. */
 export function clampSelection<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   selection: EditorSelection | null,
 ): EditorSelection | null {
   if (selection === null) return null;
@@ -121,7 +121,7 @@ function regionIndex(block: Block, entryId: string | undefined): number {
 
 /** Compares document points in visual document order. */
 export function compareSelectionPoints<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   a: SelectionPoint,
   b: SelectionPoint,
 ): number | null {
@@ -137,7 +137,7 @@ export function compareSelectionPoints<TMeta extends BlockMeta, TDocMeta extends
 }
 
 export function orderTextSelection<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   selection: TextSelection,
 ): OrderedTextSelection | null {
   const comparison = compareSelectionPoints(document, selection.anchor, selection.focus);
@@ -149,7 +149,7 @@ export function orderTextSelection<TMeta extends BlockMeta, TDocMeta extends Blo
 
 /** The contiguous top-level block range covered by a supported text selection. */
 export function getSelectedTextBlockRange<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   selection: TextSelection,
 ): { start: number; end: number } | null {
   const ordered = orderTextSelection(document, selection);
@@ -171,7 +171,7 @@ export function getSelectedTextBlockRange<TMeta extends BlockMeta, TDocMeta exte
  * lie between slices and remain represented by the enclosing block range.
  */
 export function getSelectedTextSlices<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   selection: TextSelection,
 ): SelectedTextSlice<TMeta>[] | null {
   const ordered = orderTextSelection(document, selection);
@@ -195,7 +195,7 @@ export function getSelectedTextSlices<TMeta extends BlockMeta, TDocMeta extends 
 
 /** The contiguous index range [start, end] covered by a block selection. */
 export function getSelectedBlockRange<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   selection: BlockSelection,
 ): { start: number; end: number } | null {
   const anchorIndex = document.blocks.findIndex((block) => block.id === selection.anchorBlockId);

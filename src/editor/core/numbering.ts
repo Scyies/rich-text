@@ -1,5 +1,5 @@
 import { getSectionTree, type Section } from "./sections";
-import type { BlockMeta, WealthyDocument } from "./schema";
+import type { BlockMeta, MogulDocument } from "./schema";
 
 /**
  * Computed numbering (D3.3). Numbers are display-only and derived from the
@@ -15,7 +15,7 @@ import type { BlockMeta, WealthyDocument } from "./schema";
  * positional in the section tree (depth = tree depth, not heading level),
  * so an H1 followed by an H3 still numbers 1 / 1.1.
  */
-export function getHeadingNumbers(document: WealthyDocument<BlockMeta>): Map<string, number[]> {
+export function getHeadingNumbers(document: MogulDocument<BlockMeta>): Map<string, number[]> {
   const numbers = new Map<string, number[]>();
   collectHeadingNumbers(getSectionTree(document).sections, [], numbers);
   return numbers;
@@ -34,7 +34,7 @@ function collectHeadingNumbers(
 }
 
 export function getHeadingNumberPath(
-  document: WealthyDocument<BlockMeta>,
+  document: MogulDocument<BlockMeta>,
   headingId: string,
 ): number[] | null {
   return getHeadingNumbers(document).get(headingId) ?? null;
@@ -46,7 +46,7 @@ export function formatHeadingNumber(path: number[]): string {
 }
 
 export function getHeadingNumberLabel(
-  document: WealthyDocument<BlockMeta>,
+  document: MogulDocument<BlockMeta>,
   headingId: string,
 ): string | null {
   const path = getHeadingNumberPath(document, headingId);
@@ -65,7 +65,7 @@ export function getHeadingNumberLabel(
  * any heading, or a list block at indent <= i that is not a numbered
  * continuation at exactly i.
  */
-export function getListItemNumbers(document: WealthyDocument<BlockMeta>): Map<string, number> {
+export function getListItemNumbers(document: MogulDocument<BlockMeta>): Map<string, number> {
   const numbers = new Map<string, number>();
   // counters[i] = current count of the open numbered run at indent i.
   let counters: number[] = [];
@@ -92,6 +92,6 @@ export function getListItemNumbers(document: WealthyDocument<BlockMeta>): Map<st
   return numbers;
 }
 
-export function getListItemNumber(document: WealthyDocument<BlockMeta>, blockId: string): number | null {
+export function getListItemNumber(document: MogulDocument<BlockMeta>, blockId: string): number | null {
   return getListItemNumbers(document).get(blockId) ?? null;
 }

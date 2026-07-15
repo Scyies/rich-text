@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createCustomBlock, createEmptyImageGroupBlock, createHeadingBlock, createImageBlock, createImageGroupBlock, createTableBlock, createTextBlock } from "../core/factories";
 import { createSeparatorBlock } from "../plugins/separator-core";
 import { separatorPlugin } from "../plugins/separator";
-import { SCHEMA_VERSION, type Block, type ImageBlock, type ImageGroupBlock, type TextBlock, type WealthyDocument } from "../core/schema";
+import { SCHEMA_VERSION, type Block, type ImageBlock, type ImageGroupBlock, type TextBlock, type MogulDocument } from "../core/schema";
 import { getInlineText } from "../core/inline";
 import { setCaretOffset } from "./dom";
 import { DocumentEditor } from "./DocumentEditor";
@@ -14,7 +14,7 @@ import { DocumentEditor } from "./DocumentEditor";
 // document (otherwise document-wide queries can pick up a prior test's nodes).
 afterEach(cleanup);
 
-function docWith(blocks: Block[]): WealthyDocument {
+function docWith(blocks: Block[]): MogulDocument {
   return { schemaVersion: SCHEMA_VERSION, blocks };
 }
 
@@ -54,7 +54,7 @@ describe("DocumentEditor", () => {
 
     typeInto(getBlockElement(block.id), "hello world");
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect((latest.blocks[0] as TextBlock).content).toEqual([{ type: "text", text: "hello world" }]);
   });
 
@@ -68,7 +68,7 @@ describe("DocumentEditor", () => {
     fireEvent.blur(element, { relatedTarget: document.body });
 
     expect(onCommit).toHaveBeenCalledTimes(1);
-    expect((onCommit.mock.lastCall![0] as WealthyDocument).blocks[0]).toMatchObject({
+    expect((onCommit.mock.lastCall![0] as MogulDocument).blocks[0]).toMatchObject({
       content: [{ type: "text", text: "hello world" }],
     });
   });
@@ -97,7 +97,7 @@ describe("DocumentEditor", () => {
     setCaretOffset(element, 5);
     fireEvent.keyDown(element, { key: "Enter" });
 
-    let latest = onChange.mock.lastCall![0] as WealthyDocument;
+    let latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks).toHaveLength(2);
     expect((latest.blocks[0] as TextBlock).content).toEqual([{ type: "text", text: "hello" }]);
     expect((latest.blocks[1] as TextBlock).content).toEqual([{ type: "text", text: " world" }]);
@@ -107,7 +107,7 @@ describe("DocumentEditor", () => {
     setCaretOffset(second, 0);
     fireEvent.keyDown(second, { key: "Backspace" });
 
-    latest = onChange.mock.lastCall![0] as WealthyDocument;
+    latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks).toHaveLength(1);
     expect((latest.blocks[0] as TextBlock).content).toEqual([{ type: "text", text: "hello world" }]);
   });
@@ -124,7 +124,7 @@ describe("DocumentEditor", () => {
     first.focus();
     setCaretOffset(first, 0);
     fireEvent.keyDown(first, { key: "Enter" });
-    let latest = onChange.mock.lastCall![0] as WealthyDocument;
+    let latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks).toHaveLength(3);
     expect(latest.blocks[0]).toMatchObject({ type: "text", variant: "paragraph" });
 
@@ -133,7 +133,7 @@ describe("DocumentEditor", () => {
     second.focus();
     setCaretOffset(second, 0);
     fireEvent.keyDown(second, { key: "Enter" });
-    latest = onChange.mock.lastCall![0] as WealthyDocument;
+    latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks).toHaveLength(3);
     expect(latest.blocks[1]).toMatchObject({ type: "text", variant: "bullet" });
     expect((latest.blocks[1] as TextBlock).indent ?? 0).toBe(0);
@@ -143,7 +143,7 @@ describe("DocumentEditor", () => {
     third.focus();
     setCaretOffset(third, 0);
     fireEvent.keyDown(third, { key: "Enter" });
-    latest = onChange.mock.lastCall![0] as WealthyDocument;
+    latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks).toHaveLength(3);
     expect(latest.blocks[2]).toMatchObject({ type: "text", variant: "paragraph" });
   });
@@ -158,7 +158,7 @@ describe("DocumentEditor", () => {
     setCaretOffset(element, 4);
     fireEvent.keyDown(element, { key: "Enter" });
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks).toHaveLength(2);
     expect(latest.blocks[1]).toMatchObject({ type: "text", variant: "bullet" });
   });
@@ -173,7 +173,7 @@ describe("DocumentEditor", () => {
     setCaretOffset(element, 0);
     fireEvent.keyDown(element, { key: "Backspace" });
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks[1]).toMatchObject({ variant: "paragraph" });
   });
 
@@ -184,10 +184,10 @@ describe("DocumentEditor", () => {
 
     const element = getBlockElement(bullet.id);
     fireEvent.keyDown(element, { key: "Tab" });
-    expect((onChange.mock.lastCall![0] as WealthyDocument).blocks[0]).toMatchObject({ indent: 1 });
+    expect((onChange.mock.lastCall![0] as MogulDocument).blocks[0]).toMatchObject({ indent: 1 });
 
     fireEvent.keyDown(element, { key: "Tab", shiftKey: true });
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect("indent" in latest.blocks[0]!).toBe(false);
   });
 
@@ -198,7 +198,7 @@ describe("DocumentEditor", () => {
 
     typeInto(getBlockElement(block.id), "## ", 3);
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks[0]).toMatchObject({ type: "heading", level: 2, content: [] });
   });
 
@@ -210,7 +210,7 @@ describe("DocumentEditor", () => {
     // User typed "- " at the start of "task" (caret after the space).
     typeInto(getBlockElement(block.id), "- task", 2);
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks[0]).toMatchObject({
       type: "text",
       variant: "bullet",
@@ -233,7 +233,7 @@ describe("DocumentEditor", () => {
 
     fireEvent.mouseDown(options[1]!);
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks[0]).toMatchObject({ type: "heading", level: 2, content: [] });
     expect(screen.queryByRole("listbox")).toBeNull();
   });
@@ -249,7 +249,7 @@ describe("DocumentEditor", () => {
     fireEvent.keyDown(element, { key: "Enter" });
 
     // Second item is Heading 2.
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks[0]).toMatchObject({ type: "heading", level: 2 });
 
     typeInto(getBlockElement(block.id), "/", 1);
@@ -324,11 +324,11 @@ describe("DocumentEditor", () => {
     const { container } = render(<DocumentEditor value={docWith([table])} onChange={onChange} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Add row" }));
-    let latest = onChange.mock.lastCall![0] as WealthyDocument;
+    let latest = onChange.mock.lastCall![0] as MogulDocument;
     expect((latest.blocks[0] as ReturnType<typeof createTableBlock>).rows).toHaveLength(2);
 
     fireEvent.click(screen.getByRole("button", { name: "Add column" }));
-    latest = onChange.mock.lastCall![0] as WealthyDocument;
+    latest = onChange.mock.lastCall![0] as MogulDocument;
     const widened = latest.blocks[0] as ReturnType<typeof createTableBlock>;
     expect(widened.columns).toHaveLength(3);
     for (const row of widened.rows) {
@@ -337,7 +337,7 @@ describe("DocumentEditor", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Remove column" }));
     fireEvent.click(screen.getByRole("button", { name: "Remove row" }));
-    latest = onChange.mock.lastCall![0] as WealthyDocument;
+    latest = onChange.mock.lastCall![0] as MogulDocument;
     const shrunk = latest.blocks[0] as ReturnType<typeof createTableBlock>;
     expect(shrunk.columns).toHaveLength(2);
     expect(shrunk.rows).toHaveLength(1);
@@ -389,7 +389,7 @@ describe("DocumentEditor", () => {
     caption.textContent = "Updated";
     fireEvent.input(caption);
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect((latest.blocks[0] as ImageBlock).caption).toEqual([{ type: "text", text: "Updated" }]);
   });
 
@@ -434,7 +434,7 @@ describe("DocumentEditor", () => {
     setCaretOffset(caption, 0);
     fireEvent.keyDown(caption, { key: "Backspace" });
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks.map((b) => b.type)).toEqual(["text"]);
   });
 
@@ -464,7 +464,7 @@ describe("DocumentEditor", () => {
     setCaretOffset(caption, 0);
     fireEvent.keyDown(caption, { key: "Enter" });
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks.map((b) => b.type)).toEqual(["image", "text"]);
   });
 
@@ -500,7 +500,7 @@ describe("DocumentEditor", () => {
     second.textContent = "B updated";
     fireEvent.input(second);
 
-    const images = (onChange.mock.lastCall![0] as WealthyDocument).blocks[0] as ImageGroupBlock;
+    const images = (onChange.mock.lastCall![0] as MogulDocument).blocks[0] as ImageGroupBlock;
     expect(images.images[0]!.caption).toEqual([{ type: "text", text: "A" }]);
     expect(images.images[1]!.caption).toEqual([{ type: "text", text: "B updated" }]);
   });
@@ -541,7 +541,7 @@ describe("DocumentEditor", () => {
     setCaretOffset(caption, 0);
     fireEvent.keyDown(caption, { key: "Enter" });
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks.map((b) => b.type)).toEqual(["imageGroup", "text"]);
   });
 
@@ -561,7 +561,7 @@ describe("DocumentEditor", () => {
     fireEvent.keyDown(second, { key: "Backspace" });
 
     // 2 -> 1 collapses the group to a plain image block.
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks.map((b) => b.type)).toEqual(["image"]);
   });
 
@@ -579,7 +579,7 @@ describe("DocumentEditor", () => {
     fireEvent.mouseDown(rowOption!);
 
     await waitFor(() => {
-      const latest = onChange.mock.lastCall![0] as WealthyDocument;
+      const latest = onChange.mock.lastCall![0] as MogulDocument;
       const group = latest.blocks.find((candidate) => candidate.type === "imageGroup");
       expect(group).toBeTruthy();
       // Two empty drop slots, no predetermined image.
@@ -618,7 +618,7 @@ describe("DocumentEditor", () => {
 
     fireEvent.keyDown(handle, { key: "ArrowRight" });
 
-    const latest = (onChange.mock.lastCall![0] as WealthyDocument).blocks[0] as ImageBlock;
+    const latest = (onChange.mock.lastCall![0] as MogulDocument).blocks[0] as ImageBlock;
     expect(latest.size).toEqual({ width: 55, unit: "percent" });
   });
 
@@ -649,7 +649,7 @@ describe("DocumentEditor", () => {
     fireEvent.pointerMove(firstHandle, { clientX: 40, pointerId: 1 });
     fireEvent.pointerUp(firstHandle, { clientX: 40, pointerId: 1 });
 
-    const latest = (onChange.mock.lastCall![0] as WealthyDocument).blocks[0] as ImageGroupBlock;
+    const latest = (onChange.mock.lastCall![0] as MogulDocument).blocks[0] as ImageGroupBlock;
     expect(latest.images[0]!.size).toEqual({ width: 70, unit: "percent" });
     expect(latest.images[1]!.size).toBeUndefined();
   });
@@ -668,7 +668,7 @@ describe("DocumentEditor", () => {
     expect(container.querySelectorAll(".wte-block--selected")).toHaveLength(3);
 
     fireEvent.keyDown(container.querySelector(".wte-editor")!, { key: "Delete" });
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks).toHaveLength(0);
     // Single undo restores all three (atomic patch application).
     expect((onChange.mock.lastCall![1] as { origin: string }).origin).toBe("patches");
@@ -714,7 +714,7 @@ describe("DocumentEditor", () => {
 
     const button = screen.getByRole("button", { name: "hi" });
     fireEvent.click(button);
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks[0]).toMatchObject({ data: { text: "clicked" } });
   });
 
@@ -759,7 +759,7 @@ describe("DocumentEditor", () => {
     });
     expect(caret).toBe(6);
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect((latest.blocks[0] as TextBlock).content).toEqual([
       { type: "text", text: "hello" },
       { type: "object", kind: "placeholder", data: { key: "client", label: "Cliente" } },
@@ -777,7 +777,7 @@ describe("DocumentEditor", () => {
 
     typeInto(getBlockElement(block.id), "O cliente {{Nome do Cliente}}", 29);
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect((latest.blocks[0] as TextBlock).content).toEqual([
       { type: "text", text: "O cliente " },
       { type: "object", kind: "placeholder", data: { key: "nome_do_cliente", label: "Nome do Cliente" } },
@@ -795,7 +795,7 @@ describe("DocumentEditor", () => {
       />,
     );
     typeInto(getBlockElement(block.id), "{{ana}}", 7);
-    let latest = onChange.mock.lastCall![0] as WealthyDocument;
+    let latest = onChange.mock.lastCall![0] as MogulDocument;
     expect((latest.blocks[0] as TextBlock).content).toEqual([
       { type: "object", kind: "mention", data: { name: "ana" } },
     ]);
@@ -805,7 +805,7 @@ describe("DocumentEditor", () => {
     const onChangeDisabled = vi.fn();
     render(<DocumentEditor value={docWith([plain])} onChange={onChangeDisabled} inlineTagToNode={false} />);
     typeInto(getBlockElement(plain.id), "{{ana}}", 7);
-    latest = onChangeDisabled.mock.lastCall![0] as WealthyDocument;
+    latest = onChangeDisabled.mock.lastCall![0] as MogulDocument;
     expect((latest.blocks[0] as TextBlock).content).toEqual([{ type: "text", text: "{{ana}}" }]);
   });
 
@@ -834,7 +834,7 @@ describe("DocumentEditor", () => {
     expect(option).toBeTruthy();
     fireEvent.mouseDown(option!);
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect((latest.blocks[0] as TextBlock).content).toEqual([
       { type: "object", kind: "placeholder", data: { label: "Campo" } },
     ]);
@@ -930,7 +930,7 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
     expect(within(container).getByRole("dialog")).toBeTruthy();
 
     fireEvent.change(within(container).getByLabelText("fill"), { target: { value: "Ana" } });
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect((latest.blocks[0] as TextBlock).content[1]).toMatchObject({
       kind: "placeholder",
       data: { key: "nome", label: "Nome", value: "Ana" },
@@ -949,7 +949,7 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
     fireEvent.pointerDown(container.querySelector(".wte-inline-object")!, { pointerId: 1, button: 0 });
     fireEvent.click(within(container).getByRole("button", { name: "remove-chip" }));
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect((latest.blocks[0] as TextBlock).content).toEqual([{ type: "text", text: "Olá " }]);
     expect(within(container).queryByRole("dialog")).toBeNull();
   });
@@ -1020,7 +1020,7 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
     expect(boldButton.getAttribute("aria-pressed")).toBe("true");
     fireEvent.mouseDown(boldButton);
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect((latest.blocks[0] as TextBlock).content).toEqual([{ type: "text", text: "already bold" }]);
   });
 
@@ -1044,7 +1044,7 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
     expect(boldButton.getAttribute("aria-pressed")).toBe("true");
     fireEvent.mouseDown(boldButton);
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect((latest.blocks[0] as TextBlock).content).toEqual([
       { type: "text", text: "styled heading", marks: [{ type: "bold", enabled: false }] },
     ]);
@@ -1082,7 +1082,7 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
     expect(option).toBeTruthy();
     fireEvent.mouseDown(option!);
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect((latest.blocks[0] as TextBlock).content).toEqual([
       { type: "object", kind: "placeholder", data: { label: "Campo" } },
     ]);
@@ -1134,7 +1134,7 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
 
     fireEvent.mouseDown(within(container).getByText("Plugin duplicate"));
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect((latest.blocks[0] as TextBlock).content).toEqual([
       { type: "object", kind: "source", data: { source: "host" } },
     ]);
@@ -1155,7 +1155,7 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
     expect(option).toBeTruthy();
     fireEvent.mouseDown(option!);
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks[2]).toMatchObject({ type: "custom", kind: "separator" });
   });
 });
@@ -1191,7 +1191,7 @@ describe("DocumentEditor — paste (D11)", () => {
     fireEvent.paste(element, { clipboardData });
   }
 
-  function summary(doc: WealthyDocument): string[] {
+  function summary(doc: MogulDocument): string[] {
     return doc.blocks.map((block) =>
       block.type === "text" || block.type === "heading"
         ? block.content.map((node) => (node.type === "text" ? node.text : "▢")).join("")
@@ -1203,21 +1203,21 @@ describe("DocumentEditor — paste (D11)", () => {
     const block = createTextBlock({ content: "abc" });
     const { onChange, getApi } = setup([block]);
     paste(getApi(), block.id, 3, { text: "X\nY" });
-    expect(summary(onChange.mock.lastCall![0] as WealthyDocument)).toEqual(["abc", "X", "Y"]);
+    expect(summary(onChange.mock.lastCall![0] as MogulDocument)).toEqual(["abc", "X", "Y"]);
   });
 
   it("splices a single pasted paragraph inline at the caret", () => {
     const block = createTextBlock({ content: "abcdef" });
     const { onChange, getApi } = setup([block]);
     paste(getApi(), block.id, 3, { html: "<p>XY</p>" });
-    expect(summary(onChange.mock.lastCall![0] as WealthyDocument)).toEqual(["abcXYdef"]);
+    expect(summary(onChange.mock.lastCall![0] as MogulDocument)).toEqual(["abcXYdef"]);
   });
 
   it("pastes rich HTML (heading + paragraph) replacing an empty line", () => {
     const block = createTextBlock({ content: "" });
     const { onChange, getApi } = setup([block]);
     paste(getApi(), block.id, 0, { html: "<h2>H</h2><p>P</p>" });
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks.map((b) => b.type)).toEqual(["heading", "text"]);
     expect(summary(latest)).toEqual(["H", "P"]);
   });
@@ -1226,7 +1226,7 @@ describe("DocumentEditor — paste (D11)", () => {
     const block = createTextBlock({ content: "" });
     const { onChange, getApi } = setup([block]);
     paste(getApi(), block.id, 0, { html: "<p>a</p><hr><p>b</p>" });
-    expect(summary(onChange.mock.lastCall![0] as WealthyDocument)).toEqual(["a", "[separator]", "b"]);
+    expect(summary(onChange.mock.lastCall![0] as MogulDocument)).toEqual(["a", "[separator]", "b"]);
   });
 
   it("pastes HTML image blocks at the caret when allowDroppedImageUrls is set", () => {
@@ -1234,7 +1234,7 @@ describe("DocumentEditor — paste (D11)", () => {
     const { onChange, getApi } = setup([block], { allowDroppedImageUrls: true });
     paste(getApi(), block.id, 3, { html: '<figure><img src="/pasted.png" alt="P"><figcaption>Caption</figcaption></figure>' });
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks).toHaveLength(2);
     expect(latest.blocks[1]).toMatchObject({
       type: "image",
@@ -1249,7 +1249,7 @@ describe("DocumentEditor — paste (D11)", () => {
     const { onChange, getApi } = setup([block]);
     paste(getApi(), block.id, 0, { html: '<p>before</p><figure><img src="/pasted.png" alt="P"></figure><p>after</p>' });
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks.some((b) => b.type === "image")).toBe(false);
     expect(summary(latest)).toEqual(["before", "after"]);
   });
@@ -1266,7 +1266,7 @@ describe("DocumentEditor — paste (D11)", () => {
     paste(getApi(), block.id, 0, { files: [imageFile] });
 
     await waitFor(() => {
-      const latest = onChange.mock.lastCall?.[0] as WealthyDocument | undefined;
+      const latest = onChange.mock.lastCall?.[0] as MogulDocument | undefined;
       expect(latest?.blocks[0]).toMatchObject({
         type: "image",
         source: { type: "asset", id: "photo.png" },
@@ -1285,7 +1285,7 @@ describe("DocumentEditor — paste (D11)", () => {
 
     paste(getApi(), block.id, 0, { files: [imageFile], text: "fallback" });
 
-    await waitFor(() => expect(summary(onChange.mock.lastCall![0] as WealthyDocument)).toEqual(["fallback"]));
+    await waitFor(() => expect(summary(onChange.mock.lastCall![0] as MogulDocument)).toEqual(["fallback"]));
   });
 
   it("does not replay stale paste offsets after an asynchronous upload", async () => {
@@ -1301,7 +1301,7 @@ describe("DocumentEditor — paste (D11)", () => {
     act(() => getApi().commands.updateBlock(block.id, { content: [{ type: "text", text: "changed" }] }));
     resolveUpload({ source: { type: "asset", id: "late.png" } });
 
-    await waitFor(() => expect(summary(onChange.mock.lastCall![0] as WealthyDocument)).toEqual(["changed", "[image]"]));
+    await waitFor(() => expect(summary(onChange.mock.lastCall![0] as MogulDocument)).toEqual(["changed", "[image]"]));
   });
 
   it("is a single undo step (atomic block paste)", () => {
@@ -1311,7 +1311,7 @@ describe("DocumentEditor — paste (D11)", () => {
     act(() => {
       getApi().commands.undo();
     });
-    expect(summary(onChange.mock.lastCall![0] as WealthyDocument)).toEqual(["abc"]);
+    expect(summary(onChange.mock.lastCall![0] as MogulDocument)).toEqual(["abc"]);
   });
 
   it("drops image files using the upload callback after the target block", async () => {
@@ -1339,7 +1339,7 @@ describe("DocumentEditor — paste (D11)", () => {
     });
 
     await waitFor(() => {
-      const latest = onChange.mock.lastCall?.[0] as WealthyDocument | undefined;
+      const latest = onChange.mock.lastCall?.[0] as MogulDocument | undefined;
       expect(latest?.blocks[1]).toMatchObject({
         type: "image",
         source: { type: "url", url: "https://cdn.example/drop.png" },
@@ -1365,7 +1365,7 @@ describe("DocumentEditor — paste (D11)", () => {
       },
     });
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks[1]).toMatchObject({
       type: "image",
       source: { type: "url", url: "https://example.com/drop.png" },
@@ -1461,18 +1461,18 @@ describe("DocumentEditor — cross-block text ranges", () => {
     });
     expect(values.get("text/plain")).toBe("rst\nla");
     expect(values.get("text/html")).toContain("<p>rst</p>");
-    expect(values.get("application/x-wealthy-text+json")).toContain('"schemaVersion":1');
+    expect(values.get("application/x-mogul-text+json")).toContain('"schemaVersion":1');
   });
 
   it("deletes and merges the range in one undoable command", () => {
     const { second, onChange, getApi, select } = renderRangeEditor();
     select();
     fireEvent.keyDown(getBlockElement(second.id), { key: "Backspace" });
-    let latest = onChange.mock.lastCall![0] as WealthyDocument;
+    let latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks).toHaveLength(1);
     expect(getInlineText((latest.blocks[0] as TextBlock).content)).toBe("fist");
     act(() => getApi().commands.undo());
-    latest = onChange.mock.lastCall![0] as WealthyDocument;
+    latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks).toHaveLength(2);
   });
 
@@ -1482,7 +1482,7 @@ describe("DocumentEditor — cross-block text ranges", () => {
     fireEvent.paste(getBlockElement(second.id), {
       clipboardData: { getData: (type: string) => type === "text/plain" ? "X" : "", files: [], items: [] },
     });
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks).toHaveLength(1);
     expect(getInlineText((latest.blocks[0] as TextBlock).content)).toBe("fiXst");
   });
@@ -1498,7 +1498,7 @@ describe("DocumentEditor — cross-block text ranges", () => {
     });
 
     expect(handled).toBe(true);
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks).toHaveLength(1);
     expect(getInlineText((latest.blocks[0] as TextBlock).content)).toBe("fiXst");
   });
@@ -1532,7 +1532,7 @@ describe("DocumentEditor — cross-block text ranges", () => {
     const { container, onChange, select } = renderRangeEditor();
     select();
     fireEvent.mouseDown(within(container).getByRole("button", { name: "B" }));
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     const textBlocks = latest.blocks as TextBlock[];
     expect(textBlocks.every((block) => block.content.some((node) => node.type === "text" && node.marks?.some((mark) => mark.type === "bold")))).toBe(true);
   });
@@ -1551,7 +1551,7 @@ describe("DocumentEditor — trailing non-editable block", () => {
     setCaretOffset(element, 3);
     fireEvent.keyDown(element, { key: "ArrowDown" });
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks).toHaveLength(3);
     expect(latest.blocks[2]).toMatchObject({ type: "text", variant: "paragraph", content: [] });
   });
@@ -1563,7 +1563,7 @@ describe("DocumentEditor — trailing non-editable block", () => {
 
     fireEvent.click(within(container).getByRole("button", { name: "Add a line below" }));
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks).toHaveLength(3);
     expect(latest.blocks[2]).toMatchObject({ type: "text", content: [] });
     // The last block is editable again, so the affordance is gone.
@@ -1626,7 +1626,7 @@ describe("DocumentEditor — image rows", () => {
     });
 
     await waitFor(() => {
-      const latest = onChange.mock.lastCall?.[0] as WealthyDocument | undefined;
+      const latest = onChange.mock.lastCall?.[0] as MogulDocument | undefined;
       const result = latest?.blocks[0] as ImageGroupBlock | undefined;
       // slot[0] filled with a.png, b.png appended as a new column, slot[1] still empty.
       expect(result?.images.map((e) => e.source.type)).toEqual(["url", "url", "empty"]);
@@ -1653,7 +1653,7 @@ describe("DocumentEditor — image rows", () => {
     });
 
     await waitFor(() => {
-      const result = onChange.mock.lastCall?.[0] as WealthyDocument | undefined;
+      const result = onChange.mock.lastCall?.[0] as MogulDocument | undefined;
       const images = (result?.blocks[0] as ImageGroupBlock | undefined)?.images;
       expect(images?.[0]).toMatchObject({ source: { url: "https://cdn.example/new.png" } });
       expect(images?.[1]).toMatchObject({ source: { url: "https://example.com/keep.png" } });
@@ -1669,11 +1669,11 @@ describe("DocumentEditor — image rows", () => {
 
     fireEvent.mouseDown(container.querySelector(".wte-image-group__add")!);
     fireEvent.click(container.querySelector(".wte-image-group__add")!);
-    let result = onChange.mock.lastCall![0] as WealthyDocument;
+    let result = onChange.mock.lastCall![0] as MogulDocument;
     expect((result.blocks[0] as ImageGroupBlock).images).toHaveLength(3);
 
     fireEvent.click(container.querySelectorAll(".wte-image-group__remove")[0]!);
-    result = onChange.mock.lastCall![0] as WealthyDocument;
+    result = onChange.mock.lastCall![0] as MogulDocument;
     expect((result.blocks[0] as ImageGroupBlock).images).toHaveLength(2);
   });
 
@@ -1710,7 +1710,7 @@ describe("DocumentEditor — image rows", () => {
     getBlockElement(para.id).focus();
     fireEvent.blur(container.querySelector(".wte-editor")!, { relatedTarget: document.body });
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks[0]).toMatchObject({ type: "image", source: { url: "https://example.com/a.png" } });
   });
 
@@ -1741,7 +1741,7 @@ describe("DocumentEditor — image rows", () => {
     (items(container, rowB.id)[0] as HTMLElement).focus();
     fireEvent.blur(container.querySelector(".wte-editor")!, { relatedTarget: document.body });
 
-    const latest = onChange.mock.lastCall![0] as WealthyDocument;
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect(latest.blocks.map((b) => b.id)).toEqual([rowB.id]);
   });
 

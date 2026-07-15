@@ -1,10 +1,9 @@
-# wealthy-text-editor
+# mogul-text-editor
 
-> **"Rich" → "Wealthy"** — a schema-first, headless, block-based rich text editor for React.
+> **"Rich" → "Mogul"** — a schema-first, headless, block-based rich text editor for React.
 
 A React library for editing structured, block-based documents (Notion-like, with section
-structure derived from heading levels). It was extracted from the **Minuta** project as a
-standalone, generic library.
+structure derived from heading levels).
 
 ## Philosophy
 
@@ -22,21 +21,21 @@ standalone, generic library.
 ## Install
 
 ```bash
-pnpm add wealthy-text-editor
+pnpm add mogul-text-editor
 # only if you use the docx exporter:
 pnpm add docx
 ```
 
 Peer dependencies: `react` and `react-dom` (>= 19). `docx` is an optional peer dependency needed
-only by `wealthy-text-editor/export-docx`.
+only by `mogul-text-editor/export-docx`.
 
 ## Quick start
 
 ```tsx
-import { useState } from "react";
-import { createEmptyDocument } from "wealthy-text-editor";
-import { DocumentEditor } from "wealthy-text-editor/react";
-import "wealthy-text-editor/styles.css";
+import { useState } from 'react';
+import { createEmptyDocument } from 'mogul-text-editor';
+import { DocumentEditor } from 'mogul-text-editor/react';
+import 'mogul-text-editor/styles.css';
 
 function App() {
   const [doc, setDoc] = useState(createEmptyDocument());
@@ -70,14 +69,14 @@ echoing back what you got from `onChange` is a no-op, so controlled usage is saf
 
 ## Entry points
 
-| Entry | Contents |
-| --- | --- |
-| `wealthy-text-editor` | React-free core: schema, factories, the headless engine, transforms, the patch pipeline (D10), sections, numbering, serialization. Server-safe. |
-| `wealthy-text-editor/react` | Hooks (`useDocumentEditor`, `useBlockEditor`), components (`DocumentEditor`, `BlockEditor`), the plugin system, paste, and i18n. |
-| `wealthy-text-editor/export-html` | `exportHtml` |
-| `wealthy-text-editor/export-markdown` | `exportMarkdown` |
-| `wealthy-text-editor/export-docx` | `exportDocx` (needs the `docx` peer dep) |
-| `wealthy-text-editor/styles.css` | Optional default theme |
+| Entry                               | Contents                                                                                                                                        |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mogul-text-editor`                 | React-free core: schema, factories, the headless engine, transforms, the patch pipeline (D10), sections, numbering, serialization. Server-safe. |
+| `mogul-text-editor/react`           | Hooks (`useDocumentEditor`, `useBlockEditor`), components (`DocumentEditor`, `BlockEditor`), the plugin system, paste, and i18n.                |
+| `mogul-text-editor/export-html`     | `exportHtml`                                                                                                                                    |
+| `mogul-text-editor/export-markdown` | `exportMarkdown`                                                                                                                                |
+| `mogul-text-editor/export-docx`     | `exportDocx` (needs the `docx` peer dep)                                                                                                        |
+| `mogul-text-editor/styles.css`      | Optional default theme                                                                                                                          |
 
 ## Documentation
 
@@ -96,7 +95,7 @@ See also [ARCHITECTURE.md](./ARCHITECTURE.md) for the design decisions (D1–D16
 
 ## Status
 
-`0.x` (alpha): the public API is being finalized toward 1.0. See
+`0.5.x` (pre-1.0): published on npm's `latest` channel while the public API is finalized toward 1.0. See
 [Stability & versioning](./docs/stability.md) for what's covered by semver.
 
 ## License

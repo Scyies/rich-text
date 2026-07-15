@@ -3,13 +3,13 @@
 ## Install
 
 ```bash
-pnpm add wealthy-text-editor
+pnpm add mogul-text-editor
 # only if you use the docx exporter:
 pnpm add docx
 ```
 
 Peer dependencies: `react` and `react-dom` (>= 19). `docx` is an optional peer dependency needed
-only by `wealthy-text-editor/export-docx` — install it solely if you export to Word.
+only by `mogul-text-editor/export-docx` — install it solely if you export to Word.
 
 ## A minimal editor
 
@@ -17,9 +17,9 @@ only by `wealthy-text-editor/export-docx` — install it solely if you export to
 
 ```tsx
 import { useState } from "react";
-import { createEmptyDocument } from "wealthy-text-editor";
-import { DocumentEditor } from "wealthy-text-editor/react";
-import "wealthy-text-editor/styles.css"; // optional default theme
+import { createEmptyDocument } from "mogul-text-editor";
+import { DocumentEditor } from "mogul-text-editor/react";
+import "mogul-text-editor/styles.css"; // optional default theme
 
 function Editor() {
   const [doc, setDoc] = useState(createEmptyDocument());
@@ -58,7 +58,7 @@ function Editor() {
 
 | Prop | Type | Purpose |
 | --- | --- | --- |
-| `value` | `WealthyDocument<TMeta>` | The controlled document. |
+| `value` | `MogulDocument<TMeta>` | The controlled document. |
 | `onChange` | `(doc, info) => void` | Per-transaction. |
 | `onCommit` | `(doc) => void` | Editor blur / idle / explicit. |
 | `commitIdleMs` | `number` | Idle window before an auto-commit. |
@@ -82,7 +82,7 @@ See the full list and types in the [API reference](./api-reference.md#documented
 
 ```tsx
 import { useRef } from "react";
-import type { DocumentEditorApi } from "wealthy-text-editor/react";
+import type { DocumentEditorApi } from "mogul-text-editor/react";
 
 function Host() {
   const api = useRef<DocumentEditorApi | null>(null);
@@ -110,7 +110,7 @@ The same API (`commands`, `selection`, `sectionTree`, …) is available headless
 `BlockEditor` edits one block in isolation, on the same engine (validation, undo, commit):
 
 ```tsx
-import { BlockEditor } from "wealthy-text-editor/react";
+import { BlockEditor } from "mogul-text-editor/react";
 
 <BlockEditor value={block} onChange={setBlock} ariaLabel="Title" />;
 ```
@@ -132,14 +132,14 @@ editor. Set `allowDroppedImageUrls` to also accept dropped/pasted image links.
 The parsers are also exported for custom use:
 
 ```ts
-import { parseClipboardToBlocks } from "wealthy-text-editor/react";
+import { parseClipboardToBlocks } from "mogul-text-editor/react";
 
 const blocks = parseClipboardToBlocks({ html, text }); // prefers HTML, falls back to text
 ```
 
 ## Styling
 
-The package ships an optional stylesheet (`wealthy-text-editor/styles.css`) using prefixed
+The package ships an optional stylesheet (`mogul-text-editor/styles.css`) using prefixed
 `.wte-*` classes and `--wte-*` CSS variables. It's headless by design — bring your own CSS or
 override the variables. See [Styling](./styling.md) for the stable surface.
 

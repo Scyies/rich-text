@@ -1,4 +1,4 @@
-import { validateDocument, type BlockMeta, type WealthyDocument } from "./schema";
+import { validateDocument, type BlockMeta, type MogulDocument } from "./schema";
 
 /**
  * Serializes a document to JSON. The document is validated first so a
@@ -7,7 +7,7 @@ import { validateDocument, type BlockMeta, type WealthyDocument } from "./schema
 export function serializeDocument<
   TBlockMeta extends BlockMeta = BlockMeta,
   TDocMeta extends BlockMeta = BlockMeta,
->(document: WealthyDocument<TBlockMeta, TDocMeta>): string {
+>(document: MogulDocument<TBlockMeta, TDocMeta>): string {
   return JSON.stringify(validateDocument(document));
 }
 
@@ -19,7 +19,7 @@ export function serializeDocument<
 export function deserializeDocument<
   TBlockMeta extends BlockMeta = BlockMeta,
   TDocMeta extends BlockMeta = BlockMeta,
->(json: string): WealthyDocument<TBlockMeta, TDocMeta> {
+>(json: string): MogulDocument<TBlockMeta, TDocMeta> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
@@ -28,5 +28,5 @@ export function deserializeDocument<
       cause: error,
     });
   }
-  return validateDocument(parsed) as WealthyDocument<TBlockMeta, TDocMeta>;
+  return validateDocument(parsed) as MogulDocument<TBlockMeta, TDocMeta>;
 }

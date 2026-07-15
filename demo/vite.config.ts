@@ -20,9 +20,9 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: [
-      { find: "wealthy-text-editor/react", replacement: `${demoDir}/../src/react.ts` },
-      { find: "wealthy-text-editor/styles.css", replacement: `${demoDir}/../styles.css` },
-      { find: "wealthy-text-editor", replacement: `${demoDir}/../src/index.ts` },
+      { find: "mogul-text-editor/react", replacement: `${demoDir}/../src/react.ts` },
+      { find: "mogul-text-editor/styles.css", replacement: `${demoDir}/../styles.css` },
+      { find: "mogul-text-editor", replacement: `${demoDir}/../src/index.ts` },
     ],
   },
 });

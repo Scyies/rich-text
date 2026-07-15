@@ -1,10 +1,10 @@
 import { concatInlineContent, getInlineLength, getInlineText, splitInlineContent } from "./inline";
 import { createTextBlock } from "./factories";
 import { caretAt, orderTextSelection, type TextSelection } from "./selection";
-import type { Block, BlockMeta, InlineNode, WealthyDocument } from "./schema";
+import type { Block, BlockMeta, InlineNode, MogulDocument } from "./schema";
 
 export interface RangeEditResult<TMeta extends BlockMeta, TDocMeta extends BlockMeta> {
-  document: WealthyDocument<TMeta, TDocMeta>;
+  document: MogulDocument<TMeta, TDocMeta>;
   selection: TextSelection;
 }
 
@@ -22,7 +22,7 @@ function sliceContent(content: InlineNode[], start: number, end: number): Inline
 
 /** Deletes a top-level text range as one immutable document operation. */
 export function deleteTextRange<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   selection: TextSelection,
 ): RangeEditResult<TMeta, TDocMeta> {
   const ordered = orderTextSelection(document, selection);
@@ -54,7 +54,7 @@ export function deleteTextRange<TMeta extends BlockMeta, TDocMeta extends BlockM
 
 /** Replaces a text range with inline content while retaining the start block. */
 export function replaceTextRangeWithInline<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   selection: TextSelection,
   inserted: InlineNode[],
 ): RangeEditResult<TMeta, TDocMeta> {
@@ -72,11 +72,11 @@ export function replaceTextRangeWithInline<TMeta extends BlockMeta, TDocMeta ext
 }
 
 export function replaceTextRangeWithBlocks<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   selection: TextSelection,
   inserted: Block<TMeta>[],
   inlineSingleParagraph = true,
-): { document: WealthyDocument<TMeta, TDocMeta>; selection: TextSelection | null } {
+): { document: MogulDocument<TMeta, TDocMeta>; selection: TextSelection | null } {
   const only = inserted.length === 1 ? inserted[0] : undefined;
   if (inlineSingleParagraph && only?.type === "text" && only.variant === "paragraph") {
     return replaceTextRangeWithInline(document, selection, only.content);
@@ -116,9 +116,9 @@ export function replaceTextRangeWithBlocks<TMeta extends BlockMeta, TDocMeta ext
 
 /** Returns a clipped document fragment suitable for clipboard serialization. */
 export function extractTextRange<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   selection: TextSelection,
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   const ordered = orderTextSelection(document, selection);
   if (ordered === null || ordered.start.entryId !== undefined || ordered.end.entryId !== undefined) {
     throw new Error("extractTextRange: only top-level text ranges are supported");
@@ -141,7 +141,7 @@ export function extractTextRange<TMeta extends BlockMeta, TDocMeta extends Block
 }
 
 export function textRangeToPlainText<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   selection: TextSelection,
 ): string {
   return extractTextRange(document, selection).blocks

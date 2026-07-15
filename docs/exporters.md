@@ -5,9 +5,9 @@ own subpath and consumes the **pure model** — zero React — so they run anywh
 server.
 
 ```ts
-import { exportHtml } from "wealthy-text-editor/export-html";
-import { exportMarkdown } from "wealthy-text-editor/export-markdown";
-import { exportDocx } from "wealthy-text-editor/export-docx";
+import { exportHtml } from "mogul-text-editor/export-html";
+import { exportMarkdown } from "mogul-text-editor/export-markdown";
+import { exportDocx } from "mogul-text-editor/export-docx";
 ```
 
 They are separate entries so the root package never pulls in the heavy `docx` dependency unless
@@ -140,8 +140,8 @@ All three exporters are React-free and DOM-free, so you can render a document to
 server straight from stored JSON:
 
 ```ts
-import { deserializeDocument } from "wealthy-text-editor";
-import { exportHtml } from "wealthy-text-editor/export-html";
+import { deserializeDocument } from "mogul-text-editor";
+import { exportHtml } from "mogul-text-editor/export-html";
 
 const html = exportHtml(deserializeDocument(jsonFromDb));
 ```

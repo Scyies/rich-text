@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createHeadingBlock, createImageBlock, createImageGroupBlock, createTextBlock } from "./factories";
-import { SCHEMA_VERSION, type WealthyDocument } from "./schema";
+import { SCHEMA_VERSION, type MogulDocument } from "./schema";
 import {
   caretAt,
   clampSelection,
@@ -12,7 +12,7 @@ import {
   type TextSelection,
 } from "./selection";
 
-function docWith(blocks: WealthyDocument["blocks"]): WealthyDocument {
+function docWith(blocks: MogulDocument["blocks"]): MogulDocument {
   return { schemaVersion: SCHEMA_VERSION, blocks };
 }
 

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { exportHtml } from "../exports/html";
-import { SCHEMA_VERSION, type ImageBlock, type TableBlock, type TextBlock, type WealthyDocument } from "../core/schema";
+import { SCHEMA_VERSION, type ImageBlock, type TableBlock, type TextBlock, type MogulDocument } from "../core/schema";
 import { parseClipboardToBlocks, parseHtmlToBlocks, parsePlainTextToBlocks } from "./paste";
 
 function cellText(cell: { blocks: TextBlock[] }): string {
@@ -155,11 +155,11 @@ describe("parseHtmlToBlocks", () => {
     const html = exportHtml({ schemaVersion: SCHEMA_VERSION, blocks });
     const reparsed = parseHtmlToBlocks(html);
     expect(reparsed.map((b) => b.type)).toEqual(["heading", "text", "text"]);
-    expect(exportHtml({ schemaVersion: SCHEMA_VERSION, blocks: reparsed } as WealthyDocument)).toBe(html);
+    expect(exportHtml({ schemaVersion: SCHEMA_VERSION, blocks: reparsed } as MogulDocument)).toBe(html);
   });
 
   it("preserves exported color and highlight marks", () => {
-    const document: WealthyDocument = {
+    const document: MogulDocument = {
       schemaVersion: SCHEMA_VERSION,
       blocks: [
         {

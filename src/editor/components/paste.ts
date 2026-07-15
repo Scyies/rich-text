@@ -21,7 +21,7 @@ import { domToInlineNodes } from "./dom";
  * separators, paragraphs) is mapped here. Markdown paste is out of scope.
  *
  * This module depends on the DOM (`DOMParser`) but not React, so it lives on
- * the client surface (`wealthy-text-editor/react`). In a DOM-less environment
+ * the client surface (`mogul-text-editor/react`). In a DOM-less environment
  * `parseHtmlToBlocks` returns `[]` and callers fall back to plain text.
  */
 

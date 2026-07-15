@@ -8,7 +8,7 @@ import {
   textVariantSchema,
   type Block,
   type BlockMeta,
-  type WealthyDocument,
+  type MogulDocument,
 } from "./schema";
 import {
   deleteBlock,
@@ -110,13 +110,13 @@ export interface ApplyPatchesResult<
   TMeta extends BlockMeta = BlockMeta,
   TDocMeta extends BlockMeta = BlockMeta,
 > {
-  document: WealthyDocument<TMeta, TDocMeta>;
+  document: MogulDocument<TMeta, TDocMeta>;
   /** The validated patches that were applied, in order. */
   applied: DocumentPatch[];
 }
 
 export function applyPatches<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   patches: unknown,
 ): ApplyPatchesResult<TMeta, TDocMeta> {
   const parsed = z.array(documentPatchSchema).safeParse(patches);
@@ -152,9 +152,9 @@ export function applyPatches<TMeta extends BlockMeta, TDocMeta extends BlockMeta
 }
 
 function applyPatch<TMeta extends BlockMeta, TDocMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   patch: DocumentPatch,
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   switch (patch.op) {
     case "update_block":
       return updateBlock(document, patch.blockId, patch.changes);
@@ -162,7 +162,7 @@ function applyPatch<TMeta extends BlockMeta, TDocMeta extends BlockMeta>(
       return insertBlockAfter(
         document,
         patch.afterBlockId,
-        patch.block as WealthyDocument<TMeta, TDocMeta>["blocks"][number],
+        patch.block as MogulDocument<TMeta, TDocMeta>["blocks"][number],
       );
     case "delete_block":
       return deleteBlock(document, patch.blockId);

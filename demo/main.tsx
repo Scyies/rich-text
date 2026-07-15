@@ -11,8 +11,8 @@ import {
   getSelectedTextSlices,
   selectionPointsEqual,
   type EditorSelection,
-  type WealthyDocument,
-} from "wealthy-text-editor";
+  type MogulDocument,
+} from "mogul-text-editor";
 import {
   defineBlockType,
   DocumentEditor,
@@ -21,8 +21,8 @@ import {
   type DocumentEditorApi,
   type EditorPlugin,
   type Locale,
-} from "wealthy-text-editor/react";
-import "wealthy-text-editor/styles.css";
+} from "mogul-text-editor/react";
+import "mogul-text-editor/styles.css";
 import "./demo.css";
 
 // Slash inserts a generic placeholder; the {{Label}} syntax is the path
@@ -116,7 +116,7 @@ const minutaPlugin: EditorPlugin = {
   blockTypes: [calloutBlockType],
 };
 
-function buildSampleDocument(): WealthyDocument {
+function buildSampleDocument(): MogulDocument {
   return {
     schemaVersion: SCHEMA_VERSION,
     blocks: [
@@ -124,7 +124,7 @@ function buildSampleDocument(): WealthyDocument {
       createTextBlock({
         content: [
           { type: "text", text: "This demo exercises the " },
-          { type: "text", text: "wealthy-text-editor", marks: [{ type: "bold" }] },
+          { type: "text", text: "mogul-text-editor", marks: [{ type: "bold" }] },
           { type: "text", text: " pipeline end to end. Try " },
           { type: "text", text: "markdown rules", marks: [{ type: "italic" }] },
           { type: "text", text: " (\"# \", \"- \", \"1. \"), the slash menu (\"/\"), {{tags}} for placeholders, image paste/drop, drag handles, and heading chevrons. Drag across the heading and facts below to exercise document-wide text selection." },
@@ -158,7 +158,7 @@ function buildSampleDocument(): WealthyDocument {
   };
 }
 
-function describeSelection(document: WealthyDocument, selection: EditorSelection | null): string {
+function describeSelection(document: MogulDocument, selection: EditorSelection | null): string {
   if (selection === null) return "No active selection";
   if (selection.type === "blocks") {
     const anchor = document.blocks.findIndex((block) => block.id === selection.anchorBlockId);
@@ -175,7 +175,7 @@ function describeSelection(document: WealthyDocument, selection: EditorSelection
   return `${slices.length} text block${slices.length === 1 ? "" : "s"} · ${selection.anchor.offset} → ${selection.focus.offset}`;
 }
 
-function supportsInlineInsertion(document: WealthyDocument, selection: EditorSelection | null): boolean {
+function supportsInlineInsertion(document: MogulDocument, selection: EditorSelection | null): boolean {
   if (selection?.type !== "text" || selection.anchor.entryId !== undefined || selection.focus.entryId !== undefined) {
     return false;
   }
@@ -241,7 +241,7 @@ function App() {
         <div className="demo__brand">
           <span className="demo__brand-mark" aria-hidden>W</span>
           <div>
-            <h1>Wealthy Text</h1>
+            <h1>Mogul Text</h1>
             <span>Integration workbench</span>
           </div>
         </div>

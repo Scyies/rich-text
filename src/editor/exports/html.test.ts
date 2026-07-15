@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createCustomBlock, createHeadingBlock, createImageBlock, createImageGroupBlock, createTableBlock, createTextBlock } from "../core/factories";
 import { createSeparatorBlock } from "../plugins/separator-core";
-import { SCHEMA_VERSION, type Block, type WealthyDocument } from "../core/schema";
+import { SCHEMA_VERSION, type Block, type MogulDocument } from "../core/schema";
 import { exportHtml } from "./html";
 
-function docWith(blocks: Block[]): WealthyDocument {
+function docWith(blocks: Block[]): MogulDocument {
   return { schemaVersion: SCHEMA_VERSION, blocks };
 }
 

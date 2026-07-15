@@ -4,7 +4,7 @@ The editor is **headless**: it ships structure and behavior, and an *optional* d
 can take or leave.
 
 ```ts
-import "wealthy-text-editor/styles.css";
+import "mogul-text-editor/styles.css";
 ```
 
 The stylesheet uses prefixed `.wte-*` classes and `--wte-*` CSS custom properties. You can:

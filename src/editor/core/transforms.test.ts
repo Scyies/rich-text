@@ -15,7 +15,7 @@ import {
   type HeadingBlock,
   type ImageBlock,
   type ImageGroupBlock,
-  type WealthyDocument,
+  type MogulDocument,
 } from "./schema";
 import {
   deleteBlock,
@@ -40,11 +40,11 @@ import {
   updateInlineObjectAt,
 } from "./transforms";
 
-function docWith(blocks: Block[]): WealthyDocument {
+function docWith(blocks: Block[]): MogulDocument {
   return { schemaVersion: SCHEMA_VERSION, blocks };
 }
 
-function ids(document: WealthyDocument): string[] {
+function ids(document: MogulDocument): string[] {
   return document.blocks.map((block) => block.id);
 }
 

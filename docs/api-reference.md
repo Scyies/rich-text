@@ -1,6 +1,6 @@
 # API reference
 
-The public surface, by entry point. Model types (`WealthyDocument`, `Block`, `InlineNode`, …)
+The public surface, by entry point. Model types (`MogulDocument`, `Block`, `InlineNode`, …)
 are described in [Concepts](./concepts.md); this page focuses on the exported functions, hooks,
 components, and their signatures.
 
@@ -8,16 +8,16 @@ components, and their signatures.
 > listed (internal components, DOM helpers, raw Zod schemas) is intentionally not exported — see
 > [Stability & versioning](./stability.md).
 
-- [`wealthy-text-editor` (root, React-free)](#root--wealthy-text-editor)
-- [`wealthy-text-editor/react`](#react--wealthy-text-editorreact)
-- [`wealthy-text-editor/export-html`](#export-html)
-- [`wealthy-text-editor/export-markdown`](#export-markdown)
-- [`wealthy-text-editor/export-docx`](#export-docx)
-- [`wealthy-text-editor/styles.css`](#styles)
+- [`mogul-text-editor` (root, React-free)](#root--mogul-text-editor)
+- [`mogul-text-editor/react`](#react--mogul-text-editorreact)
+- [`mogul-text-editor/export-html`](#export-html)
+- [`mogul-text-editor/export-markdown`](#export-markdown)
+- [`mogul-text-editor/export-docx`](#export-docx)
+- [`mogul-text-editor/styles.css`](#styles)
 
 ---
 
-## Root — `wealthy-text-editor`
+## Root — `mogul-text-editor`
 
 React-free core: schema, factories, the headless engine, pure transforms, the patch pipeline,
 sections, numbering, serialization. Safe on the server.
@@ -27,11 +27,11 @@ sections, numbering, serialization. Safe on the server.
 | Export | Signature | Description |
 | --- | --- | --- |
 | `SCHEMA_VERSION` | `1` | The current (frozen) wire-format version. |
-| `validateDocument` | `(input: unknown) => WealthyDocument` | Parses & validates; throws on invalid. |
+| `validateDocument` | `(input: unknown) => MogulDocument` | Parses & validates; throws on invalid. |
 | `safeValidateDocument` | `(input: unknown) => { success: true; document } \| { success: false; error }` | Non-throwing validation. |
 | `isBlockOfType` | `<T>(block: Block, type: T) => block is Extract<Block, { type: T }>` | Type-guard helper. |
 
-**Types:** `WealthyDocument`, `Block`, `BaseBlock`, `HeadingBlock`, `TextBlock`, `TableBlock`,
+**Types:** `MogulDocument`, `Block`, `BaseBlock`, `HeadingBlock`, `TextBlock`, `TableBlock`,
 `ImageBlock`, `ImageContent`, `ImageGroupBlock`, `ImageGroupEntry`, `ImageGroupColumnWidth`,
 `ImageSource`, `ImageSize`, `ImageAlign`, `CustomBlock`, `TableColumn`, `TableRow`, `TableCell`, `InlineNode`, `TextNode`,
 `InlineObjectNode`, `InlineMark`, `Align`, `HeadingLevel`, `TextVariant`, `BlockMeta`.
@@ -40,7 +40,7 @@ sections, numbering, serialization. Safe on the server.
 
 | Export | Signature |
 | --- | --- |
-| `createEmptyDocument` | `<TBlockMeta, TDocMeta>() => WealthyDocument` — one empty paragraph |
+| `createEmptyDocument` | `<TBlockMeta, TDocMeta>() => MogulDocument` — one empty paragraph |
 | `createBlock` | `(input: CreateBlockInput) => Block` |
 | `createHeadingBlock` | `(input: CreateHeadingBlockInput) => HeadingBlock` |
 | `createTextBlock` | `(input?: CreateTextBlockInput) => TextBlock` |
@@ -76,7 +76,7 @@ exporters and server code create separators without importing React. **Type:** `
 | Export | Signature |
 | --- | --- |
 | `serializeDocument` | `(document) => string` — validates, then `JSON.stringify` |
-| `deserializeDocument` | `(json: string) => WealthyDocument` — `JSON.parse`, then validates |
+| `deserializeDocument` | `(json: string) => MogulDocument` — `JSON.parse`, then validates |
 
 Both preserve `meta`/`data` bags untouched. `deserializeDocument` throws a `SyntaxError` on
 invalid JSON and a validation error on a malformed document.
@@ -228,7 +228,7 @@ Every command runs as one undoable transaction and throws on invalid input.
 
 ---
 
-## React — `wealthy-text-editor/react`
+## React — `mogul-text-editor/react`
 
 Hooks, components, the plugin system, paste, and i18n. Re-exports `createSeparatorBlock` /
 `SEPARATOR_BLOCK_KIND` from the root for convenience.
@@ -246,7 +246,7 @@ React components add commit-on-editor-blur behavior.
 
 | Member | Type | |
 | --- | --- | --- |
-| `document` | `WealthyDocument` | Current document. |
+| `document` | `MogulDocument` | Current document. |
 | `commands` | `EditorCommands` | Undoable operations. |
 | `engine` | `EditorEngine` | Escape hatch to the engine. |
 | `selection` / `setSelection` | `EditorSelection \| null` / setter | |
@@ -273,7 +273,7 @@ The primary multi-block editor. Props (`DocumentEditorProps<TMeta>`):
 
 | Prop | Type |
 | --- | --- |
-| `value` | `WealthyDocument<TMeta>` |
+| `value` | `MogulDocument<TMeta>` |
 | `onChange?` | `(document, info: ChangeInfo) => void` |
 | `onCommit?` | `(document) => void` |
 | `commitIdleMs?` | `number` |
@@ -368,7 +368,7 @@ chip whose `key` is the slugified label.
 ## export-html
 
 ```ts
-import { exportHtml } from "wealthy-text-editor/export-html";
+import { exportHtml } from "mogul-text-editor/export-html";
 ```
 
 `exportHtml(document, options?: HtmlExportOptions): string`. `HtmlExportOptions`:
@@ -381,7 +381,7 @@ where `columnWidth` sizes the child figure and percent `size.width` sizes the im
 ## export-markdown
 
 ```ts
-import { exportMarkdown } from "wealthy-text-editor/export-markdown";
+import { exportMarkdown } from "mogul-text-editor/export-markdown";
 ```
 
 `exportMarkdown(document, options?: MarkdownExportOptions): string`. Marks without a Markdown
@@ -393,7 +393,7 @@ image groups are emitted as stacked portable Markdown images.
 ## export-docx
 
 ```ts
-import { exportDocx } from "wealthy-text-editor/export-docx";
+import { exportDocx } from "mogul-text-editor/export-docx";
 import { Packer } from "docx";
 
 const blob = await Packer.toBlob(exportDocx(document));
@@ -408,7 +408,7 @@ in v1.0. Image groups export as borderless one-row tables. See [Exporters](./exp
 ## styles
 
 ```ts
-import "wealthy-text-editor/styles.css";
+import "mogul-text-editor/styles.css";
 ```
 
 The optional default theme (prefixed `.wte-*` classes, `--wte-*` variables). Stable classes and

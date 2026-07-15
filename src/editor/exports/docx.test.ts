@@ -3,16 +3,16 @@ import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { createCustomBlock, createHeadingBlock, createImageBlock, createImageGroupBlock, createTableBlock, createTextBlock } from "../core/factories";
 import { createSeparatorBlock } from "../plugins/separator-core";
-import { SCHEMA_VERSION, type Block, type WealthyDocument } from "../core/schema";
+import { SCHEMA_VERSION, type Block, type MogulDocument } from "../core/schema";
 import { exportDocx, type DocxExportOptions } from "./docx";
 
-function docWith(blocks: Block[]): WealthyDocument {
+function docWith(blocks: Block[]): MogulDocument {
   return { schemaVersion: SCHEMA_VERSION, blocks };
 }
 
 /** Packs the export and unzips word/document.xml — the real content check. */
 async function documentXml(
-  doc: WealthyDocument,
+  doc: MogulDocument,
   options?: DocxExportOptions,
 ): Promise<{ buffer: Buffer; xml: string }> {
   const buffer = await Packer.toBuffer(exportDocx(doc, options));

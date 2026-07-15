@@ -2,10 +2,10 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHeadingBlock, createTextBlock } from "../core/factories";
-import { SCHEMA_VERSION, type Block, type TextBlock, type WealthyDocument } from "../core/schema";
+import { SCHEMA_VERSION, type Block, type TextBlock, type MogulDocument } from "../core/schema";
 import { useDocumentEditor, type UseDocumentEditorOptions } from "./useDocumentEditor";
 
-function docWith(blocks: Block[]): WealthyDocument {
+function docWith(blocks: Block[]): MogulDocument {
   return { schemaVersion: SCHEMA_VERSION, blocks };
 }
 
@@ -50,11 +50,11 @@ describe("useDocumentEditor", () => {
 
   it("echoing the onChange document back into value does NOT reset the editor", () => {
     const block = createTextBlock({ content: "a" });
-    let latest: WealthyDocument | null = null;
+    let latest: MogulDocument | null = null;
     const initial = docWith([block]);
     const { result, rerender } = renderHook(
       (props: UseDocumentEditorOptions) => useDocumentEditor(props),
-      { initialProps: { value: initial, onChange: (doc: WealthyDocument) => (latest = doc) } },
+      { initialProps: { value: initial, onChange: (doc: MogulDocument) => (latest = doc) } },
     );
 
     act(() => {
@@ -62,7 +62,7 @@ describe("useDocumentEditor", () => {
     });
     expect(result.current.canUndo).toBe(true);
 
-    rerender({ value: latest!, onChange: (doc: WealthyDocument) => (latest = doc) });
+    rerender({ value: latest!, onChange: (doc: MogulDocument) => (latest = doc) });
 
     expect(result.current.canUndo).toBe(true); // history survived
     expect(result.current.isDirty).toBe(true); // still uncommitted
@@ -172,7 +172,7 @@ describe("useDocumentEditor", () => {
     unmount();
 
     expect(onCommit).toHaveBeenCalledTimes(1);
-    expect((onCommit.mock.lastCall![0] as WealthyDocument).blocks[0]).toMatchObject({
+    expect((onCommit.mock.lastCall![0] as MogulDocument).blocks[0]).toMatchObject({
       content: textContent("b"),
     });
   });

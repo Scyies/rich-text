@@ -1,6 +1,6 @@
 {
-  "name": "wealthy-text-editor",
-  "version": "0.5.0-alpha.0",
+  "name": "mogul-text-editor",
+  "version": "0.5.0",
   "description": "Schema-first, headless, block-based rich text editor for React.",
   "license": "MIT",
   "repository": {

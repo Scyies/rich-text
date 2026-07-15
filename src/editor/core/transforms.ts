@@ -15,7 +15,7 @@ import {
   type InlineNode,
   type TextBlock,
   type TextVariant,
-  type WealthyDocument,
+  type MogulDocument,
 } from "./schema";
 
 /**
@@ -26,7 +26,7 @@ import {
 
 export const MAX_INDENT = 8;
 
-function requireBlockIndex(document: WealthyDocument<BlockMeta>, blockId: string, operation: string): number {
+function requireBlockIndex(document: MogulDocument<BlockMeta>, blockId: string, operation: string): number {
   const index = document.blocks.findIndex((block) => block.id === blockId);
   if (index === -1) {
     throw new RangeError(`${operation}: block not found: ${blockId}`);
@@ -35,7 +35,7 @@ function requireBlockIndex(document: WealthyDocument<BlockMeta>, blockId: string
 }
 
 function requireSectionRange(
-  document: WealthyDocument<BlockMeta>,
+  document: MogulDocument<BlockMeta>,
   headingId: string,
   operation: string,
 ): { start: number; end: number } {
@@ -47,9 +47,9 @@ function requireSectionRange(
 }
 
 function withBlocks<TMeta extends BlockMeta, TDocMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   blocks: Block<TMeta>[],
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   return { ...document, blocks };
 }
 
@@ -62,10 +62,10 @@ function isTextLike(block: Block<BlockMeta>): block is HeadingBlock<BlockMeta> |
 // ---------------------------------------------------------------------------
 
 export function insertBlockAfter<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   afterBlockId: string | null,
   block: Block<TMeta>,
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   if (document.blocks.some((existing) => existing.id === block.id)) {
     throw new RangeError(`insertBlockAfter: duplicate block id: ${block.id}`);
   }
@@ -91,10 +91,10 @@ const PATCHABLE_KEYS: Record<Block<BlockMeta>["type"], ReadonlySet<string>> = {
  * document (e.g. heading level 9).
  */
 export function updateBlock<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   blockId: string,
   patch: Record<string, unknown>,
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   const index = requireBlockIndex(document, blockId, "updateBlock");
   const block = document.blocks[index]!;
   const allowed = PATCHABLE_KEYS[block.type];
@@ -110,9 +110,9 @@ export function updateBlock<TMeta extends BlockMeta, TDocMeta extends BlockMeta 
 }
 
 export function deleteBlock<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   blockId: string,
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   const index = requireBlockIndex(document, blockId, "deleteBlock");
   const blocks = [...document.blocks];
   blocks.splice(index, 1);
@@ -121,10 +121,10 @@ export function deleteBlock<TMeta extends BlockMeta, TDocMeta extends BlockMeta 
 
 /** Moves a block after `afterBlockId` (null = to the start of the document). */
 export function moveBlock<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   blockId: string,
   afterBlockId: string | null,
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   if (afterBlockId === blockId) {
     throw new RangeError("moveBlock: cannot move a block after itself");
   }
@@ -150,10 +150,10 @@ export type TurnIntoTarget =
  * and align survive; indent survives text→text and is dropped on →heading.
  */
 export function turnInto<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   blockId: string,
   target: TurnIntoTarget,
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   const index = requireBlockIndex(document, blockId, "turnInto");
   const block = document.blocks[index]!;
   if (!isTextLike(block)) {
@@ -194,11 +194,11 @@ export function turnInto<TMeta extends BlockMeta, TDocMeta extends BlockMeta = B
  * text); any other split keeps the original block type and attrs.
  */
 export function splitBlock<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   blockId: string,
   offset: number,
   newBlockId: string = generateBlockId(),
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   const index = requireBlockIndex(document, blockId, "splitBlock");
   const block = document.blocks[index]!;
   if (!isTextLike(block)) {
@@ -227,9 +227,9 @@ export function splitBlock<TMeta extends BlockMeta, TDocMeta extends BlockMeta =
  * old content length (compute it before calling).
  */
 export function mergeWithPrevious<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   blockId: string,
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   const index = requireBlockIndex(document, blockId, "mergeWithPrevious");
   if (index === 0) {
     throw new RangeError("mergeWithPrevious: block has no previous block");
@@ -252,11 +252,11 @@ export function mergeWithPrevious<TMeta extends BlockMeta, TDocMeta extends Bloc
  * at `offset + length(node)` afterwards.
  */
 export function insertInlineNode<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   blockId: string,
   offset: number,
   node: InlineNode,
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   const index = requireBlockIndex(document, blockId, "insertInlineNode");
   const block = document.blocks[index]!;
   if (!isTextLike(block)) {
@@ -282,11 +282,11 @@ export function getInlineNodeLength(node: InlineNode): number {
  * point (D6): the popover edits a placeholder/mention in place.
  */
 export function updateInlineObjectAt<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   blockId: string,
   offset: number,
   patch: { data?: Record<string, unknown>; meta?: Record<string, unknown> },
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   const index = requireBlockIndex(document, blockId, "updateInlineObjectAt");
   const block = document.blocks[index]!;
   if (!isTextLike(block)) {
@@ -318,10 +318,10 @@ export function updateInlineObjectAt<TMeta extends BlockMeta, TDocMeta extends B
  * out-of-range offset or a non-text-like block.
  */
 export function removeInlineNodeAt<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   blockId: string,
   offset: number,
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   const index = requireBlockIndex(document, blockId, "removeInlineNodeAt");
   const block = document.blocks[index]!;
   if (!isTextLike(block)) {
@@ -339,24 +339,24 @@ export function removeInlineNodeAt<TMeta extends BlockMeta, TDocMeta extends Blo
 }
 
 export function indentBlock<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   blockId: string,
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   return shiftIndent(document, blockId, 1);
 }
 
 export function outdentBlock<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   blockId: string,
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   return shiftIndent(document, blockId, -1);
 }
 
 function shiftIndent<TMeta extends BlockMeta, TDocMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   blockId: string,
   delta: number,
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   const index = requireBlockIndex(document, blockId, "indent/outdent");
   const block = document.blocks[index]!;
   if (block.type !== "text") {
@@ -389,7 +389,7 @@ const IMAGE_GROUP_ENTRY_PATCHABLE_KEYS: ReadonlySet<string> = new Set([
 ]);
 
 function requireImageGroup<TMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta, BlockMeta>,
+  document: MogulDocument<TMeta, BlockMeta>,
   groupId: string,
   operation: string,
 ): { index: number; group: ImageGroupBlock<TMeta> } {
@@ -406,10 +406,10 @@ function parseBlock<TMeta extends BlockMeta>(block: Block<TMeta>): Block<TMeta> 
 }
 
 function replaceBlockAt<TMeta extends BlockMeta, TDocMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   index: number,
   ...replacement: Block<TMeta>[]
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   const blocks = [...document.blocks];
   blocks.splice(index, 1, ...replacement);
   return withBlocks(document, blocks);
@@ -459,11 +459,11 @@ function groupOrCollapse<TMeta extends BlockMeta>(
 
 /** Inserts an entry after `afterEntryId` (null = at the start of the group). */
 export function insertImageGroupEntry<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   groupId: string,
   afterEntryId: string | null,
   entry: ImageGroupEntry<TMeta>,
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   const { index, group } = requireImageGroup(document, groupId, "insertImageGroupEntry");
   if (group.images.some((existing) => existing.id === entry.id)) {
     throw new RangeError(`insertImageGroupEntry: duplicate entry id: ${entry.id}`);
@@ -480,11 +480,11 @@ export function insertImageGroupEntry<TMeta extends BlockMeta, TDocMeta extends 
 
 /** Shallow-merges `patch` into one entry; `id` is immutable, unknown keys throw. */
 export function updateImageGroupEntry<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   groupId: string,
   entryId: string,
   patch: Partial<Omit<ImageGroupEntry<TMeta>, "id">>,
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   const { index, group } = requireImageGroup(document, groupId, "updateImageGroupEntry");
   const entryIndex = group.images.findIndex((existing) => existing.id === entryId);
   if (entryIndex === -1) {
@@ -506,10 +506,10 @@ export function updateImageGroupEntry<TMeta extends BlockMeta, TDocMeta extends 
  * image block in the same slot (the group's id is reused).
  */
 export function removeImageGroupEntry<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   groupId: string,
   entryId: string,
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   const { index, group } = requireImageGroup(document, groupId, "removeImageGroupEntry");
   if (!group.images.some((existing) => existing.id === entryId)) {
     throw new RangeError(`removeImageGroupEntry: entry not found: ${entryId}`);
@@ -529,11 +529,11 @@ export function removeImageGroupEntry<TMeta extends BlockMeta, TDocMeta extends 
  * would leave an empty left side).
  */
 export function splitImageGroup<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   groupId: string,
   beforeEntryId: string,
   newBlockId: string = generateBlockId(),
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   const { index, group } = requireImageGroup(document, groupId, "splitImageGroup");
   const at = group.images.findIndex((existing) => existing.id === beforeEntryId);
   if (at === -1) {
@@ -556,9 +556,9 @@ export function splitImageGroup<TMeta extends BlockMeta, TDocMeta extends BlockM
  * reference when nothing changed so callers can skip a no-op transaction.
  */
 export function pruneEmptyImageSlots<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   options: { exceptBlockId?: string | undefined } = {},
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   let changed = false;
   const blocks: Block<TMeta>[] = [];
   for (const block of document.blocks) {
@@ -594,10 +594,10 @@ export function pruneEmptyImageSlots<TMeta extends BlockMeta, TDocMeta extends B
  * clamped to 1..6.
  */
 export function moveSection<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   headingId: string,
   afterBlockId: string | null,
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   const range = requireSectionRange(document, headingId, "moveSection");
   const extracted = document.blocks.slice(range.start, range.end);
   const remaining = [...document.blocks.slice(0, range.start), ...document.blocks.slice(range.end)];
@@ -638,9 +638,9 @@ function clampLevel(level: number): HeadingLevel {
 
 /** Deletes a heading and every block in its section. */
 export function deleteSection<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   headingId: string,
-): WealthyDocument<TMeta, TDocMeta> {
+): MogulDocument<TMeta, TDocMeta> {
   const range = requireSectionRange(document, headingId, "deleteSection");
   const blocks = [...document.blocks.slice(0, range.start), ...document.blocks.slice(range.end)];
   return withBlocks(document, blocks);
@@ -652,9 +652,9 @@ export function deleteSection<TMeta extends BlockMeta, TDocMeta extends BlockMet
  * heading id is returned alongside the document.
  */
 export function duplicateSection<TMeta extends BlockMeta, TDocMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   headingId: string,
-): { document: WealthyDocument<TMeta, TDocMeta>; newHeadingId: string } {
+): { document: MogulDocument<TMeta, TDocMeta>; newHeadingId: string } {
   const range = requireSectionRange(document, headingId, "duplicateSection");
   const copies = document.blocks
     .slice(range.start, range.end)

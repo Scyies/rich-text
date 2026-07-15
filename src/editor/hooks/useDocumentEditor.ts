@@ -7,7 +7,7 @@ import {
 } from "../core/commands";
 import { getSectionRange, type Section, type SectionTree } from "../core/sections";
 import type { EditorSelection } from "../core/selection";
-import type { BlockMeta, WealthyDocument } from "../core/schema";
+import type { BlockMeta, MogulDocument } from "../core/schema";
 
 /**
  * Headless document editor hook (v0.3).
@@ -23,11 +23,11 @@ export interface UseDocumentEditorOptions<
   TMeta extends BlockMeta = BlockMeta,
   TDocMeta extends BlockMeta = BlockMeta,
 > {
-  value: WealthyDocument<TMeta, TDocMeta>;
+  value: MogulDocument<TMeta, TDocMeta>;
   /** Fires after every transaction (commands, patches, undo/redo). */
-  onChange?: ((document: WealthyDocument<TMeta, TDocMeta>, info: ChangeInfo) => void) | undefined;
+  onChange?: ((document: MogulDocument<TMeta, TDocMeta>, info: ChangeInfo) => void) | undefined;
   /** Fires on explicit `commit()` and on idle commit. */
-  onCommit?: ((document: WealthyDocument<TMeta, TDocMeta>) => void) | undefined;
+  onCommit?: ((document: MogulDocument<TMeta, TDocMeta>) => void) | undefined;
   /** Auto-commit after this many ms without a transaction. Off by default. */
   commitIdleMs?: number | undefined;
   /** Undo depth (engine creation time only). */
@@ -37,7 +37,7 @@ export interface UseDocumentEditorOptions<
 }
 
 export interface DocumentEditorApi<TMeta extends BlockMeta = BlockMeta, TDocMeta extends BlockMeta = BlockMeta> {
-  document: WealthyDocument<TMeta, TDocMeta>;
+  document: MogulDocument<TMeta, TDocMeta>;
   commands: EditorCommands<TMeta>;
   /** Escape hatch to the underlying engine. */
   engine: EditorEngine<TMeta, TDocMeta>;
@@ -69,8 +69,8 @@ const EMPTY_SET: ReadonlySet<string> = new Set<string>();
  * deserialized, or loaded) triggers a switch.
  */
 function isSameDocument<TMeta extends BlockMeta, TDocMeta extends BlockMeta>(
-  a: WealthyDocument<TMeta, TDocMeta>,
-  b: WealthyDocument<TMeta, TDocMeta>,
+  a: MogulDocument<TMeta, TDocMeta>,
+  b: MogulDocument<TMeta, TDocMeta>,
 ): boolean {
   if (a === b) {
     return true;
@@ -108,7 +108,7 @@ export function useDocumentEditor<TMeta extends BlockMeta = BlockMeta, TDocMeta 
   // Committed baseline: ref for timers, state for render reactivity.
   const [lastCommitted, setLastCommittedState] = useState(value);
   const lastCommittedRef = useRef(value);
-  const setLastCommitted = useCallback((document: WealthyDocument<TMeta, TDocMeta>) => {
+  const setLastCommitted = useCallback((document: MogulDocument<TMeta, TDocMeta>) => {
     lastCommittedRef.current = document;
     setLastCommittedState(document);
   }, []);

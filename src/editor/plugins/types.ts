@@ -8,7 +8,7 @@ import type { DocumentEditorApi } from "../hooks/useDocumentEditor";
  * Plugin surface (D5/D6). Plugins register per-`kind` renderers and editor
  * extensions; the host passes them to `<DocumentEditor plugins={…}>`. These
  * types live React-side (renderers return `ReactNode`) — the core entry
- * (`wealthy-text-editor`) stays React-free. See ARCHITECTURE.md D5/D6.
+ * (`mogul-text-editor`) stays React-free. See ARCHITECTURE.md D5/D6.
  */
 
 // ---------------------------------------------------------------------------

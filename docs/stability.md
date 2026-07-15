@@ -11,17 +11,17 @@ is a contract:
   locale.
 - **Fixes** → patch version.
 
-The package is currently `0.x` (alpha): the surface is being finalized, so it may still change
-before 1.0. Once 1.0 ships, the guarantees above apply.
+The package is currently `0.5.x` (pre-1.0) and published on npm's `latest` channel. The surface
+is still being finalized, so it may change before 1.0. Once 1.0 ships, the guarantees above apply.
 
 ## What is public
 
 The public API is exactly what's exported from the documented entry points:
 
-- `wealthy-text-editor` (root, React-free)
-- `wealthy-text-editor/react`
-- `wealthy-text-editor/export-html`, `/export-markdown`, `/export-docx`
-- `wealthy-text-editor/styles.css` — the [stable classes & variables](./styling.md) only
+- `mogul-text-editor` (root, React-free)
+- `mogul-text-editor/react`
+- `mogul-text-editor/export-html`, `/export-markdown`, `/export-docx`
+- `mogul-text-editor/styles.css` — the [stable classes & variables](./styling.md) only
 
 See the [API reference](./api-reference.md) for the full enumeration.
 
@@ -59,7 +59,7 @@ Deliberate design choices you can depend on:
   asset ids for rendering/export and own upload/storage, including pasted/dropped image files.
 - **Image groups:** side-by-side images are semantic `imageGroup` blocks in the model. DOCX
   represents them with borderless tables as an exporter detail, not as nested editor tables.
-- **Two generics on `WealthyDocument`** (`<TBlockMeta, TDocMeta>`), both defaulted, so existing
+- **Two generics on `MogulDocument`** (`<TBlockMeta, TDocMeta>`), both defaulted, so existing
   single-argument and zero-argument uses keep working.
 
 ## Plugin lifecycle (forward-compatible)

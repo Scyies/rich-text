@@ -39,7 +39,7 @@ export type {
   TextBlock,
   TextNode,
   TextVariant,
-  WealthyDocument,
+  MogulDocument,
 } from "./editor/core/schema";
 
 // Factories

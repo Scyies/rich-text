@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import type { ChangeInfo } from "../core/commands";
 import type { EditorSelection } from "../core/selection";
 import type { TurnIntoTarget } from "../core/transforms";
-import { SCHEMA_VERSION, type Block, type BlockMeta, type WealthyDocument } from "../core/schema";
+import { SCHEMA_VERSION, type Block, type BlockMeta, type MogulDocument } from "../core/schema";
 import { useDocumentEditor } from "./useDocumentEditor";
 
 /**
@@ -42,7 +42,7 @@ export function useBlockEditor<TMeta extends BlockMeta = BlockMeta>(
 ): BlockEditorApi<TMeta> {
   const { value, onChange, onCommit } = options;
 
-  const documentValue = useMemo<WealthyDocument<TMeta>>(
+  const documentValue = useMemo<MogulDocument<TMeta>>(
     () => ({ schemaVersion: SCHEMA_VERSION, blocks: [value] }),
     [value],
   );

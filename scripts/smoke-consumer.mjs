@@ -7,7 +7,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const consumer = await mkdtemp(join(tmpdir(), "wealthy-text-consumer-"));
+const consumer = await mkdtemp(join(tmpdir(), "mogul-text-consumer-"));
 const corepackPnpm = join(dirname(process.execPath), "node_modules", "corepack", "dist", "pnpm.js");
 const runPnpm = (args, options = {}) => existsSync(corepackPnpm)
   ? execFileSync(process.execPath, [corepackPnpm, ...args], options)
@@ -24,7 +24,7 @@ try {
     private: true,
     type: "module",
     dependencies: {
-      "wealthy-text-editor": `file:${resolve(root, tarball)}`,
+      "mogul-text-editor": `file:${resolve(root, tarball)}`,
       react: "19.2.7",
       "react-dom": "19.2.7",
       "@types/react": "19.2.17",
@@ -36,23 +36,23 @@ try {
   runPnpm(["install", "--ignore-workspace", "--prefer-offline"], { cwd: consumer, stdio: "pipe" });
 
   await writeFile(join(consumer, "esm.mjs"), `
-    import { createEmptyDocument } from "wealthy-text-editor";
-    import { separatorPlugin } from "wealthy-text-editor/react";
-    import { exportHtml } from "wealthy-text-editor/export-html";
+    import { createEmptyDocument } from "mogul-text-editor";
+    import { separatorPlugin } from "mogul-text-editor/react";
+    import { exportHtml } from "mogul-text-editor/export-html";
     const doc = createEmptyDocument();
     if (doc.blocks.length !== 1 || typeof exportHtml(doc) !== "string" || separatorPlugin.name !== "wte-separator") process.exit(1);
   `);
   await writeFile(join(consumer, "cjs.cjs"), `
-    const core = require("wealthy-text-editor");
-    const react = require("wealthy-text-editor/react");
+    const core = require("mogul-text-editor");
+    const react = require("mogul-text-editor/react");
     if (core.createEmptyDocument().blocks.length !== 1 || typeof react.DocumentEditor !== "function") process.exit(1);
   `);
   await writeFile(join(consumer, "minuta-consumer.tsx"), `
-    import type { WealthyDocument } from "wealthy-text-editor";
-    import { defineBlockType, type DocumentEditorApi, type EditorPlugin } from "wealthy-text-editor/react";
+    import type { MogulDocument } from "mogul-text-editor";
+    import { defineBlockType, type DocumentEditorApi, type EditorPlugin } from "mogul-text-editor/react";
     type LegalBlockMeta = Record<string, unknown> & { role?: "facts" | "requests"; provenance?: "human" | "agent" };
     type LegalDocumentMeta = Record<string, unknown> & { caseId: string; jurisdiction: string };
-    declare const document: WealthyDocument<LegalBlockMeta, LegalDocumentMeta>;
+    declare const document: MogulDocument<LegalBlockMeta, LegalDocumentMeta>;
     declare const editor: DocumentEditorApi<LegalBlockMeta, LegalDocumentMeta>;
     const signature = defineBlockType({ kind: "signature", decode: (data) => ({ signer: String(data.signer ?? "") }), render: ({ block }) => block.data.signer });
     const plugin: EditorPlugin<LegalBlockMeta> = { name: "minuta", blockTypes: [signature] };
@@ -61,8 +61,8 @@ try {
     plugin.name satisfies string;
   `);
   await writeFile(join(consumer, "require-consumer.cts"), `
-    import { createEmptyDocument } from "wealthy-text-editor";
-    import { DocumentEditor } from "wealthy-text-editor/react";
+    import { createEmptyDocument } from "mogul-text-editor";
+    import { DocumentEditor } from "mogul-text-editor/react";
     createEmptyDocument().blocks.length satisfies number;
     DocumentEditor satisfies Function;
   `);
@@ -74,8 +74,8 @@ try {
   execFileSync(process.execPath, [join(root, "node_modules", "typescript", "bin", "tsc"), "-p", join(consumer, "tsconfig.json")], { stdio: "inherit" });
   execFileSync(process.execPath, [join(consumer, "esm.mjs")], { stdio: "pipe" });
   execFileSync(process.execPath, [join(consumer, "cjs.cjs")], { stdio: "pipe" });
-  const packedPackage = JSON.parse(await readFile(join(consumer, "node_modules", "wealthy-text-editor", "package.json"), "utf8"));
-  if (packedPackage.name !== "wealthy-text-editor") throw new Error("packed dependency was not installed");
+  const packedPackage = JSON.parse(await readFile(join(consumer, "node_modules", "mogul-text-editor", "package.json"), "utf8"));
+  if (packedPackage.name !== "mogul-text-editor") throw new Error("packed dependency was not installed");
   console.log("Clean Minuta-style ESM, CJS, and TypeScript consumer checks passed.");
 } finally {
   await rm(consumer, { recursive: true, force: true });

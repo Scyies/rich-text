@@ -2,12 +2,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, within } from "@testing-library/react";
 import { createTableBlock, createTextBlock } from "../core/factories";
-import { SCHEMA_VERSION, type Block, type WealthyDocument } from "../core/schema";
+import { SCHEMA_VERSION, type Block, type MogulDocument } from "../core/schema";
 import { DocumentEditor } from "./DocumentEditor";
 
 afterEach(cleanup);
 
-function docWith(blocks: Block[]): WealthyDocument {
+function docWith(blocks: Block[]): MogulDocument {
   return { schemaVersion: SCHEMA_VERSION, blocks };
 }
 

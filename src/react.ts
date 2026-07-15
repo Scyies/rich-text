@@ -1,6 +1,6 @@
 /**
- * wealthy-text-editor/react — React surface of the library.
- * The root entry ("wealthy-text-editor") is React-free and server-safe
+ * mogul-text-editor/react — React surface of the library.
+ * The root entry ("mogul-text-editor") is React-free and server-safe
  * (schema, engine, transforms, patches); this entry adds hooks and
  * components for the client.
  */

@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { createEditorEngine } from "./commands";
 import { createHeadingBlock, createTextBlock } from "./factories";
 import { getInlineText } from "./inline";
-import { SCHEMA_VERSION, type Block, type TextBlock, type WealthyDocument } from "./schema";
+import { SCHEMA_VERSION, type Block, type TextBlock, type MogulDocument } from "./schema";
 
-function docWith(blocks: Block[]): WealthyDocument {
+function docWith(blocks: Block[]): MogulDocument {
   return { schemaVersion: SCHEMA_VERSION, blocks };
 }
 

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createHeadingBlock, createTextBlock, generateBlockId } from "./factories";
 import { PatchError, applyPatches } from "./patches";
-import { SCHEMA_VERSION, type Block, type TextBlock, type WealthyDocument } from "./schema";
+import { SCHEMA_VERSION, type Block, type TextBlock, type MogulDocument } from "./schema";
 
-function docWith(blocks: Block[]): WealthyDocument {
+function docWith(blocks: Block[]): MogulDocument {
   return { schemaVersion: SCHEMA_VERSION, blocks };
 }
 

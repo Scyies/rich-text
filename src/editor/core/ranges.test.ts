@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { createImageBlock, createTextBlock } from "./factories";
 import { getInlineText } from "./inline";
 import { deleteTextRange, extractTextRange, replaceTextRangeWithBlocks, replaceTextRangeWithInline, textRangeToPlainText } from "./ranges";
-import { SCHEMA_VERSION, type WealthyDocument } from "./schema";
+import { SCHEMA_VERSION, type MogulDocument } from "./schema";
 
-function docWith(blocks: WealthyDocument["blocks"]): WealthyDocument {
+function docWith(blocks: MogulDocument["blocks"]): MogulDocument {
   return { schemaVersion: SCHEMA_VERSION, blocks };
 }
 

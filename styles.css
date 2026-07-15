@@ -1,8 +1,8 @@
 /**
- * wealthy-text-editor — base stylesheet.
+ * mogul-text-editor — base stylesheet.
  * Headless by design: this file provides structural styling only, themed
  * through CSS variables the host can override. Import once:
- *   import "wealthy-text-editor/styles.css"
+ *   import "mogul-text-editor/styles.css"
  */
 
 .wte-editor {

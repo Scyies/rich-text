@@ -23,11 +23,11 @@ import {
   safeValidateDocument,
   tableBlockSchema,
   validateDocument,
-  type WealthyDocument,
+  type MogulDocument,
 } from "./schema";
 import { deserializeDocument, serializeDocument } from "./serialization";
 
-function docWith(blocks: WealthyDocument["blocks"]): WealthyDocument {
+function docWith(blocks: MogulDocument["blocks"]): MogulDocument {
   return { schemaVersion: SCHEMA_VERSION, blocks };
 }
 
@@ -318,7 +318,7 @@ describe("meta bag round-trip (D5)", () => {
       provenance: { createdBy: "llm", createdAt: "2026-06-11T10:00:00-03:00" },
       sources: { evidenceIds: [generateBlockId()], nested: { deep: [1, "two", null, { ok: true }] } },
     };
-    const doc: WealthyDocument = {
+    const doc: MogulDocument = {
       schemaVersion: SCHEMA_VERSION,
       meta: { workspaceId: generateBlockId() },
       blocks: [

@@ -1,4 +1,4 @@
-import type { BlockMeta, WealthyDocument } from "./schema";
+import type { BlockMeta, MogulDocument } from "./schema";
 import type { EditorSelection } from "./selection";
 
 /**
@@ -12,7 +12,7 @@ export interface HistoryEntry<
   TBlockMeta extends BlockMeta = BlockMeta,
   TDocMeta extends BlockMeta = BlockMeta,
 > {
-  document: WealthyDocument<TBlockMeta, TDocMeta>;
+  document: MogulDocument<TBlockMeta, TDocMeta>;
   selection: EditorSelection | null;
 }
 

@@ -1,4 +1,4 @@
-import type { Block, BlockMeta, HeadingBlock, WealthyDocument } from "./schema";
+import type { Block, BlockMeta, HeadingBlock, MogulDocument } from "./schema";
 
 /**
  * Section derivation (D1, D3).
@@ -23,7 +23,7 @@ export interface SectionTree<TMeta extends BlockMeta = BlockMeta> {
 }
 
 export function getSectionTree<TMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta>,
+  document: MogulDocument<TMeta>,
 ): SectionTree<TMeta> {
   const tree: SectionTree<TMeta> = { preamble: [], sections: [] };
   const stack: Section<TMeta>[] = [];
@@ -55,7 +55,7 @@ export function getSectionTree<TMeta extends BlockMeta = BlockMeta>(
 }
 
 export function getSection<TMeta extends BlockMeta = BlockMeta>(
-  document: WealthyDocument<TMeta>,
+  document: MogulDocument<TMeta>,
   headingId: string,
 ): Section<TMeta> | null {
   return findInSections(getSectionTree(document).sections, headingId);
@@ -83,7 +83,7 @@ function findInSections<TMeta extends BlockMeta>(
  * is not a heading block in the document.
  */
 export function getSectionRange(
-  document: WealthyDocument<BlockMeta>,
+  document: MogulDocument<BlockMeta>,
   headingId: string,
 ): { start: number; end: number } | null {
   const start = document.blocks.findIndex((block) => block.id === headingId);
@@ -111,7 +111,7 @@ export function getSectionRange(
  * one deeper than the innermost section still open at that position, or 1
  * at the top level.
  */
-export function getImpliedLevelAt(document: WealthyDocument<BlockMeta>, index: number): number {
+export function getImpliedLevelAt(document: MogulDocument<BlockMeta>, index: number): number {
   const stack: number[] = [];
   const upTo = Math.min(Math.max(index, 0), document.blocks.length);
   for (let blockIndex = 0; blockIndex < upTo; blockIndex += 1) {

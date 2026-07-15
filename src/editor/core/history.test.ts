@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createEmptyDocument, createTextBlock } from "./factories";
 import { createHistory, type HistoryEntry } from "./history";
-import { SCHEMA_VERSION, type WealthyDocument } from "./schema";
+import { SCHEMA_VERSION, type MogulDocument } from "./schema";
 
 function entry(label: string): HistoryEntry {
-  const doc: WealthyDocument = {
+  const doc: MogulDocument = {
     schemaVersion: SCHEMA_VERSION,
     blocks: [createTextBlock({ content: label })],
   };

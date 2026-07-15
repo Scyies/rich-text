@@ -1,9 +1,9 @@
 const [root, react, html, markdown, docx] = await Promise.all([
-  import("wealthy-text-editor"),
-  import("wealthy-text-editor/react"),
-  import("wealthy-text-editor/export-html"),
-  import("wealthy-text-editor/export-markdown"),
-  import("wealthy-text-editor/export-docx"),
+  import("mogul-text-editor"),
+  import("mogul-text-editor/react"),
+  import("mogul-text-editor/export-html"),
+  import("mogul-text-editor/export-markdown"),
+  import("mogul-text-editor/export-docx"),
 ]);
 
 const checks = [

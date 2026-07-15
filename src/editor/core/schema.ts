@@ -2,7 +2,7 @@ import { z } from "zod";
 import { isSafeLinkHref } from "./urls";
 
 /**
- * wealthy-text-editor — core schema (v0.1)
+ * mogul-text-editor — core schema (v0.1)
  *
  * Design decisions (see ARCHITECTURE.md, D1–D15):
  * - D1: the document is a FLAT array of blocks. Sections are derived from
@@ -423,7 +423,7 @@ export const documentSchema = z
     });
   });
 
-export interface WealthyDocument<
+export interface MogulDocument<
   TBlockMeta extends BlockMeta = BlockMeta,
   TDocMeta extends BlockMeta = BlockMeta,
 > {
@@ -435,7 +435,7 @@ export interface WealthyDocument<
 // Compile-time guarantee that the hand-written generic interfaces stay in
 // sync with the Zod schemas at their default instantiation.
 type _AssertBlockMatches = z.infer<typeof blockSchema> extends Block ? true : never;
-type _AssertDocumentMatches = z.infer<typeof documentSchema> extends WealthyDocument ? true : never;
+type _AssertDocumentMatches = z.infer<typeof documentSchema> extends MogulDocument ? true : never;
 const _blockMatches: _AssertBlockMatches = true;
 const _documentMatches: _AssertDocumentMatches = true;
 void _blockMatches;
@@ -445,8 +445,8 @@ void _documentMatches;
 // Validation helpers
 // ---------------------------------------------------------------------------
 
-export function validateDocument(input: unknown): WealthyDocument {
-  return documentSchema.parse(input) as WealthyDocument;
+export function validateDocument(input: unknown): MogulDocument {
+  return documentSchema.parse(input) as MogulDocument;
 }
 
 export interface DocumentValidationIssue {
@@ -461,11 +461,11 @@ export interface DocumentValidationError {
 }
 
 export function safeValidateDocument(input: unknown):
-  | { success: true; document: WealthyDocument }
+  | { success: true; document: MogulDocument }
   | { success: false; error: DocumentValidationError } {
   const result = documentSchema.safeParse(input);
   return result.success
-    ? { success: true, document: result.data as WealthyDocument }
+    ? { success: true, document: result.data as MogulDocument }
     : {
         success: false,
         error: {

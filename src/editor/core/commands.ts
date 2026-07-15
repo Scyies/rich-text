@@ -5,7 +5,7 @@ import { applyPatches, type DocumentPatch } from "./patches";
 import { deleteTextRange as deleteDocumentTextRange, replaceTextRangeWithBlocks, replaceTextRangeWithInline } from "./ranges";
 import { caretAt, clampSelection, selectionsEqual, type EditorSelection, type TextSelection } from "./selection";
 import { getSection, getSectionTree, type Section, type SectionTree } from "./sections";
-import type { Block, BlockMeta, ImageGroupEntry, InlineNode, WealthyDocument } from "./schema";
+import type { Block, BlockMeta, ImageGroupEntry, InlineNode, MogulDocument } from "./schema";
 import * as transforms from "./transforms";
 import type { TurnIntoTarget } from "./transforms";
 
@@ -28,7 +28,7 @@ export type EngineListener<
   TBlockMeta extends BlockMeta = BlockMeta,
   TDocMeta extends BlockMeta = BlockMeta,
 > = (
-  document: WealthyDocument<TBlockMeta, TDocMeta>,
+  document: MogulDocument<TBlockMeta, TDocMeta>,
   info: ChangeInfo,
 ) => void;
 
@@ -36,7 +36,7 @@ export interface EditorEngineOptions<
   TBlockMeta extends BlockMeta = BlockMeta,
   TDocMeta extends BlockMeta = BlockMeta,
 > {
-  value: WealthyDocument<TBlockMeta, TDocMeta>;
+  value: MogulDocument<TBlockMeta, TDocMeta>;
   /** Maximum undo depth; engine creation time only. */
   limit?: number;
   /** Edits with the same coalesce key within this window merge. */
@@ -118,9 +118,9 @@ export interface EditorEngine<
   TBlockMeta extends BlockMeta = BlockMeta,
   TDocMeta extends BlockMeta = BlockMeta,
 > {
-  getDocument(): WealthyDocument<TBlockMeta, TDocMeta>;
+  getDocument(): MogulDocument<TBlockMeta, TDocMeta>;
   /** Document switch (D10: new `value` reference) — resets history. */
-  setDocument(document: WealthyDocument<TBlockMeta, TDocMeta>): void;
+  setDocument(document: MogulDocument<TBlockMeta, TDocMeta>): void;
   getSelection(): EditorSelection | null;
   /**
    * Selection updates notify subscribers (origin "selection") but never
@@ -164,8 +164,8 @@ export function createEditorEngine<
   function transact<TResult>(
     command: string,
     coalesceKey: string | null,
-    run: (current: WealthyDocument<TBlockMeta, TDocMeta>) => {
-      document: WealthyDocument<TBlockMeta, TDocMeta>;
+    run: (current: MogulDocument<TBlockMeta, TDocMeta>) => {
+      document: MogulDocument<TBlockMeta, TDocMeta>;
       result: TResult;
       selection?: EditorSelection | null;
     },

@@ -20,7 +20,7 @@ import {
   type TableRow,
   type TextBlock,
   type TextVariant,
-  type WealthyDocument,
+  type MogulDocument,
 } from "./schema";
 
 export function generateBlockId(): string {
@@ -266,7 +266,7 @@ export function createBlock<TMeta extends BlockMeta = BlockMeta>(input: CreateBl
 export function createEmptyDocument<
   TBlockMeta extends BlockMeta = BlockMeta,
   TDocMeta extends BlockMeta = BlockMeta,
->(): WealthyDocument<TBlockMeta, TDocMeta> {
+>(): MogulDocument<TBlockMeta, TDocMeta> {
   return {
     schemaVersion: SCHEMA_VERSION,
     blocks: [createTextBlock<TBlockMeta>()],

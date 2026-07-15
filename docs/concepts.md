@@ -1,13 +1,13 @@
 # Concepts & data model
 
-Wealthy Text Editor is **schema-first**: the document is plain JSON, and everything
+Mogul Text Editor is **schema-first**: the document is plain JSON, and everything
 else — sections, numbering, the React UI, the exporters — is derived from it. Understanding
 the model is most of understanding the library.
 
 ## The document
 
 ```ts
-interface WealthyDocument<TBlockMeta = BlockMeta, TDocMeta = BlockMeta> {
+interface MogulDocument<TBlockMeta = BlockMeta, TDocMeta = BlockMeta> {
   schemaVersion: 1;
   blocks: Block<TBlockMeta>[];
   meta?: TDocMeta;
@@ -23,7 +23,7 @@ the data: no `children`, no `parentId`. Containment (a heading and the blocks un
 
 > The two generics let a host type block-level and document-level metadata independently
 > (`{ role }` on blocks vs. `{ caseId, court }` on the document). Both default to an open
-> record, so `WealthyDocument` with no type arguments is fully usable.
+> record, so `MogulDocument` with no type arguments is fully usable.
 
 ## Blocks
 
@@ -179,10 +179,10 @@ This is the host's extension point for domain data (e.g. Minuta's `meta.role`).
 
 The package ships a **React-free core** and a separate **React surface**:
 
-- **`wealthy-text-editor`** (root) — schema, factories, the headless engine, pure transforms,
+- **`mogul-text-editor`** (root) — schema, factories, the headless engine, pure transforms,
   the patch pipeline, sections, numbering, serialization. **Zero React**, safe to run on a
   server (e.g. apply LLM-generated patches, export a document). See [Headless & server use](./headless.md).
-- **`wealthy-text-editor/react`** — hooks and components (`DocumentEditor`, `BlockEditor`),
+- **`mogul-text-editor/react`** — hooks and components (`DocumentEditor`, `BlockEditor`),
   the plugin system, paste, and i18n.
 
 Exporters live in their own subpaths (`/export-html`, `/export-markdown`, `/export-docx`) so

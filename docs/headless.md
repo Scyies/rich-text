@@ -1,6 +1,6 @@
 # Headless & server use
 
-The root entry, `wealthy-text-editor`, is **React-free and DOM-free**. It holds the schema, the
+The root entry, `mogul-text-editor`, is **React-free and DOM-free**. It holds the schema, the
 headless engine, the pure transforms, the patch pipeline, sections, numbering, and
 serialization. You can run all of it on a server or in a worker — to apply LLM-generated edits,
 validate stored documents, or export — without ever touching React.
@@ -12,7 +12,7 @@ import {
   validateDocument,
   serializeDocument,
   deserializeDocument,
-} from "wealthy-text-editor";
+} from "mogul-text-editor";
 ```
 
 ## The engine
@@ -48,7 +48,7 @@ failure leaves the document untouched, and the result is fully re-validated (pat
 untrusted).
 
 ```ts
-import { applyPatches } from "wealthy-text-editor";
+import { applyPatches } from "mogul-text-editor";
 
 const { document, applied } = applyPatches(current, [
   { op: "update_block", blockId, changes: { content: [{ type: "text", text: "Updated" }] } },
@@ -84,7 +84,7 @@ Sections and numbering are pure functions over the document — ideal for server
 tables of contents, or feeding a custom exporter:
 
 ```ts
-import { getSectionTree, getHeadingNumbers, formatHeadingNumber } from "wealthy-text-editor";
+import { getSectionTree, getHeadingNumbers, formatHeadingNumber } from "mogul-text-editor";
 
 const tree = getSectionTree(document);
 const numbers = getHeadingNumbers(document); // Map<blockId, number[]>
@@ -97,4 +97,4 @@ a host builds on — for example, a custom Word generator for legal templates. S
 ## See also
 
 - [Concepts: the two entry points](./concepts.md#the-two-entry-points)
-- [API reference: root](./api-reference.md#root--wealthy-text-editor)
+- [API reference: root](./api-reference.md#root--mogul-text-editor)

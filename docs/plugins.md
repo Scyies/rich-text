@@ -5,7 +5,7 @@ and **toolbar buttons**. They live entirely on the React side and are passed via
 prop. Everything is additive — the core never knows about your domain.
 
 ```tsx
-import { DocumentEditor, separatorPlugin, type EditorPlugin } from "wealthy-text-editor/react";
+import { DocumentEditor, separatorPlugin, type EditorPlugin } from "mogul-text-editor/react";
 
 <DocumentEditor value={doc} onChange={setDoc} plugins={[separatorPlugin, myPlugin]} />;
 ```

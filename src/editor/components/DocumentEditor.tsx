@@ -54,7 +54,7 @@ import type {
   InlineMark,
   InlineNode,
   TableBlock,
-  WealthyDocument,
+  MogulDocument,
 } from "../core/schema";
 import { useDocumentEditor, type DocumentEditorApi } from "../hooks/useDocumentEditor";
 import { getInlineNodeLength } from "../core/transforms";
@@ -121,9 +121,9 @@ export interface DocumentEditorProps<
   TMeta extends BlockMeta = BlockMeta,
   TDocMeta extends BlockMeta = BlockMeta,
 > {
-  value: WealthyDocument<TMeta, TDocMeta>;
-  onChange?: ((document: WealthyDocument<TMeta, TDocMeta>, info: ChangeInfo) => void) | undefined;
-  onCommit?: ((document: WealthyDocument<TMeta, TDocMeta>) => void) | undefined;
+  value: MogulDocument<TMeta, TDocMeta>;
+  onChange?: ((document: MogulDocument<TMeta, TDocMeta>, info: ChangeInfo) => void) | undefined;
+  onCommit?: ((document: MogulDocument<TMeta, TDocMeta>) => void) | undefined;
   commitIdleMs?: number | undefined;
   readOnly?: boolean | undefined;
   /** Show computed hierarchical numbers (1., 1.1…) before headings. */
@@ -247,7 +247,7 @@ function isTextLike(block: Block): block is Extract<Block, { type: "heading" | "
 }
 
 function isSupportedTopLevelTextRange<TMeta extends BlockMeta, TDocMeta extends BlockMeta>(
-  document: WealthyDocument<TMeta, TDocMeta>,
+  document: MogulDocument<TMeta, TDocMeta>,
   selection: TextSelection,
 ): boolean {
   if (selection.anchor.entryId !== undefined || selection.focus.entryId !== undefined) return false;
@@ -1049,7 +1049,7 @@ export function DocumentEditor<
 
       const html = event.clipboardData.getData("text/html");
       const text = event.clipboardData.getData("text/plain");
-      const structured = event.clipboardData.getData("application/x-wealthy-text+json");
+      const structured = event.clipboardData.getData("application/x-mogul-text+json");
       const imageFiles = getImageFiles(event.clipboardData);
       if (html.trim().length === 0 && text.length === 0 && structured.length === 0 && imageFiles.length === 0) {
         return;
@@ -1480,7 +1480,7 @@ export function DocumentEditor<
   const writeSelectionToClipboard = useCallback((clipboardData: DataTransfer): boolean => {
     const selection = engine.getSelection();
     const currentDocument = engine.getDocument();
-    let fragment: WealthyDocument<TMeta, TDocMeta>;
+    let fragment: MogulDocument<TMeta, TDocMeta>;
     let plainText: string;
     if (selection?.type === "text" && !isCollapsed(selection)) {
       try {
@@ -1501,7 +1501,7 @@ export function DocumentEditor<
     }
     clipboardData.setData("text/plain", plainText);
     clipboardData.setData("text/html", exportHtml(fragment));
-    clipboardData.setData("application/x-wealthy-text+json", serializeDocument(fragment));
+    clipboardData.setData("application/x-mogul-text+json", serializeDocument(fragment));
     return true;
   }, [engine]);
 

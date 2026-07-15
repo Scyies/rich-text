@@ -6,9 +6,9 @@ import {
   getHeadingNumberPath,
   getListItemNumbers,
 } from "./numbering";
-import { SCHEMA_VERSION, type Block, type WealthyDocument } from "./schema";
+import { SCHEMA_VERSION, type Block, type MogulDocument } from "./schema";
 
-function docWith(blocks: Block[]): WealthyDocument {
+function docWith(blocks: Block[]): MogulDocument {
   return { schemaVersion: SCHEMA_VERSION, blocks };
 }
 

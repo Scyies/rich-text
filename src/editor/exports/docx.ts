@@ -32,11 +32,11 @@ import type {
   InlineObjectNode,
   TableBlock,
   TextBlock,
-  WealthyDocument,
+  MogulDocument,
 } from "../core/schema";
 
 /**
- * docx exporter (D12 — subpath entry `wealthy-text-editor/export-docx`).
+ * docx exporter (D12 — subpath entry `mogul-text-editor/export-docx`).
  *
  * The only exporter with a heavy dependency (`docx`); it loads solely through
  * this subpath. Consumes the pure document model — zero React. Returns a
@@ -288,7 +288,7 @@ function blockToDocx(block: Block, options: DocxExportOptions): FileChild | File
   }
 }
 
-export function exportDocx(document: WealthyDocument<BlockMeta>, options: DocxExportOptions = {}): Document {
+export function exportDocx(document: MogulDocument<BlockMeta>, options: DocxExportOptions = {}): Document {
   const children: FileChild[] = [];
   for (const block of document.blocks) {
     const mapped = blockToDocx(block, options);
