@@ -64,6 +64,8 @@ export function defineBlockType<
 export interface InlineObjectEditorContext {
   /** Replace the object's data/meta in the model (atomic, undoable). Each is replaced wholesale when provided. */
   update(patch: { data?: Record<string, unknown>; meta?: Record<string, unknown> }): void;
+  /** Replace the chip with ordinary text as one atomic, undoable edit. */
+  replaceWithText(text: string): void;
   /** Remove the chip from its block. */
   remove(): void;
   /** Close the popover without further changes. */

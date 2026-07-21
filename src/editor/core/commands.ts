@@ -75,6 +75,8 @@ export interface EditorCommands<TBlockMeta extends BlockMeta = BlockMeta> {
     offset: number,
     patch: { data?: Record<string, unknown>; meta?: Record<string, unknown> },
   ): void;
+  /** Replaces the inline object at `offset` with ordinary text as one undoable edit. */
+  replaceInlineObjectWithText(blockId: string, offset: number, text: string): void;
   /** Removes the inline node (one inline unit, e.g. a chip) at `offset`. */
   removeInlineNode(blockId: string, offset: number): void;
   /** Inserts an image-group entry after `afterEntryId` (null = at the start). */
@@ -330,6 +332,13 @@ export function createEditorEngine<
     updateInlineObject(blockId, offset, patch) {
       transact("updateInlineObject", null, (current) => ({
         document: transforms.updateInlineObjectAt(current, blockId, offset, patch),
+        result: undefined,
+      }));
+    },
+
+    replaceInlineObjectWithText(blockId, offset, text) {
+      transact("replaceInlineObjectWithText", null, (current) => ({
+        document: transforms.replaceInlineObjectWithTextAt(current, blockId, offset, text),
         result: undefined,
       }));
     },

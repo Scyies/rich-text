@@ -2118,6 +2118,10 @@ export function DocumentEditor<
         >
           {chipEditState.renderEditor(chipEditState.node, {
             update: (patch) => commands.updateInlineObject(chipEditState.blockId, chipEditState.offset, patch),
+            replaceWithText: (text) => {
+              commands.replaceInlineObjectWithText(chipEditState.blockId, chipEditState.offset, text);
+              closeChipEdit();
+            },
             remove: () => {
               commands.removeInlineNode(chipEditState.blockId, chipEditState.offset);
               closeChipEdit();

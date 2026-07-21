@@ -120,6 +120,7 @@ export {
   moveSection,
   outdentBlock,
   pruneEmptyImageSlots,
+  replaceInlineObjectWithTextAt,
   removeImageGroupEntry,
   removeInlineNodeAt,
   splitBlock,

@@ -879,7 +879,7 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
             ? node.data["value"]
             : `{${String(node.data["label"] ?? node.kind)}}`,
         getClassName: (node) => (node.data["value"] !== undefined ? "filled" : "empty"),
-        renderEditor: (node, { update, remove }) => (
+        renderEditor: (node, { update, replaceWithText, remove }) => (
           <div>
             <input
               aria-label="fill"
@@ -888,6 +888,9 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
             />
             <button type="button" onClick={remove}>
               remove-chip
+            </button>
+            <button type="button" onClick={() => replaceWithText("Mariana Oliveira")}>
+              replace-with-text
             </button>
           </div>
         ),
@@ -951,6 +954,24 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
 
     const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect((latest.blocks[0] as TextBlock).content).toEqual([{ type: "text", text: "Olá " }]);
+    expect(within(container).queryByRole("dialog")).toBeNull();
+  });
+
+  it("the popover's replaceWithText() collapses the chip to ordinary text", () => {
+    const block = chipBlock();
+    const onChange = vi.fn();
+    const { container } = render(
+      <DocumentEditor value={docWith([block])} onChange={onChange} plugins={[fillablePlaceholder]} />,
+    );
+
+    fireEvent.pointerDown(container.querySelector(".wte-inline-object")!, { pointerId: 1, button: 0 });
+    fireEvent.click(within(container).getByRole("button", { name: "replace-with-text" }));
+
+    const latest = onChange.mock.lastCall![0] as MogulDocument;
+    expect((latest.blocks[0] as TextBlock).content).toEqual([
+      { type: "text", text: "Olá Mariana Oliveira" },
+    ]);
+    expect(container.querySelector(".wte-inline-object")).toBeNull();
     expect(within(container).queryByRole("dialog")).toBeNull();
   });
 

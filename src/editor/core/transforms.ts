@@ -312,6 +312,38 @@ export function updateInlineObjectAt<TMeta extends BlockMeta, TDocMeta extends B
   return withBlocks(document, blocks);
 }
 
+/** Replace one atomic inline object with ordinary text, merging adjacent text nodes. */
+export function replaceInlineObjectWithTextAt<
+  TMeta extends BlockMeta,
+  TDocMeta extends BlockMeta = BlockMeta,
+>(
+  document: MogulDocument<TMeta, TDocMeta>,
+  blockId: string,
+  offset: number,
+  text: string,
+): MogulDocument<TMeta, TDocMeta> {
+  const index = requireBlockIndex(document, blockId, "replaceInlineObjectWithTextAt");
+  const block = document.blocks[index]!;
+  if (!isTextLike(block)) {
+    throw new RangeError(
+      `replaceInlineObjectWithTextAt: only heading/text blocks hold inline content (got ${block.type})`,
+    );
+  }
+  const [left, rest] = splitInlineContent(block.content, offset);
+  const target = rest[0];
+  if (target === undefined || target.type !== "object") {
+    throw new RangeError(
+      `replaceInlineObjectWithTextAt: no inline object at offset ${offset} in block ${blockId}`,
+    );
+  }
+  const [, right] = splitInlineContent(rest, 1);
+  const replacement: InlineNode[] = text.length > 0 ? [{ type: "text", text }] : [];
+  const content = concatInlineContent(concatInlineContent(left, replacement), right);
+  const blocks = [...document.blocks];
+  blocks[index] = { ...block, content };
+  return withBlocks(document, blocks);
+}
+
 /**
  * Removes the single inline node (one inline unit) at `offset` — the chip a
  * popover's `remove()` deletes, or any one atomic object. Throws on an

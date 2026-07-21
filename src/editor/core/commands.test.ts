@@ -150,6 +150,26 @@ describe("createEditorEngine", () => {
     expect((engine.getDocument().blocks[0] as TextBlock).content).toHaveLength(2);
   });
 
+  it("replaceInlineObjectWithText atomically turns a chip into normal text and is undoable", () => {
+    const block = createTextBlock({
+      content: [
+        { type: "text", text: "Autora: " },
+        { type: "object", kind: "placeholder", data: { key: "autor", label: "Nome do autor" } },
+        { type: "text", text: "." },
+      ],
+    });
+    const original = docWith([block]);
+    const engine = createEditorEngine({ value: original });
+
+    engine.commands.replaceInlineObjectWithText(block.id, 8, "Mariana Oliveira");
+
+    expect((engine.getDocument().blocks[0] as TextBlock).content).toEqual([
+      { type: "text", text: "Autora: Mariana Oliveira." },
+    ]);
+    expect(engine.commands.undo()).toBe(true);
+    expect(engine.getDocument()).toEqual(original);
+  });
+
   it("applyPatches is undoable as a single step", () => {
     const heading = createHeadingBlock({ level: 1, content: "A" });
     const paragraph = createTextBlock({ content: "body" });
