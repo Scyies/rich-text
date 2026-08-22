@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { exportHtml } from "../exports/html";
+import { createTextBlock } from "../core/factories";
 import { SCHEMA_VERSION, type ImageBlock, type TableBlock, type TextBlock, type MogulDocument } from "../core/schema";
 import { parseClipboardToBlocks, parseHtmlToBlocks, parsePlainTextToBlocks } from "./paste";
 
@@ -46,6 +47,24 @@ describe("parseHtmlToBlocks", () => {
     expect(parseHtmlToBlocks("<ol><li>one</li><li>two</li></ol>")).toMatchObject([
       { type: "text", variant: "numbered" },
       { type: "text", variant: "numbered" },
+    ]);
+  });
+
+  it("round-trips generated alphabetic markers without duplicating them into content", () => {
+    const document: MogulDocument = {
+      schemaVersion: SCHEMA_VERSION,
+      blocks: [
+        createTextBlock({ variant: "numbered", listMarker: "lower-alpha", content: "First" }),
+        createTextBlock({ variant: "numbered", listMarker: "lower-alpha", content: "Second" }),
+      ],
+    };
+    const blocks = parseHtmlToBlocks(exportHtml(document)) as TextBlock[];
+    expect(blocks.map((block) => ({
+      marker: block.listMarker,
+      text: block.content.map((node) => node.type === "text" ? node.text : "").join(""),
+    }))).toEqual([
+      { marker: "lower-alpha", text: "First" },
+      { marker: "lower-alpha", text: "Second" },
     ]);
   });
 

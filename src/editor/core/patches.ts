@@ -5,7 +5,7 @@ import {
   blockSchema,
   documentSchema,
   headingLevelSchema,
-  textVariantSchema,
+  orderedListMarkerSchema,
   type Block,
   type BlockMeta,
   type MogulDocument,
@@ -38,9 +38,10 @@ const insertableBlockSchema = z.preprocess((value) => {
   return value;
 }, blockSchema);
 
-export const turnIntoTargetSchema = z.discriminatedUnion("type", [
+export const turnIntoTargetSchema = z.union([
   z.object({ type: z.literal("heading"), level: headingLevelSchema }),
-  z.object({ type: z.literal("text"), variant: textVariantSchema }),
+  z.object({ type: z.literal("text"), variant: z.literal("numbered"), listMarker: orderedListMarkerSchema.optional() }),
+  z.object({ type: z.literal("text"), variant: z.enum(["paragraph", "bullet"]) }),
 ]);
 
 const documentPatchSchema = z.discriminatedUnion("op", [

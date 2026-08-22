@@ -17,6 +17,7 @@ describe("matchInputRule", () => {
   it("matches numbered rules with . and )", () => {
     expect(matchInputRule("1. ")).toEqual({ target: { type: "text", variant: "numbered" }, prefixLength: 3 });
     expect(matchInputRule("12) ")).toEqual({ target: { type: "text", variant: "numbered" }, prefixLength: 4 });
+    expect(matchInputRule("a) ")).toEqual({ target: { type: "text", variant: "numbered", listMarker: "lower-alpha" }, prefixLength: 3 });
     expect(matchInputRule("123. ")).toBeNull();
   });
 

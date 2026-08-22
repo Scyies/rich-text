@@ -3,6 +3,7 @@ import { generateBlockId } from "./factories";
 import { getImpliedLevelAt, getSectionRange } from "./sections";
 import {
   blockSchema,
+  MAX_INDENT,
   type Block,
   type BlockMeta,
   type HeadingBlock,
@@ -15,6 +16,7 @@ import {
   type InlineNode,
   type TextBlock,
   type TextVariant,
+  type OrderedListMarker,
   type MogulDocument,
 } from "./schema";
 
@@ -24,7 +26,7 @@ import {
  * Invalid operations throw and leave no partial state behind.
  */
 
-export const MAX_INDENT = 8;
+export { MAX_INDENT };
 
 function requireBlockIndex(document: MogulDocument<BlockMeta>, blockId: string, operation: string): number {
   const index = document.blocks.findIndex((block) => block.id === blockId);
@@ -77,7 +79,7 @@ export function insertBlockAfter<TMeta extends BlockMeta, TDocMeta extends Block
 
 const PATCHABLE_KEYS: Record<Block<BlockMeta>["type"], ReadonlySet<string>> = {
   heading: new Set(["level", "align", "content", "meta"]),
-  text: new Set(["variant", "indent", "align", "content", "meta"]),
+  text: new Set(["variant", "listMarker", "indent", "align", "content", "meta"]),
   table: new Set(["columns", "rows", "showHeader", "meta"]),
   image: new Set(["source", "altText", "caption", "size", "align", "meta"]),
   imageGroup: new Set(["images", "align", "gap", "meta"]),
@@ -142,7 +144,8 @@ export function moveBlock<TMeta extends BlockMeta, TDocMeta extends BlockMeta = 
 
 export type TurnIntoTarget =
   | { type: "heading"; level: HeadingLevel }
-  | { type: "text"; variant: TextVariant };
+  | { type: "text"; variant: "numbered"; listMarker?: OrderedListMarker }
+  | { type: "text"; variant: Exclude<TextVariant, "numbered"> };
 
 /**
  * Converts a line between heading and text variants (D1/D2: a one-block
@@ -175,6 +178,7 @@ export function turnInto<TMeta extends BlockMeta, TDocMeta extends BlockMeta = B
       id: block.id,
       type: "text",
       variant: target.variant,
+      ...(target.variant === "numbered" && target.listMarker !== undefined ? { listMarker: target.listMarker } : {}),
       ...(block.type === "text" && block.indent !== undefined ? { indent: block.indent } : {}),
       ...(block.align !== undefined ? { align: block.align } : {}),
       content: block.content,

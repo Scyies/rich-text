@@ -20,6 +20,7 @@ import {
   type TableRow,
   type TextBlock,
   type TextVariant,
+  type OrderedListMarker,
   type MogulDocument,
 } from "./schema";
 
@@ -59,6 +60,7 @@ export function createHeadingBlock<TMeta extends BlockMeta = BlockMeta>(
 
 export interface CreateTextBlockInput<TMeta extends BlockMeta = BlockMeta> {
   variant?: TextVariant;
+  listMarker?: OrderedListMarker;
   content?: InlineNode[] | string;
   indent?: number;
   align?: Align;
@@ -68,10 +70,12 @@ export interface CreateTextBlockInput<TMeta extends BlockMeta = BlockMeta> {
 export function createTextBlock<TMeta extends BlockMeta = BlockMeta>(
   input: CreateTextBlockInput<TMeta> = {},
 ): TextBlock<TMeta> {
+  if (input.listMarker !== undefined && (input.variant ?? "paragraph") !== "numbered") throw new RangeError("createTextBlock: listMarker is only valid for numbered blocks");
   return {
     id: generateBlockId(),
     type: "text",
     variant: input.variant ?? "paragraph",
+    ...(input.listMarker !== undefined ? { listMarker: input.listMarker } : {}),
     ...(input.indent !== undefined ? { indent: input.indent } : {}),
     ...(input.align !== undefined ? { align: input.align } : {}),
     content: toContent(input.content),

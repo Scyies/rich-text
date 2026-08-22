@@ -1,7 +1,8 @@
-import { getHeadingNumbers, formatHeadingNumber } from "../core/numbering";
+import { getHeadingNumbers, formatHeadingNumber, getListMarkerPlan } from "../core/numbering";
 import { resolveImageGroupColumnWidths } from "../core/image-layout";
 import { sanitizeLinkHref } from "../core/urls";
 import { SEPARATOR_BLOCK_KIND } from "../plugins/separator-core";
+import { MAX_INDENT } from "../core/schema";
 import type {
   Block,
   BlockMeta,
@@ -159,13 +160,15 @@ function isListBlock(block: Block): block is TextBlock & { variant: "bullet" | "
  * opening deeper lists inside the current `<li>` (valid HTML nesting) and
  * splitting on a variant change at the same indent.
  */
-function renderListRun(items: TextBlock[], options: HtmlExportOptions): string {
+function renderListRun(items: TextBlock[], options: HtmlExportOptions, listLabels: ReadonlyMap<string, string>): string {
   let html = "";
-  const stack: Array<{ indent: number; tag: "ul" | "ol" }> = [];
+  const stack: Array<{ indent: number; tag: "ul" | "ol"; marker?: string }> = [];
 
   for (const item of items) {
-    const indent = item.indent ?? 0;
+    const indent = Math.min(item.indent ?? 0, MAX_INDENT);
     const tag: "ul" | "ol" = item.variant === "numbered" ? "ol" : "ul";
+    const marker = item.variant === "numbered" ? (item.listMarker ?? "decimal") : undefined;
+    const open = tag === "ol" && marker === "lower-alpha" ? '<ol type="a" style="list-style:none">' : `<${tag}>`;
 
     while (stack.length > 0 && stack[stack.length - 1]!.indent > indent) {
       html += `</li></${stack.pop()!.tag}>`;
@@ -173,18 +176,21 @@ function renderListRun(items: TextBlock[], options: HtmlExportOptions): string {
 
     const top = stack[stack.length - 1];
     if (top !== undefined && top.indent === indent) {
-      if (top.tag === tag) {
+      if (top.tag === tag && top.marker === marker) {
         html += "</li>";
       } else {
         html += `</li></${stack.pop()!.tag}>`;
-        html += `<${tag}>`;
-        stack.push({ indent, tag });
+        html += open;
+        stack.push({ indent, tag, ...(marker !== undefined ? { marker } : {}) });
       }
     } else {
-      html += `<${tag}>`;
-      stack.push({ indent, tag });
+      html += open;
+      stack.push({ indent, tag, ...(marker !== undefined ? { marker } : {}) });
     }
-    html += `<li>${renderInline(item.content, options)}`;
+    const explicitMarker = marker === "lower-alpha"
+      ? `<span class="wte-list-marker" aria-hidden="true">${listLabels.get(item.id) ?? "a)"} </span>`
+      : "";
+    html += `<li>${explicitMarker}${renderInline(item.content, options)}`;
   }
 
   while (stack.length > 0) {
@@ -193,9 +199,23 @@ function renderListRun(items: TextBlock[], options: HtmlExportOptions): string {
   return html;
 }
 
-function renderTable(block: TableBlock, options: HtmlExportOptions): string {
-  const renderCell = (cell: { blocks: TextBlock[] }): string =>
-    cell.blocks.map((b) => renderInline(b.content, options)).join("<br>");
+function renderTable(block: TableBlock, options: HtmlExportOptions, listLabels: ReadonlyMap<string, string>): string {
+  const renderCell = (cell: { blocks: TextBlock[] }): string => {
+    let html = "";
+    for (let index = 0; index < cell.blocks.length; index += 1) {
+      const current = cell.blocks[index]!;
+      if (!isListBlock(current)) { html += `${renderInline(current.content, options)}<br>`; continue; }
+      const run = [current];
+      while (cell.blocks[index + 1] !== undefined) {
+        const next = cell.blocks[index + 1]!;
+        if (!isListBlock(next)) break;
+        run.push(next);
+        index += 1;
+      }
+      html += renderListRun(run, options, listLabels);
+    }
+    return html.replace(/<br>$/, "");
+  };
 
   const rowHtml = (
     row: { cells: Array<{ columnId: string; blocks: TextBlock[] }> },
@@ -263,6 +283,7 @@ function renderImageGroup(block: ImageGroupBlock, options: HtmlExportOptions): s
 
 export function exportHtml(document: MogulDocument<BlockMeta>, options: HtmlExportOptions = {}): string {
   const headingNumbers = options.headingNumbers === true ? getHeadingNumbers(document) : null;
+  const listLabels = new Map(Array.from(getListMarkerPlan(document), ([blockId, item]) => [blockId, item.label]));
   const parts: string[] = [];
   const blocks = document.blocks;
 
@@ -276,7 +297,7 @@ export function exportHtml(document: MogulDocument<BlockMeta>, options: HtmlExpo
         index += 1;
       }
       index -= 1; // the for-loop will re-increment
-      parts.push(renderListRun(run, options));
+      parts.push(renderListRun(run, options, listLabels));
       continue;
     }
 
@@ -291,7 +312,7 @@ export function exportHtml(document: MogulDocument<BlockMeta>, options: HtmlExpo
         parts.push(`<p${alignStyle(block.align)}>${renderInline(block.content, options)}</p>`);
         break;
       case "table":
-        parts.push(renderTable(block, options));
+        parts.push(renderTable(block, options, listLabels));
         break;
       case "image":
         parts.push(renderImage(block, options));

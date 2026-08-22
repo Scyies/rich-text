@@ -17,6 +17,7 @@ export interface InputRuleMatch {
 const HEADING_RULE = /^(#{1,6}) $/;
 const BULLET_RULE = /^[-*] $/;
 const NUMBERED_RULE = /^\d{1,2}[.)] $/;
+const ALPHA_RULE = /^a\) $/i;
 
 /**
  * Matches against the text up to the caret. Pass exactly the leading text
@@ -35,6 +36,9 @@ export function matchInputRule(textBeforeCaret: string): InputRuleMatch | null {
   }
   if (NUMBERED_RULE.test(textBeforeCaret)) {
     return { target: { type: "text", variant: "numbered" }, prefixLength: textBeforeCaret.length };
+  }
+  if (ALPHA_RULE.test(textBeforeCaret)) {
+    return { target: { type: "text", variant: "numbered", listMarker: "lower-alpha" }, prefixLength: textBeforeCaret.length };
   }
   return null;
 }

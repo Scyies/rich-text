@@ -195,7 +195,7 @@ function App() {
 
   const captureEditor = useCallback((api: DocumentEditorApi | null) => {
     editorRef.current = api;
-    if (api !== null) setEditorEngine((current) => current ?? api.engine);
+    if (api !== null) setEditorEngine((current: DocumentEditorApi["engine"] | null) => current ?? api.engine);
   }, []);
   const subscribeToSelection = useCallback(
     (onStoreChange: () => void) => editorEngine?.subscribe(() => onStoreChange()) ?? EMPTY_SUBSCRIBE(),

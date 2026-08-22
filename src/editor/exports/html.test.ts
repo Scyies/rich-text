@@ -82,6 +82,24 @@ describe("exportHtml", () => {
     );
   });
 
+  it("clamps list structure to the shared marker-planning depth", () => {
+    const doc = docWith([
+      createTextBlock({ variant: "numbered", listMarker: "lower-alpha", content: "eight", indent: 8 }),
+      createTextBlock({ variant: "numbered", listMarker: "lower-alpha", content: "nine", indent: 9 }),
+      createTextBlock({ variant: "numbered", listMarker: "lower-alpha", content: "eight again", indent: 8 }),
+    ]);
+    expect(exportHtml(doc)).toBe('<ol type="a" style="list-style:none"><li><span class="wte-list-marker" aria-hidden="true">a) </span>eight</li><li><span class="wte-list-marker" aria-hidden="true">b) </span>nine</li><li><span class="wte-list-marker" aria-hidden="true">c) </span>eight again</li></ol>');
+  });
+
+  it("preserves alphabetic list semantics inside table cells", () => {
+    const table = createTableBlock({ columnCount: 1, rowCount: 1, showHeader: false });
+    table.rows[0]!.cells[0]!.blocks = [
+      createTextBlock({ variant: "numbered", listMarker: "lower-alpha", content: "A" }),
+      createTextBlock({ variant: "numbered", listMarker: "lower-alpha", content: "B" }),
+    ];
+    expect(exportHtml(docWith([table]))).toContain('<td><ol type="a" style="list-style:none"><li><span class="wte-list-marker" aria-hidden="true">a) </span>A</li><li><span class="wte-list-marker" aria-hidden="true">b) </span>B</li></ol></td>');
+  });
+
   it("honors table column widths with a colgroup", () => {
     const table = createTableBlock({ columnCount: 2, rowCount: 1, showHeader: false });
     table.columns[0] = { ...table.columns[0]!, width: { value: 30, unit: "percent" } };

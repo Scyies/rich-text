@@ -16,7 +16,8 @@ import {
   type IRunOptions,
 } from "docx";
 import { resolveImageGroupColumnWidths } from "../core/image-layout";
-import { isFilledImageGroupEntry } from "../core/schema";
+import { getListMarkerPlan, type ListMarkerPlanItem } from "../core/numbering";
+import { isFilledImageGroupEntry, MAX_INDENT } from "../core/schema";
 import { SEPARATOR_BLOCK_KIND } from "../plugins/separator-core";
 import type {
   Align,
@@ -49,6 +50,7 @@ import type {
  */
 
 const NUMBERED_REFERENCE = "wte-numbered";
+const ALPHA_REFERENCE = "wte-lower-alpha";
 
 export interface DocxExportOptions {
   /** Serialize a custom block to docx block(s). Default: a plain paragraph with the kind. */
@@ -135,24 +137,28 @@ function defaultInlineObjectText(node: InlineObjectNode): string {
   return typeof label === "string" && label.length > 0 ? label : node.kind;
 }
 
-function textBlockParagraph(block: TextBlock, options: DocxExportOptions): Paragraph {
+function textBlockParagraph(block: TextBlock, options: DocxExportOptions, listPlan: ReadonlyMap<string, ListMarkerPlanItem>, instances: Map<string, number>): Paragraph {
   const children = inlineToRuns(block.content, options);
   const align = alignment(block.align);
-  const indent = block.indent ?? 0;
+  const indent = Math.min(block.indent ?? 0, MAX_INDENT);
   if (block.variant === "bullet") {
     return new Paragraph({ children, bullet: { level: indent }, ...(align !== undefined ? { alignment: align } : {}) });
   }
   if (block.variant === "numbered") {
+    const item = listPlan.get(block.id);
+    const runId = item?.runId ?? block.id;
+    if (!instances.has(runId)) instances.set(runId, instances.size + 1);
+    const instance = instances.get(runId)!;
     return new Paragraph({
       children,
-      numbering: { reference: NUMBERED_REFERENCE, level: indent },
+      numbering: { reference: item?.marker === "lower-alpha" ? ALPHA_REFERENCE : NUMBERED_REFERENCE, level: indent, instance },
       ...(align !== undefined ? { alignment: align } : {}),
     });
   }
   return new Paragraph({ children, ...(align !== undefined ? { alignment: align } : {}) });
 }
 
-function tableToDocx(block: TableBlock, options: DocxExportOptions): Table {
+function tableToDocx(block: TableBlock, options: DocxExportOptions, listPlan: ReadonlyMap<string, ListMarkerPlanItem>, instances: Map<string, number>): Table {
   const rows = block.rows.map(
     (row) =>
       new TableRow({
@@ -160,7 +166,7 @@ function tableToDocx(block: TableBlock, options: DocxExportOptions): Table {
           const cell = row.cells.find((candidate) => candidate.columnId === column.id);
           const paragraphs =
             cell !== undefined && cell.blocks.length > 0
-              ? cell.blocks.map((b) => textBlockParagraph(b, options))
+              ? cell.blocks.map((b) => textBlockParagraph(b, options, listPlan, instances))
               : [new Paragraph({ children: [] })];
           return new TableCell({ children: paragraphs });
         }),
@@ -259,7 +265,7 @@ function imageGroupToDocx(block: ImageGroupBlock, options: DocxExportOptions): T
   });
 }
 
-function blockToDocx(block: Block, options: DocxExportOptions): FileChild | FileChild[] {
+function blockToDocx(block: Block, options: DocxExportOptions, listPlan: ReadonlyMap<string, ListMarkerPlanItem>, instances: Map<string, number>): FileChild | FileChild[] {
   switch (block.type) {
     case "heading": {
       const align = alignment(block.align);
@@ -270,9 +276,9 @@ function blockToDocx(block: Block, options: DocxExportOptions): FileChild | File
       });
     }
     case "text":
-      return textBlockParagraph(block, options);
+      return textBlockParagraph(block, options, listPlan, instances);
     case "table":
-      return tableToDocx(block, options);
+      return tableToDocx(block, options, listPlan, instances);
     case "image":
       return imageToDocx(block, options);
     case "imageGroup":
@@ -290,8 +296,10 @@ function blockToDocx(block: Block, options: DocxExportOptions): FileChild | File
 
 export function exportDocx(document: MogulDocument<BlockMeta>, options: DocxExportOptions = {}): Document {
   const children: FileChild[] = [];
+  const listPlan = getListMarkerPlan(document);
+  const instances = new Map<string, number>();
   for (const block of document.blocks) {
-    const mapped = blockToDocx(block, options);
+    const mapped = blockToDocx(block, options, listPlan, instances);
     if (Array.isArray(mapped)) {
       children.push(...mapped);
     } else {
@@ -308,6 +316,15 @@ export function exportDocx(document: MogulDocument<BlockMeta>, options: DocxExpo
             level,
             format: LevelFormat.DECIMAL,
             text: `%${level + 1}.`,
+            alignment: AlignmentType.START,
+          })),
+        },
+        {
+          reference: ALPHA_REFERENCE,
+          levels: Array.from({ length: 9 }, (_, level) => ({
+            level,
+            format: LevelFormat.LOWER_LETTER,
+            text: `%${level + 1})`,
             alignment: AlignmentType.START,
           })),
         },

@@ -20,6 +20,8 @@ import { isSafeLinkHref } from "./urls";
  */
 
 export const SCHEMA_VERSION = 1;
+/** Highest list depth supported consistently by editor UI and fixed-level exporters. */
+export const MAX_INDENT = 8;
 
 // ---------------------------------------------------------------------------
 // Primitives
@@ -102,19 +104,27 @@ export interface HeadingBlock<TMeta extends BlockMeta = BlockMeta> extends BaseB
 
 export const textVariantSchema = z.enum(["paragraph", "bullet", "numbered"]);
 export type TextVariant = z.infer<typeof textVariantSchema>;
+export const orderedListMarkerSchema = z.enum(["decimal", "lower-alpha"]);
+export type OrderedListMarker = z.infer<typeof orderedListMarkerSchema>;
 
 export const textBlockSchema = z.object({
   ...baseBlockShape,
   type: z.literal("text"),
   variant: textVariantSchema,
+  listMarker: orderedListMarkerSchema.optional(),
   indent: z.int().min(0).optional(),
   align: alignSchema.optional(),
   content: z.array(inlineNodeSchema),
+}).check((ctx) => {
+  if (ctx.value.variant !== "numbered" && ctx.value.listMarker !== undefined) {
+    ctx.issues.push({ code: "custom", message: "listMarker is only valid on a numbered text block", input: ctx.value, path: ["listMarker"] });
+  }
 });
 
 export interface TextBlock<TMeta extends BlockMeta = BlockMeta> extends BaseBlock<TMeta> {
   type: "text";
   variant: TextVariant;
+  listMarker?: OrderedListMarker | undefined;
   indent?: number | undefined;
   align?: Align | undefined;
   content: InlineNode[];

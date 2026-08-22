@@ -5,8 +5,8 @@ import { defineConfig } from "vite";
 
 const demoDir = dirname(fileURLToPath(import.meta.url));
 
-// Demo-only config (lives inside demo/ so Vitest at the repo root is
-// unaffected). Resolves the package name to local source.
+// Demo-only config (lives inside demo/ so Vitest at the repo root is unaffected).
+// The workspace link resolves through the freshly built package exports.
 export default defineConfig({
   root: demoDir,
   build: {
@@ -18,11 +18,4 @@ export default defineConfig({
     port: Number(process.env.PORT) || 5173,
   },
   plugins: [react()],
-  resolve: {
-    alias: [
-      { find: "mogul-text-editor/react", replacement: `${demoDir}/../src/react.ts` },
-      { find: "mogul-text-editor/styles.css", replacement: `${demoDir}/../styles.css` },
-      { find: "mogul-text-editor", replacement: `${demoDir}/../src/index.ts` },
-    ],
-  },
 });

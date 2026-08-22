@@ -1,13 +1,30 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createTableBlock } from "../core/factories";
+import { createTableBlock, createTextBlock } from "../core/factories";
 import { en } from "../i18n/messages";
 import { TableView } from "./TableView";
 
 afterEach(cleanup);
 
 describe("TableView structural controls", () => {
+  it("renders alphabetic markers for numbered blocks inside a cell", () => {
+    const block = createTableBlock({ columnCount: 1, rowCount: 1, showHeader: false });
+    block.rows[0]!.cells[0]!.blocks = [
+      createTextBlock({ variant: "numbered", listMarker: "lower-alpha", content: "first" }),
+      createTextBlock({ variant: "numbered", listMarker: "lower-alpha", content: "second" }),
+    ];
+    const { container } = render(<TableView block={block} onTableChange={vi.fn()} />);
+    expect(Array.from(container.querySelectorAll(".wte-block__marker"), (marker) => marker.textContent)).toEqual(["a)", "b)"]);
+  });
+
+  it("renders list indentation inside table cells", () => {
+    const block = createTableBlock({ columnCount: 1, rowCount: 1, showHeader: false });
+    block.rows[0]!.cells[0]!.blocks = [createTextBlock({ variant: "numbered", content: "nested", indent: 2 })];
+    const { container } = render(<TableView block={block} onTableChange={vi.fn()} />);
+    expect(container.querySelector<HTMLElement>(".wte-block__line")?.style.paddingLeft).toBe("3rem");
+  });
+
   it("removes a row when more than one remains", () => {
     const block = createTableBlock({ columnCount: 2, rowCount: 2, showHeader: false });
     const onTableChange = vi.fn();

@@ -1,5 +1,7 @@
 import { createTextBlock, generateBlockId } from "../core/factories";
 import type { InlineNode, TableBlock, TextBlock } from "../core/schema";
+import { getListMarkerPlan } from "../core/numbering";
+import { MAX_INDENT, SCHEMA_VERSION } from "../core/schema";
 import { useMessages } from "../i18n";
 import { InlineEditor } from "./InlineEditor";
 
@@ -19,6 +21,7 @@ export interface TableViewProps {
 
 export function TableView({ block, readOnly = false, onTableChange }: TableViewProps) {
   const messages = useMessages();
+  const listPlan = getListMarkerPlan({ schemaVersion: SCHEMA_VERSION, blocks: [block] });
 
   function updateCellBlock(rowIndex: number, columnId: string, blockIndex: number, content: InlineNode[]): void {
     const rows = block.rows.map((row, currentRowIndex) => {
@@ -89,13 +92,23 @@ export function TableView({ block, readOnly = false, onTableChange }: TableViewP
 
   function renderCell(cellBlocks: TextBlock[], rowIndex: number, columnId: string) {
     return cellBlocks.map((cellBlock, blockIndex) => (
-      <InlineEditor
+      <div
+        className="wte-block__line"
+        data-block-id={cellBlock.id}
         key={cellBlock.id}
-        content={cellBlock.content}
-        readOnly={readOnly}
-        onContentChange={(content) => updateCellBlock(rowIndex, columnId, blockIndex, content)}
-        ariaLabel={messages.tableCellAriaLabel}
-      />
+        style={cellBlock.indent !== undefined ? { paddingLeft: `${Math.min(cellBlock.indent, MAX_INDENT) * 1.5}rem` } : undefined}
+      >
+        {cellBlock.variant === "bullet" && <span className="wte-block__marker">•</span>}
+        {cellBlock.variant === "numbered" && <span className="wte-block__marker">{listPlan.get(cellBlock.id)?.label ?? "1."}</span>}
+        <InlineEditor
+          as="p"
+          content={cellBlock.content}
+          readOnly={readOnly}
+          style={cellBlock.align !== undefined ? { textAlign: cellBlock.align } : undefined}
+          onContentChange={(content) => updateCellBlock(rowIndex, columnId, blockIndex, content)}
+          ariaLabel={messages.tableCellAriaLabel}
+        />
+      </div>
     ));
   }
 

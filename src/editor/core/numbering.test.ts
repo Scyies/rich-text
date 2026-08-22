@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { createHeadingBlock, createTextBlock } from "./factories";
+import { createHeadingBlock, createTableBlock, createTextBlock } from "./factories";
 import {
   formatHeadingNumber,
   getHeadingNumberLabel,
   getHeadingNumberPath,
   getListItemNumbers,
+  getListMarkerPlan,
 } from "./numbering";
 import { SCHEMA_VERSION, type Block, type MogulDocument } from "./schema";
 
@@ -43,6 +44,40 @@ describe("heading numbering", () => {
   });
 });
 
+describe("list marker plan", () => {
+  it("labels alphabetic runs through aa and restarts after interruptions", () => {
+    const items = Array.from({ length: 27 }, () => createTextBlock({ variant: "numbered", listMarker: "lower-alpha" }));
+    const breaker = createTextBlock({ content: "break" });
+    const restart = createTextBlock({ variant: "numbered", listMarker: "lower-alpha" });
+    const plan = getListMarkerPlan(docWith([...items, breaker, restart]));
+    expect(plan.get(items[0]!.id)).toMatchObject({ ordinal: 1, label: "a)", runId: `document:${items[0]!.id}` });
+    expect(plan.get(items[26]!.id)?.label).toBe("aa)");
+    expect(plan.get(restart.id)).toMatchObject({ ordinal: 1, label: "a)", runId: `document:${restart.id}` });
+  });
+
+  it("numbers each table cell in an independent deterministic scope", () => {
+    const table = createTableBlock({ columnCount: 2, rowCount: 1 });
+    for (const cell of table.rows[0]!.cells) cell.blocks[0] = createTextBlock({ variant: "numbered", listMarker: "lower-alpha" });
+    const plan = getListMarkerPlan(docWith([table]));
+    const left = plan.get(table.rows[0]!.cells[0]!.blocks[0]!.id)!;
+    const right = plan.get(table.rows[0]!.cells[1]!.blocks[0]!.id)!;
+    expect(left.ordinal).toBe(1);
+    expect(right.ordinal).toBe(1);
+    expect(left.runId).not.toBe(right.runId);
+  });
+
+  it("starts a new run when the ordered marker style changes", () => {
+    const decimal = createTextBlock({ variant: "numbered" });
+    const alpha = createTextBlock({ variant: "numbered", listMarker: "lower-alpha" });
+    const decimalAgain = createTextBlock({ variant: "numbered" });
+    const plan = getListMarkerPlan(docWith([decimal, alpha, decimalAgain]));
+    expect(plan.get(decimal.id)).toMatchObject({ ordinal: 1, label: "1." });
+    expect(plan.get(alpha.id)).toMatchObject({ ordinal: 1, label: "a)" });
+    expect(plan.get(decimalAgain.id)).toMatchObject({ ordinal: 1, label: "1." });
+    expect(new Set([plan.get(decimal.id)?.runId, plan.get(alpha.id)?.runId, plan.get(decimalAgain.id)?.runId]).size).toBe(3);
+  });
+});
+
 describe("list numbering", () => {
   it("numbers contiguous runs and restarts after a break", () => {
     const one = createTextBlock({ variant: "numbered" });
@@ -67,6 +102,18 @@ describe("list numbering", () => {
     expect(numbers.get(nestedA.id)).toBe(1);
     expect(numbers.get(nestedB.id)).toBe(2);
     expect(numbers.get(two.id)).toBe(2);
+  });
+
+  it("clamps marker planning at the rendered depth boundary", () => {
+    const first = createTextBlock({ variant: "numbered", listMarker: "lower-alpha", indent: 8 });
+    const beyond = createTextBlock({ variant: "numbered", listMarker: "lower-alpha", indent: 9 });
+    const last = createTextBlock({ variant: "numbered", listMarker: "lower-alpha", indent: 8 });
+    const huge = createTextBlock({ variant: "numbered", listMarker: "lower-alpha", indent: Number.MAX_SAFE_INTEGER });
+    const plan = getListMarkerPlan(docWith([first, beyond, last, huge]));
+
+    expect([first, beyond, last, huge].map((block) => plan.get(block.id)?.label)).toEqual(["a)", "b)", "c)", "d)"]);
+    expect([first, beyond, last, huge].map((block) => plan.get(block.id)?.level)).toEqual([8, 8, 8, 8]);
+    expect(new Set([first, beyond, last, huge].map((block) => plan.get(block.id)?.runId)).size).toBe(1);
   });
 
   it("nested runs restart when revisited after the parent advances", () => {

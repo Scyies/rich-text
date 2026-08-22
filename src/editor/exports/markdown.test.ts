@@ -57,6 +57,16 @@ describe("exportMarkdown", () => {
     expect(exportMarkdown(doc)).toBe("1. one\n2. two\n  - nested");
   });
 
+  it("clamps deep list indentation before rendering whitespace", () => {
+    const doc = docWith([
+      createTextBlock({ variant: "numbered", content: "eight", indent: 8 }),
+      createTextBlock({ variant: "numbered", content: "nine", indent: 9 }),
+      createTextBlock({ variant: "numbered", content: "huge", indent: Number.MAX_SAFE_INTEGER }),
+    ]);
+    const indent = "  ".repeat(8);
+    expect(exportMarkdown(doc)).toBe(`${indent}1. eight\n${indent}2. nine\n${indent}3. huge`);
+  });
+
   it("renders a GFM pipe table with alignment", () => {
     const table = createTableBlock({ columnCount: 2, rowCount: 2 });
     table.columns[1]!.align = "right";

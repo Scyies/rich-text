@@ -39,6 +39,7 @@ export type {
   TextBlock,
   TextNode,
   TextVariant,
+  OrderedListMarker,
   MogulDocument,
 } from "./editor/core/schema";
 
@@ -102,7 +103,9 @@ export {
   getHeadingNumbers,
   getListItemNumber,
   getListItemNumbers,
+  getListMarkerPlan,
 } from "./editor/core/numbering";
+export type { ListMarkerPlanItem } from "./editor/core/numbering";
 
 // Transforms (pure)
 export {
@@ -148,6 +151,9 @@ export type { RangeEditResult } from "./editor/core/ranges";
 
 // Selection equality
 export { selectionsEqual } from "./editor/core/selection";
+
+export { planSetAlignment, planToggleMark } from "./editor/core/formatting";
+export type { GetInheritedMarkTypes } from "./editor/core/formatting";
 
 // Marks (range operations)
 export {

@@ -22,6 +22,22 @@ async function documentXml(
 }
 
 describe("exportDocx", () => {
+  it("emits native lower-letter numbering with closing-parenthesis labels", async () => {
+    const buffer = await Packer.toBuffer(exportDocx(docWith([
+      createTextBlock({ variant: "numbered", listMarker: "lower-alpha", content: "Alpha" }),
+    ])));
+    const zip = await JSZip.loadAsync(buffer);
+    const numbering = await zip.file("word/numbering.xml")!.async("string");
+    expect(numbering).toContain('w:val="lowerLetter"');
+    expect(numbering).toContain('w:val="%1)"');
+  });
+  it("clamps legacy deep list indentation to the highest defined numbering level", async () => {
+    const { xml } = await documentXml(docWith([
+      createTextBlock({ variant: "numbered", listMarker: "lower-alpha", content: "Deep", indent: 99 }),
+    ]));
+    expect(xml).toContain('<w:ilvl w:val="8"');
+    expect(xml).not.toContain('<w:ilvl w:val="99"');
+  });
   it("packs a document covering all block types into a valid .docx", async () => {
     const table = createTableBlock({ columnCount: 2, rowCount: 1, showHeader: false });
     table.rows[0]!.cells[0]!.blocks = [createTextBlock({ content: "CellA" })];

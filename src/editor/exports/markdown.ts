@@ -1,6 +1,7 @@
 import { getHeadingNumbers, formatHeadingNumber, getListItemNumbers } from "../core/numbering";
 import { SEPARATOR_BLOCK_KIND } from "../plugins/separator-core";
 import { sanitizeLinkHref } from "../core/urls";
+import { MAX_INDENT } from "../core/schema";
 import type {
   Block,
   BlockMeta,
@@ -127,7 +128,7 @@ function renderListItem(
   listNumbers: Map<string, number>,
   options: MarkdownExportOptions,
 ): string {
-  const indent = "  ".repeat(block.indent ?? 0);
+  const indent = "  ".repeat(Math.min(block.indent ?? 0, MAX_INDENT));
   const marker = block.variant === "numbered" ? `${listNumbers.get(block.id) ?? 1}.` : "-";
   return `${indent}${marker} ${renderInline(block.content, options)}`;
 }

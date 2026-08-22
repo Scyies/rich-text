@@ -19,8 +19,10 @@ import type { ChangeInfo } from "../core/commands";
 import { getInlineLength, getInlineText, splitInlineContent, concatInlineContent } from "../core/inline";
 import { extractTextRange, textRangeToPlainText } from "../core/ranges";
 import { deserializeDocument, serializeDocument } from "../core/serialization";
-import { applyMark, getActiveMarks, removeMark } from "../core/marks";
-import { getHeadingNumbers, getListItemNumbers, formatHeadingNumber } from "../core/numbering";
+import { getActiveMarks } from "../core/marks";
+import { planToggleMark } from "../core/formatting";
+import { getHeadingNumbers, getListMarkerPlan, formatHeadingNumber } from "../core/numbering";
+import type { ListMarkerPlanItem } from "../core/numbering";
 import {
   getSelectedBlockRange,
   getSelectedTextBlockRange,
@@ -42,7 +44,7 @@ import {
   type CreateImageBlockInput,
   type CreateImageGroupEntryInput,
 } from "../core/factories";
-import { isDurableImageUrl } from "../core/schema";
+import { isDurableImageUrl, MAX_INDENT } from "../core/schema";
 import { exportHtml } from "../exports/html";
 import type {
   Block,
@@ -1854,27 +1856,8 @@ export function DocumentEditor<
     (mark: InlineMark) => {
       const selection = engine.getSelection();
       if (selection?.type !== "text" || isCollapsed(selection)) return;
-      const slices = getSelectedTextSlices(engine.getDocument(), selection);
-      if (slices === null || slices.length === 0) return;
-      const activeEverywhere = slices.every(({ block, start, end }) => {
-        const inherited = getInheritedMarkTypes?.(block as Block<TMeta>) ?? new Set();
-        return getActiveMarks(block.content, start, end, inherited).some((active) => active.type === mark.type);
-      });
-      const booleanMark = ["bold", "italic", "underline", "strikethrough", "code"].includes(mark.type);
-      commands.applyPatches(slices.map(({ block, start, end }) => {
-        const inherited = getInheritedMarkTypes?.(block as Block<TMeta>) ?? new Set();
-        let content;
-        if (activeEverywhere) {
-          content = booleanMark && inherited.has(mark.type)
-            ? applyMark(block.content, start, end, { ...mark, enabled: false } as InlineMark)
-            : removeMark(block.content, start, end, mark.type);
-        } else {
-          content = booleanMark && inherited.has(mark.type)
-            ? removeMark(block.content, start, end, mark.type)
-            : applyMark(block.content, start, end, mark);
-        }
-        return { op: "update_block", blockId: block.id, changes: { content } };
-      }));
+      const patches = planToggleMark(engine.getDocument(), selection, mark, getInheritedMarkTypes);
+      if (patches.length > 0) commands.applyPatches(patches);
     },
     [engine, commands, getInheritedMarkTypes],
   );
@@ -1905,7 +1888,7 @@ export function DocumentEditor<
     () => (showHeadingNumbers ? getHeadingNumbers(document) : null),
     [showHeadingNumbers, document],
   );
-  const listNumbers = useMemo(() => getListItemNumbers(document), [document]);
+  const listNumbers = useMemo(() => getListMarkerPlan(document), [document]);
   const visibleBlocks = useMemo(
     () => document.blocks.filter((block) => !editor.hiddenBlockIds.has(block.id)),
     [document, editor.hiddenBlockIds],
@@ -2148,7 +2131,7 @@ interface BlockRowProps {
   collapsed: boolean;
   dropIndicator: "before" | "after" | null;
   headingNumber: number[] | null;
-  listNumber: number | null;
+  listNumber: ListMarkerPlanItem | null;
   registerEditor(key: EditorKey, handle: InlineEditorHandle | null): void;
   onContentChange(blockId: string, content: InlineNode[], caret: number | null): void;
   onSelectionChange(blockId: string, start: number, end: number, entryId?: string): void;
@@ -2244,7 +2227,7 @@ const BlockRow = memo(function BlockRow({
     <div
       className={classes}
       data-block-id={block.id}
-      style={indent > 0 ? { marginLeft: `${indent * 24}px` } : undefined}
+      style={indent > 0 ? { marginLeft: `${Math.min(indent, MAX_INDENT) * 24}px` } : undefined}
       onDragOver={(event) => {
         if (readOnly) {
           return;
@@ -2339,7 +2322,7 @@ const BlockRow = memo(function BlockRow({
           <div className="wte-block__line">
             {block.variant === "bullet" && <span className="wte-block__marker">•</span>}
             {block.variant === "numbered" && (
-              <span className="wte-block__marker">{listNumber ?? "•"}.</span>
+              <span className="wte-block__marker">{listNumber?.label ?? "1."}</span>
             )}
             <InlineEditor
               ref={(handle) => registerEditor(blockKey(block.id), handle)}

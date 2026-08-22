@@ -1,11 +1,4 @@
 {
   "extends": "../tsconfig.json",
-  "compilerOptions": {
-    "baseUrl": "..",
-    "paths": {
-      "mogul-text-editor": ["src/index.ts"],
-      "mogul-text-editor/react": ["src/react.ts"]
-    }
-  },
   "include": ["./main.tsx", "./vite.config.ts", "./vite-env.d.ts"]
 }

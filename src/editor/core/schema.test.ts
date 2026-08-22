@@ -22,6 +22,7 @@ import {
   isFilledImageGroupEntry,
   safeValidateDocument,
   tableBlockSchema,
+  textBlockSchema,
   validateDocument,
   type MogulDocument,
 } from "./schema";
@@ -53,11 +54,13 @@ describe("block schemas", () => {
     }
   });
 
-  it("rejects negative or fractional indent", () => {
+  it("rejects negative or fractional indent while retaining deep-document compatibility", () => {
     const negative = { ...createTextBlock(), indent: -1 };
     expect(blockSchema.safeParse(negative).success).toBe(false);
     const fractional = { ...createTextBlock(), indent: 1.5 };
     expect(blockSchema.safeParse(fractional).success).toBe(false);
+    const deep = { ...createTextBlock(), indent: 99 };
+    expect(blockSchema.safeParse(deep).success).toBe(true);
   });
 
   it("rejects blocks without a uuid id", () => {
@@ -270,6 +273,12 @@ describe("table blocks (D9: restricted cells)", () => {
 });
 
 describe("document schema", () => {
+  it("accepts listMarker only on numbered text blocks and keeps legacy decimal blocks", () => {
+    expect(textBlockSchema.parse(createTextBlock({ variant: "numbered" })).listMarker).toBeUndefined();
+    expect(textBlockSchema.parse(createTextBlock({ variant: "numbered", listMarker: "lower-alpha" })).listMarker).toBe("lower-alpha");
+    expect(textBlockSchema.safeParse({ ...createTextBlock(), listMarker: "lower-alpha" }).success).toBe(false);
+    expect(textBlockSchema.safeParse({ ...createTextBlock({ variant: "bullet" }), listMarker: "lower-alpha" }).success).toBe(false);
+  });
   it("accepts a flat mixed-block document", () => {
     const doc = docWith([
       createHeadingBlock({ level: 1, content: "Facts" }),
