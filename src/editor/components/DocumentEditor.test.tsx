@@ -928,11 +928,11 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
       <DocumentEditor value={docWith([block])} onChange={onChange} plugins={[fillablePlaceholder]} />,
     );
 
-    expect(within(container).queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.pointerDown(container.querySelector(".wte-inline-object")!, { pointerId: 1, button: 0 });
-    expect(within(container).getByRole("dialog")).toBeTruthy();
+    expect(screen.getByRole("dialog")).toBeTruthy();
 
-    fireEvent.change(within(container).getByLabelText("fill"), { target: { value: "Ana" } });
+    fireEvent.change(screen.getByLabelText("fill"), { target: { value: "Ana" } });
     const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect((latest.blocks[0] as TextBlock).content[1]).toMatchObject({
       kind: "placeholder",
@@ -950,11 +950,11 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
     );
 
     fireEvent.pointerDown(container.querySelector(".wte-inline-object")!, { pointerId: 1, button: 0 });
-    fireEvent.click(within(container).getByRole("button", { name: "remove-chip" }));
+    fireEvent.click(screen.getByRole("button", { name: "remove-chip" }));
 
     const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect((latest.blocks[0] as TextBlock).content).toEqual([{ type: "text", text: "Olá " }]);
-    expect(within(container).queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("the popover's replaceWithText() collapses the chip to ordinary text", () => {
@@ -965,14 +965,14 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
     );
 
     fireEvent.pointerDown(container.querySelector(".wte-inline-object")!, { pointerId: 1, button: 0 });
-    fireEvent.click(within(container).getByRole("button", { name: "replace-with-text" }));
+    fireEvent.click(screen.getByRole("button", { name: "replace-with-text" }));
 
     const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect((latest.blocks[0] as TextBlock).content).toEqual([
       { type: "text", text: "Olá Mariana Oliveira" },
     ]);
     expect(container.querySelector(".wte-inline-object")).toBeNull();
-    expect(within(container).queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("moving focus into the chip popover does not commit or close it", () => {
@@ -988,6 +988,13 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
 
     expect(onCommit).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("leaves no overlay layer behind in the document after unmount", () => {
+    const { unmount } = render(<DocumentEditor value={docWith([chipBlock()])} plugins={[fillablePlaceholder]} />);
+    expect(document.querySelectorAll(".wte-overlay-layer")).toHaveLength(1);
+    unmount();
+    expect(document.querySelectorAll(".wte-overlay-layer")).toHaveLength(0);
   });
 
   it("editor shortcuts leave keys typed in the chip popover alone", () => {
@@ -1016,14 +1023,14 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
     const chip = container.querySelector(".wte-inline-object")!;
     expect(chip.className).not.toContain("wte-inline-object--interactive");
     fireEvent.mouseDown(chip);
-    expect(within(container).queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("a plugin toolbar item renders in the floating toolbar over a selection and fires", () => {
     const block = createTextBlock({ content: "abcdef" });
     const applied = vi.fn();
     let api: import("../hooks/useDocumentEditor").DocumentEditorApi | null = null;
-    const { container } = render(
+    render(
       <DocumentEditor
         value={docWith([block])}
         ref={(value) => {
@@ -1035,7 +1042,7 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
 
     // A non-collapsed text selection brings up the floating toolbar.
     act(() => api!.setSelection({ type: "text", anchor: { blockId: block.id, offset: 0 }, focus: { blockId: block.id, offset: 3 } }));
-    const star = within(container).getByRole("button", { name: "★" });
+    const star = screen.getByRole("button", { name: "★" });
     fireEvent.mouseDown(star);
     expect(applied).toHaveBeenCalledTimes(1);
   });
@@ -1058,7 +1065,7 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
     });
     const onChange = vi.fn();
     let api: import("../hooks/useDocumentEditor").DocumentEditorApi | null = null;
-    const { container } = render(
+    render(
       <DocumentEditor
         value={docWith([block])}
         onChange={onChange}
@@ -1069,7 +1076,7 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
     );
 
     act(() => api!.setSelection({ type: "text", anchor: { blockId: block.id, offset: 0 }, focus: { blockId: block.id, offset: 12 } }));
-    const boldButton = within(container).getByRole("button", { name: "B" });
+    const boldButton = screen.getByRole("button", { name: "B" });
     expect(boldButton.getAttribute("aria-pressed")).toBe("true");
     fireEvent.mouseDown(boldButton);
 
@@ -1081,7 +1088,7 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
     const block = createHeadingBlock({ level: 1, content: "styled heading" });
     const onChange = vi.fn();
     let api: import("../hooks/useDocumentEditor").DocumentEditorApi | null = null;
-    const { container } = render(
+    render(
       <DocumentEditor
         value={docWith([block])}
         onChange={onChange}
@@ -1093,7 +1100,7 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
     );
 
     act(() => api!.setSelection({ type: "text", anchor: { blockId: block.id, offset: 0 }, focus: { blockId: block.id, offset: 14 } }));
-    const boldButton = within(container).getByRole("button", { name: "B" });
+    const boldButton = screen.getByRole("button", { name: "B" });
     expect(boldButton.getAttribute("aria-pressed")).toBe("true");
     fireEvent.mouseDown(boldButton);
 
@@ -1106,7 +1113,7 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
   it("a plugin slash item appears in the menu and applies", () => {
     const block = createTextBlock({ content: "" });
     const onChange = vi.fn();
-    const { container } = render(
+    render(
       <DocumentEditor
         value={docWith([block])}
         onChange={onChange}
@@ -1129,7 +1136,7 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
 
     // Open the menu with "/", then confirm the plugin item is listed.
     typeInto(getBlockElement(block.id), "/", 1);
-    const option = within(container)
+    const option = screen
       .getAllByRole("option")
       .find((candidate) => candidate.textContent?.includes("Campo"));
     expect(option).toBeTruthy();
@@ -1144,7 +1151,7 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
   it("shows slash items as core → host → plugin and applies host before plugin on duplicate id", () => {
     const block = createTextBlock({ content: "" });
     const onChange = vi.fn();
-    const { container } = render(
+    render(
       <DocumentEditor
         value={docWith([block])}
         onChange={onChange}
@@ -1173,7 +1180,7 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
     );
 
     typeInto(getBlockElement(block.id), "/", 1);
-    const labels = within(container).getAllByRole("option").map((option) => option.textContent);
+    const labels = screen.getAllByRole("option").map((option) => option.textContent);
     expect(labels.slice(0, 7)).toEqual([
       "Heading 1#",
       "Heading 2##",
@@ -1185,7 +1192,7 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
     ]);
     expect(labels.slice(7)).toEqual(["Host duplicate", "Plugin duplicate"]);
 
-    fireEvent.mouseDown(within(container).getByText("Plugin duplicate"));
+    fireEvent.mouseDown(screen.getByText("Plugin duplicate"));
 
     const latest = onChange.mock.lastCall![0] as MogulDocument;
     expect((latest.blocks[0] as TextBlock).content).toEqual([
@@ -1582,9 +1589,9 @@ describe("DocumentEditor — cross-block text ranges", () => {
   });
 
   it("applies a toolbar mark across every selected text slice", () => {
-    const { container, onChange, select } = renderRangeEditor();
+    const { onChange, select } = renderRangeEditor();
     select();
-    fireEvent.mouseDown(within(container).getByRole("button", { name: "B" }));
+    fireEvent.mouseDown(screen.getByRole("button", { name: "B" }));
     const latest = onChange.mock.lastCall![0] as MogulDocument;
     const textBlocks = latest.blocks as TextBlock[];
     expect(textBlocks.every((block) => block.content.some((node) => node.type === "text" && node.marks?.some((mark) => mark.type === "bold")))).toBe(true);

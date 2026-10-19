@@ -15,10 +15,15 @@ The stylesheet uses prefixed `.wte-*` classes and `--wte-*` CSS custom propertie
 
 ## Theming with variables
 
-The fastest customization is overriding the CSS variables on a container:
+The fastest customization is overriding the CSS variables. The slash menu, floating toolbar, and
+chip popover render into a `.wte-overlay-layer` element attached to `document.body`, outside the
+editor root, so they stay anchored when a host scales the page with a CSS `transform`. They
+inherit variables, color, and font from that layer rather than from the editor's ancestors, so
+set your theme on both:
 
 ```css
-.wte-editor {
+.wte-editor,
+.wte-overlay-layer {
   --wte-foreground: #1c2733;
   --wte-muted: #6b7682;
   --wte-border: #d4d9de;
@@ -48,6 +53,7 @@ These class names are part of the public contract and safe to target:
 | Class | Element |
 | --- | --- |
 | `.wte-editor` | The editor root container |
+| `.wte-overlay-layer` | The body-level layer holding the editor's floating overlays |
 | `.wte-block` | A block wrapper |
 | `.wte-inline-editor` | A block's editable line |
 | `.wte-inline-object` | An inline-object chip |
