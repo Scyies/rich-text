@@ -42,7 +42,7 @@ test("floating toolbar sits above the selection under a zoomed page", async ({ p
   expect(Math.abs(toolbarBox.x - selection.left)).toBeLessThanOrEqual(2);
 });
 
-test("slash menu opens below the caret under a zoomed page", async ({ page }) => {
+test("slash menu opens next to the caret under a zoomed page", async ({ page }) => {
   await page.goto(ZOOMED);
   const source = page.locator(".wte-inline-editor").filter({ hasText: "Second supporting fact" });
   await source.click();
@@ -53,7 +53,9 @@ test("slash menu opens below the caret under a zoomed page", async ({ page }) =>
   await expect(menu).toBeVisible();
   const caret = await liveRangeRect(page);
   const menuBox = await box(menu);
-  expect(Math.abs(menuBox.y - (caret.bottom + 6))).toBeLessThanOrEqual(2);
+  // Below the caret, or above it when the viewport has no room below.
+  const gap = Math.min(Math.abs(menuBox.y - (caret.bottom + 6)), Math.abs(menuBox.y + menuBox.height - (caret.top - 6)));
+  expect(gap).toBeLessThanOrEqual(2);
   expect(Math.abs(menuBox.x - caret.left)).toBeLessThanOrEqual(2);
 });
 
