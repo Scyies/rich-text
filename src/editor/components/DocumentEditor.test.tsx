@@ -975,6 +975,38 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
     expect(within(container).queryByRole("dialog")).toBeNull();
   });
 
+  it("moving focus into the chip popover does not commit or close it", () => {
+    const first = createTextBlock({ content: "first" });
+    const onCommit = vi.fn();
+    const { container } = render(
+      <DocumentEditor value={docWith([first, chipBlock()])} onCommit={onCommit} plugins={[fillablePlaceholder]} />,
+    );
+
+    typeInto(getBlockElement(first.id), "changed");
+    fireEvent.pointerDown(container.querySelector(".wte-inline-object")!, { pointerId: 1, button: 0 });
+    fireEvent.blur(getBlockElement(first.id), { relatedTarget: screen.getByLabelText("fill") });
+
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("editor shortcuts leave keys typed in the chip popover alone", () => {
+    const first = createTextBlock({ content: "first" });
+    const onChange = vi.fn();
+    const { container } = render(
+      <DocumentEditor value={docWith([first, chipBlock()])} onChange={onChange} plugins={[fillablePlaceholder]} />,
+    );
+
+    typeInto(getBlockElement(first.id), "changed");
+    fireEvent.pointerDown(container.querySelector(".wte-inline-object")!, { pointerId: 1, button: 0 });
+    const undo = fireEvent.keyDown(screen.getByLabelText("fill"), { key: "z", ctrlKey: true });
+
+    expect(undo).toBe(true);
+    expect((onChange.mock.lastCall![0] as MogulDocument).blocks[0]).toMatchObject({
+      content: [{ type: "text", text: "changed" }],
+    });
+  });
+
   it("a non-interactive chip (no renderEditor) does not open a popover", () => {
     const plugin: import("../plugins/types").EditorPlugin = {
       name: "static",
