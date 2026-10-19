@@ -104,7 +104,7 @@
     "smoke:exports": "node scripts/smoke-exports.mjs",
     "smoke:consumer": "node scripts/smoke-consumer.mjs",
     "check:release-tag": "node scripts/check-release-tag.mjs",
-    "validate:release": "pnpm lint && pnpm test:coverage && pnpm typecheck && pnpm typecheck:demo && pnpm build && pnpm build:demo && pnpm pack --dry-run && pnpm smoke:exports && pnpm smoke:consumer && pnpm check:release-tag"
+    "validate:release": "pnpm lint && pnpm test:coverage && pnpm typecheck && pnpm build && pnpm typecheck:demo && pnpm build:demo && pnpm pack --dry-run && pnpm smoke:exports && pnpm smoke:consumer && pnpm check:release-tag"
   },
   "dependencies": {
     "zod": "^4.1.0"
