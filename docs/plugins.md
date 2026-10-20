@@ -56,7 +56,8 @@ block with `createCustomBlock({ kind: "callout", data: { text: "" } })`.
 
 Chips are atomic inline tokens — placeholders, mentions, fields. They render as a single unit
 in the contenteditable (native-first, D16); the optional edit UI appears in a click-to-edit
-popover owned by the editor.
+popover owned by the editor. Opening the popover (click, or Enter/Space on a focused chip) moves
+the editor caret to just before the chip, so caret-based commands act on the chip's block.
 
 ```tsx
 const placeholderPlugin: EditorPlugin = {

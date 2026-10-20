@@ -1,6 +1,6 @@
 {
   "name": "mogul-text-editor",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Schema-first, headless, block-based rich text editor for React.",
   "license": "MIT",
   "repository": {
