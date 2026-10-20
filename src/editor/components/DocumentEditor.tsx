@@ -25,6 +25,7 @@ import { planToggleMark } from "../core/formatting";
 import { getHeadingNumbers, getListMarkerPlan, formatHeadingNumber } from "../core/numbering";
 import type { ListMarkerPlanItem } from "../core/numbering";
 import {
+  caretAt,
   getSelectedBlockRange,
   getSelectedTextBlockRange,
   getSelectedTextSlices,
@@ -960,13 +961,17 @@ export function DocumentEditor<
     const offset = offsetOfInlineObject(rootElement, chip);
     if (offset === null) return false;
     chipTriggerRef.current = chip;
+    // The engine caret moves before the chip, so host commands that act at the
+    // caret (insert a block, insert a chip) target the chip's block.
+    engine.setSelection(caretAt(blockId, offset));
     const rect = chip.getBoundingClientRect();
     setChipEdit({ blockId, offset, anchor: { x: rect.left, y: rect.bottom } });
     return true;
-  }, [registry, readOnly]);
+  }, [engine, registry, readOnly]);
 
   // A click on an interactive chip (a kind with renderEditor) opens its
-  // popover. preventDefault stops a caret from landing on the atomic chip.
+  // popover. preventDefault stops the browser caret from landing on the atomic
+  // chip; openChipEditor places the engine caret before it instead.
   const handleEditorMouseDown = useCallback(
     (event: ReactPointerEvent) => {
       const target = event.target instanceof Element ? event.target : null;

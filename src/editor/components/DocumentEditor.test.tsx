@@ -7,6 +7,8 @@ import { createSeparatorBlock } from "../plugins/separator-core";
 import { separatorPlugin } from "../plugins/separator";
 import { SCHEMA_VERSION, type Block, type ImageBlock, type ImageGroupBlock, type TextBlock, type MogulDocument } from "../core/schema";
 import { getInlineText } from "../core/inline";
+import { caretAt } from "../core/selection";
+import type { DocumentEditorApi } from "../hooks/useDocumentEditor";
 import { setCaretOffset } from "./dom";
 import { DocumentEditor } from "./DocumentEditor";
 
@@ -940,6 +942,34 @@ describe("DocumentEditor — plugins (D5/D6)", () => {
     });
     // The chip's visible label now reflects the filled value.
     expect(container.querySelector(".wte-inline-object")!.textContent).toBe("Ana");
+  });
+
+  it("clicking a chip moves the caret to just before it", () => {
+    const first = createTextBlock({ content: "first" });
+    const block = chipBlock();
+    let api: DocumentEditorApi | null = null;
+    const { container } = render(
+      <DocumentEditor value={docWith([first, block])} plugins={[fillablePlaceholder]} ref={(value) => { api = value; }} />,
+    );
+
+    act(() => api!.engine.setSelection(caretAt(first.id, 2)));
+    fireEvent.pointerDown(container.querySelector(".wte-inline-object")!, { pointerId: 1, button: 0 });
+
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(api!.engine.getSelection()).toEqual(caretAt(block.id, "Olá ".length));
+  });
+
+  it("opening a chip with Enter moves the caret to just before it", () => {
+    const block = chipBlock();
+    let api: DocumentEditorApi | null = null;
+    const { container } = render(
+      <DocumentEditor value={docWith([block])} plugins={[fillablePlaceholder]} ref={(value) => { api = value; }} />,
+    );
+
+    fireEvent.keyDown(container.querySelector(".wte-inline-object")!, { key: "Enter" });
+
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(api!.engine.getSelection()).toEqual(caretAt(block.id, "Olá ".length));
   });
 
   it("the popover's remove() deletes the chip", () => {
