@@ -185,6 +185,9 @@ function supportsInlineInsertion(document: MogulDocument, selection: EditorSelec
   });
 }
 
+// `?zoom=1.25` puts the editor under a scaled ancestor, the way hosts zoom a page.
+const PAGE_ZOOM = Number(new URLSearchParams(window.location.search).get("zoom")) || 1;
+
 function App() {
   const [document, setDocument] = useState(buildSampleDocument);
   const [lastCommit, setLastCommit] = useState<string>("—");
@@ -285,25 +288,27 @@ function App() {
               <span aria-hidden>●</span> {selectionLabel}
             </output>
           </section>
-          <DocumentEditor
-            ref={captureEditor}
-            plugins={[minutaPlugin, separatorPlugin]}
-            value={document}
-            onChange={setDocument}
-            onCommit={() => setLastCommit(new Date().toLocaleTimeString())}
-            commitIdleMs={1500}
-            showHeadingNumbers
-            locale={locale}
-            onUploadImage={uploadImage}
-            allowDroppedImageUrls
-            groupUploadedImages
-            resolveImageSource={(block) =>
-              block.source.type === "asset" ? assetUrls.current.get(block.source.id) : undefined
-            }
-            resolveImageContentSource={(entry) =>
-              entry.source.type === "asset" ? assetUrls.current.get(entry.source.id) : undefined
-            }
-          />
+          <div style={PAGE_ZOOM === 1 ? undefined : { transform: `scale(${PAGE_ZOOM})`, transformOrigin: "top left" }}>
+            <DocumentEditor
+              ref={captureEditor}
+              plugins={[minutaPlugin, separatorPlugin]}
+              value={document}
+              onChange={setDocument}
+              onCommit={() => setLastCommit(new Date().toLocaleTimeString())}
+              commitIdleMs={1500}
+              showHeadingNumbers
+              locale={locale}
+              onUploadImage={uploadImage}
+              allowDroppedImageUrls
+              groupUploadedImages
+              resolveImageSource={(block) =>
+                block.source.type === "asset" ? assetUrls.current.get(block.source.id) : undefined
+              }
+              resolveImageContentSource={(entry) =>
+                entry.source.type === "asset" ? assetUrls.current.get(entry.source.id) : undefined
+              }
+            />
+          </div>
         </div>
         {showJson && (
           <aside className="demo__json">

@@ -5,7 +5,10 @@
  *   import "mogul-text-editor/styles.css"
  */
 
-.wte-editor {
+/* Overlays (slash menu, toolbar, chip popover) render into a body-level
+   .wte-overlay-layer, outside .wte-editor, so the theme lives on both. */
+.wte-editor,
+.wte-overlay-layer {
   --wte-foreground: #1c2733;
   --wte-muted: #6b7682;
   --wte-border: #d4d9de;
@@ -14,10 +17,13 @@
   --wte-surface: #ffffff;
   --wte-radius: 6px;
 
+  color: var(--wte-foreground);
+}
+
+.wte-editor {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  color: var(--wte-foreground);
   outline: none;
 }
 
@@ -36,7 +42,10 @@
 @media (prefers-reduced-motion: reduce) {
   .wte-editor *,
   .wte-editor *::before,
-  .wte-editor *::after {
+  .wte-editor *::after,
+  .wte-overlay-layer *,
+  .wte-overlay-layer *::before,
+  .wte-overlay-layer *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

@@ -15,6 +15,7 @@ import {
   type Ref,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import type { ChangeInfo } from "../core/commands";
 import { getInlineLength, getInlineText, splitInlineContent, concatInlineContent } from "../core/inline";
 import { extractTextRange, textRangeToPlainText } from "../core/ranges";
@@ -419,22 +420,45 @@ export function DocumentEditor<
     }
   }, []);
 
+  // Overlays use viewport coordinates with position: fixed. Under a transformed
+  // host ancestor (page zoom) that ancestor would become their containing block,
+  // so they render into a body-level layer and the editor's territory is the
+  // root plus that layer.
+  const [overlayLayer, setOverlayLayer] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    const ownerDocument = editorRootRef.current?.ownerDocument;
+    if (ownerDocument === undefined) return;
+    const layer = ownerDocument.createElement("div");
+    layer.className = "wte-overlay-layer";
+    ownerDocument.body.appendChild(layer);
+    setOverlayLayer(layer);
+    return () => {
+      layer.remove();
+      setOverlayLayer(null);
+    };
+  }, []);
+
+  const ownsNode = useCallback(
+    (node: Node): boolean => editorRootRef.current?.contains(node) === true || overlayLayer?.contains(node) === true,
+    [overlayLayer],
+  );
+
   const isIndependentEditingTarget = useCallback((target: EventTarget | null): boolean => {
     if (!(target instanceof Element)) return false;
     const editingSurface = target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false'])");
-    if (editingSurface === null || editorRootRef.current?.contains(editingSurface) !== true) return false;
+    if (editingSurface === null || !ownsNode(editingSurface)) return false;
     for (const handle of editorsRef.current.values()) {
       const root = handle.getElement();
       if (root === editingSurface || root?.contains(editingSurface)) return false;
     }
     return true;
-  }, []);
+  }, [ownsNode]);
 
   const eventTargetOwnsSelection = useCallback(
     (target: EventTarget | null, selection: EditorSelection): boolean => {
       const targetElement = target instanceof Element ? target : null;
       const root = editorRootRef.current;
-      if (targetElement === null || root === null || !root.contains(targetElement)) return false;
+      if (targetElement === null || root === null || !ownsNode(targetElement)) return false;
       if (targetElement === root) return true;
       if (selection.type === "blocks") return targetElement.closest(".wte-block__handle") !== null;
       const anchorEditorId = editorIdForSelectionPoint(selection.anchor);
@@ -447,7 +471,7 @@ export function DocumentEditor<
       }
       return false;
     },
-    [],
+    [ownsNode],
   );
 
   const resolveDomSelectionPoint = useCallback((node: Node, offset: number): SelectionPoint | null => {
@@ -1963,7 +1987,7 @@ export function DocumentEditor<
   const handleContainerBlur = useCallback(
     (event: ReactFocusEvent<HTMLDivElement>) => {
       const nextTarget = event.relatedTarget;
-      if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+      if (nextTarget instanceof Node && ownsNode(nextTarget)) {
         return;
       }
       commit();
@@ -1975,7 +1999,7 @@ export function DocumentEditor<
         commands.pruneEmptyImageSlots(lastFocusedBlockIdRef.current ?? undefined);
       }
     },
-    [commit, readOnly, commands],
+    [ownsNode, commit, readOnly, commands],
   );
 
   // A non-editable block at the end of the document has no caret position after
@@ -2057,10 +2081,6 @@ export function DocumentEditor<
         />
       ))}
 
-      {crossBlockSelectionRects.map((style, index) => (
-        <span key={index} className="wte-cross-block-selection" aria-hidden="true" style={style} />
-      ))}
-
       {showTrailingAdd && (
         <button
           type="button"
@@ -2070,48 +2090,57 @@ export function DocumentEditor<
         />
       )}
 
-      {slash !== null && (
-        <SlashMenu
-          items={slashItems}
-          highlightedIndex={slashIndex}
-          onSelect={applySlashItem}
-          onHighlight={setSlashIndex}
-          anchor={slash.anchor}
-        />
-      )}
+      {overlayLayer !== null && createPortal(
+        <>
+          {crossBlockSelectionRects.map((style, index) => (
+            <span key={index} className="wte-cross-block-selection" aria-hidden="true" style={style} />
+          ))}
 
-      {toolbarTarget !== undefined && !readOnly && (
-        <FloatingToolbar
-          activeMarkTypes={activeMarkTypes}
-          onToggleMark={handleToggleMark}
-          extraItems={toolbarExtraItems}
-          style={toolbarStyle}
-        />
-      )}
+          {slash !== null && (
+            <SlashMenu
+              items={slashItems}
+              highlightedIndex={slashIndex}
+              onSelect={applySlashItem}
+              onHighlight={setSlashIndex}
+              anchor={slash.anchor}
+            />
+          )}
 
-      {chipEditState !== null && (
-        <ChipPopover
-          style={{
-            top: chipEditState.anchor.y + 6,
-            left: Math.max(
-              8,
-              Math.min(chipEditState.anchor.x, (typeof window !== "undefined" ? window.innerWidth : 1280) - 248),
-            ),
-          }}
-        >
-          {chipEditState.renderEditor(chipEditState.node, {
-            update: (patch) => commands.updateInlineObject(chipEditState.blockId, chipEditState.offset, patch),
-            replaceWithText: (text) => {
-              commands.replaceInlineObjectWithText(chipEditState.blockId, chipEditState.offset, text);
-              closeChipEdit();
-            },
-            remove: () => {
-              commands.removeInlineNode(chipEditState.blockId, chipEditState.offset);
-              closeChipEdit();
-            },
-            close: closeChipEdit,
-          })}
-        </ChipPopover>
+          {toolbarTarget !== undefined && !readOnly && (
+            <FloatingToolbar
+              activeMarkTypes={activeMarkTypes}
+              onToggleMark={handleToggleMark}
+              extraItems={toolbarExtraItems}
+              style={toolbarStyle}
+            />
+          )}
+
+          {chipEditState !== null && (
+            <ChipPopover
+              style={{
+                top: chipEditState.anchor.y + 6,
+                left: Math.max(
+                  8,
+                  Math.min(chipEditState.anchor.x, (typeof window !== "undefined" ? window.innerWidth : 1280) - 248),
+                ),
+              }}
+            >
+              {chipEditState.renderEditor(chipEditState.node, {
+                update: (patch) => commands.updateInlineObject(chipEditState.blockId, chipEditState.offset, patch),
+                replaceWithText: (text) => {
+                  commands.replaceInlineObjectWithText(chipEditState.blockId, chipEditState.offset, text);
+                  closeChipEdit();
+                },
+                remove: () => {
+                  commands.removeInlineNode(chipEditState.blockId, chipEditState.offset);
+                  closeChipEdit();
+                },
+                close: closeChipEdit,
+              })}
+            </ChipPopover>
+          )}
+        </>,
+        overlayLayer,
       )}
     </div>
     </MessagesProvider>
